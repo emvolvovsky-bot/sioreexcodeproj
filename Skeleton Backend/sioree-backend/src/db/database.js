@@ -8,16 +8,14 @@ const isLocalDB = process.env.DATABASE_URL?.includes("localhost") ||
                   (!process.env.DATABASE_URL?.includes("supabase") && 
                    !process.env.DATABASE_URL?.includes("amazonaws"));
 
-// Parse DATABASE_URL and ensure it uses IPv4 if needed
-let databaseUrl = process.env.DATABASE_URL;
+// Parse DATABASE_URL - use as-is, but log for debugging
+const databaseUrl = process.env.DATABASE_URL;
 if (databaseUrl && databaseUrl.includes("supabase")) {
-  // Force IPv4 by replacing IPv6 hostname with IPv4 if present
-  // Supabase connection strings should use the pooler or direct connection
-  // If the URL contains an IPv6 address, we might need to use the pooler endpoint
-  if (!databaseUrl.includes("pooler") && !databaseUrl.includes(":5432")) {
-    // Ensure we're using the pooler for better connection handling
-    databaseUrl = databaseUrl.replace(/@([^:]+):5432/, '@$1.pooler.supabase.com:6543');
-  }
+  console.log("📊 Using Supabase database connection");
+  // Log connection details (without exposing password)
+  const urlParts = new URL(databaseUrl);
+  console.log(`📊 Database host: ${urlParts.hostname}`);
+  console.log(`📊 Database port: ${urlParts.port || '5432'}`);
 }
 
 // Use connection pool for better performance and error handling

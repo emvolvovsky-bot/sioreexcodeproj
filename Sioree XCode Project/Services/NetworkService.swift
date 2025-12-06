@@ -140,6 +140,9 @@ class NetworkService {
         }
         
         return session.dataTaskPublisher(for: request)
+            .timeout(.seconds(Int(Constants.API.timeout)), scheduler: DispatchQueue.global(), customError: {
+                URLError(.timedOut)
+            })
             .tryMap { data, response -> Data in
                 // Log response for debugging
                 if let httpResponse = response as? HTTPURLResponse {
@@ -163,7 +166,21 @@ class NetworkService {
             }
             .decode(type: T.self, decoder: decoder)
             .mapError { error -> Error in
-                // Better error logging
+                // Handle timeout and network errors
+                if let urlError = error as? URLError {
+                    switch urlError.code {
+                    case .timedOut:
+                        print("❌ Request timed out after \(Constants.API.timeout) seconds")
+                        return NetworkError.serverError("Connection terminated due to connection timeout. Please check your internet connection and ensure the backend server is running.")
+                    case .notConnectedToInternet:
+                        return NetworkError.serverError("No internet connection. Please check your network settings.")
+                    case .cannotConnectToHost:
+                        return NetworkError.serverError("Cannot connect to server. Please ensure the backend is running at \(self.baseURL).")
+                    default:
+                        return NetworkError.serverError("Network error: \(urlError.localizedDescription)")
+                    }
+                }
+                // Better error logging for decoding errors
                 if let decodingError = error as? DecodingError {
                     print("❌ JSON Decoding Error: \(decodingError)")
                     switch decodingError {
@@ -178,6 +195,7 @@ class NetworkService {
                     @unknown default:
                         print("   Unknown decoding error")
                     }
+                    return NetworkError.decodingError
                 }
                 return error
             }

@@ -19,7 +19,7 @@ struct Constants {
             case .development:
                 return "http://192.168.1.200:4000"  // Local development
             case .production:
-                return "https://api.sioree.com"  // TODO: Replace with your production backend URL
+                return "https://sioree-api.onrender.com"  // Render deployment
             }
         }
     }
@@ -27,7 +27,7 @@ struct Constants {
     // MARK: - API
     struct API {
         // Change this to .production when ready for App Store
-        static let environment: Environment = .development
+        static let environment: Environment = .production
         
         static var baseURL: String {
             environment.baseURL

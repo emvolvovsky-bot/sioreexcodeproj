@@ -2,34 +2,21 @@ import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import db from "../db/database.js";
+import { sendWelcomeEmail, sendLoginEmail } from "../services/email.js";
 
 const router = express.Router();
 
 /*
 ---------------------------------------
-  HELPER: GENERATE TOKENS
+  HELPER: GENERATE TOKEN
 ---------------------------------------
 */
-function generateTokens(userId) {
-  const accessToken = jwt.sign(
+function generateToken(userId) {
+  return jwt.sign(
     { userId },
-    process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || "15m" }
+    process.env.JWT_SECRET || "your-secret-key-change-in-production",
+    { expiresIn: process.env.JWT_EXPIRES_IN || "7d" }
   );
-
-  const refreshToken = jwt.sign(
-    { userId },
-    process.env.JWT_REFRESH_SECRET,
-    { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || "7d" }
-  );
-
-  // Save refresh token in SQLite
-  db.prepare(`
-    INSERT INTO refresh_tokens (user_id, token)
-    VALUES (?, ?)
-  `).run(userId, refreshToken);
-
-  return { accessToken, refreshToken };
 }
 
 /*
@@ -37,32 +24,77 @@ function generateTokens(userId) {
   SIGNUP
 ---------------------------------------
 */
-router.post("/signup", (req, res) => {
-  const { email, password, name } = req.body;
+router.post("/signup", async (req, res) => {
+  try {
+    const { email, password, username, name, userType, location } = req.body;
 
-  if (!email || !password)
-    return res.status(400).json({ error: "Email and password required" });
+    if (!email || !password)
+      return res.status(400).json({ error: "Email and password required" });
 
-  const exists = db.prepare(`SELECT * FROM users WHERE email = ?`).get(email);
-  if (exists)
-    return res.status(400).json({ error: "User already exists" });
+    // Check if user exists
+    const existsResult = await db.query(
+      `SELECT * FROM users WHERE email = $1 OR username = $2`,
+      [email, username || email.split("@")[0]]
+    ).catch(err => {
+      console.error("Database query error:", err);
+      throw err;
+    });
 
-  const hashed = bcrypt.hashSync(password, 10);
+    if (existsResult.rows.length > 0)
+      return res.status(400).json({ error: "User already exists" });
 
-  const result = db.prepare(`
-    INSERT INTO users (email, password, name)
-    VALUES (?, ?, ?)
-  `).run(email, hashed, name || null);
+    const hashed = bcrypt.hashSync(password, 10);
+    const usernameValue = username || email.split("@")[0];
+    const nameValue = name || usernameValue;
 
-  const userId = result.lastInsertRowid;
+    // Insert user (include location if provided, especially for talent)
+    const locationValue = location || null;
+    const result = await db.query(
+      `INSERT INTO users (email, password_hash, username, name, user_type, location)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, email, username, name, user_type, location, created_at`,
+      [email, hashed, usernameValue, nameValue, userType || "partier", locationValue]
+    );
 
-  const tokens = generateTokens(userId);
+    const userRow = result.rows[0];
+    const token = generateToken(userRow.id);
 
-  res.json({
-    message: "User created",
-    user: { id: userId, email, name },
-    ...tokens
-  });
+    // Format user object to match iOS expectations
+    const user = {
+      id: userRow.id.toString(),
+      email: userRow.email,
+      username: userRow.username,
+      name: userRow.name || userRow.username,
+      userType: userRow.user_type || "partier",
+      bio: userRow.bio || null,
+      avatar: userRow.avatar || null,
+      location: userRow.location || null,
+      verified: userRow.verified || false,
+      createdAt: userRow.created_at ? new Date(userRow.created_at).toISOString() : new Date().toISOString(),
+      followerCount: userRow.follower_count || 0,
+      followingCount: userRow.following_count || 0,
+      eventCount: userRow.event_count || 0,
+      badges: []
+    };
+
+    console.log("✅ Signup successful for user:", email);
+    
+    // Send response immediately (don't wait for email)
+    res.json({
+      token,
+      user
+    });
+    
+    // Send welcome email after response (completely async, won't block)
+    sendWelcomeEmail(email, nameValue).catch(err => {
+      console.error("⚠️ Failed to send welcome email:", err);
+    });
+  } catch (err) {
+    console.error("❌ Signup error:", err);
+    console.error("   Error message:", err.message);
+    console.error("   Error stack:", err.stack);
+    res.status(500).json({ error: err.message || "Server error during signup" });
+  }
 });
 
 /*
@@ -70,50 +102,130 @@ router.post("/signup", (req, res) => {
   LOGIN
 ---------------------------------------
 */
-router.post("/login", (req, res) => {
-  const { email, password } = req.body;
+router.post("/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
 
-  const user = db.prepare(`SELECT * FROM users WHERE email = ?`).get(email);
-  if (!user)
-    return res.status(400).json({ error: "Invalid email or password" });
+    if (!email || !password)
+      return res.status(400).json({ error: "Email and password required" });
 
-  const valid = bcrypt.compareSync(password, user.password);
-  if (!valid)
-    return res.status(400).json({ error: "Invalid email or password" });
+    // Get user from database
+    const result = await db.query(
+      `SELECT * FROM users WHERE email = $1`,
+      [email]
+    );
 
-  const tokens = generateTokens(user.id);
+    if (result.rows.length === 0)
+      return res.status(400).json({ error: "Invalid email or password" });
 
-  res.json({
-    message: "Logged in",
-    user: { id: user.id, email: user.email, name: user.name },
-    ...tokens
-  });
+    const userRow = result.rows[0];
+
+    // Verify password
+    const valid = bcrypt.compareSync(password, userRow.password_hash);
+    if (!valid)
+      return res.status(400).json({ error: "Invalid email or password" });
+
+    const token = generateToken(userRow.id);
+
+    // Format user object to match iOS expectations
+    const user = {
+      id: userRow.id.toString(),
+      email: userRow.email,
+      username: userRow.username,
+      name: userRow.name || userRow.username,
+      userType: userRow.user_type || "partier",
+      bio: userRow.bio || null,
+      avatar: userRow.avatar || null,
+      location: userRow.location || null,
+      verified: userRow.verified || false,
+      createdAt: userRow.created_at ? new Date(userRow.created_at).toISOString() : new Date().toISOString(),
+      followerCount: userRow.follower_count || 0,
+      followingCount: userRow.following_count || 0,
+      eventCount: userRow.event_count || 0,
+      badges: []
+    };
+
+    console.log("✅ Login successful for user:", email);
+    
+    // Send response immediately (don't wait for email)
+    res.json({
+      token,
+      user
+    });
+    
+    // Send login notification email after response (completely async, won't block)
+    sendLoginEmail(email, userRow.name || userRow.username).catch(err => {
+      console.error("⚠️ Failed to send login email:", err);
+    });
+  } catch (err) {
+    console.error("❌ Login error:", err);
+    console.error("   Error message:", err.message);
+    console.error("   Error stack:", err.stack);
+    res.status(500).json({ error: err.message || "Server error during login" });
+  }
 });
 
 /*
 ---------------------------------------
-  REFRESH TOKEN
+  GET CURRENT USER
 ---------------------------------------
 */
-router.post("/refresh", (req, res) => {
-  const { refreshToken } = req.body;
-
-  if (!refreshToken)
-    return res.status(400).json({ error: "Missing refresh token" });
-
-  const stored = db.prepare(`
-    SELECT * FROM refresh_tokens WHERE token = ?
-  `).get(refreshToken);
-
-  if (!stored)
-    return res.status(401).json({ error: "Invalid refresh token" });
-
+router.get("/me", async (req, res) => {
   try {
-    const payload = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
-    const tokens = generateTokens(payload.userId);
-    res.json(tokens);
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      console.log("❌ No auth header or invalid format");
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const token = authHeader.substring(7);
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key-change-in-production");
+    } catch (jwtError) {
+      console.error("❌ JWT verification error:", jwtError.message);
+      return res.status(401).json({ error: "Invalid or expired token" });
+    }
+
+    if (!decoded || !decoded.userId) {
+      console.error("❌ Token decoded but missing userId");
+      return res.status(401).json({ error: "Invalid token format" });
+    }
+
+    const result = await db.query(
+      `SELECT * FROM users WHERE id = $1`,
+      [decoded.userId]
+    );
+
+    if (result.rows.length === 0) {
+      console.error("❌ User not found for userId:", decoded.userId);
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const userRow = result.rows[0];
+
+    // Format user object to match iOS expectations
+    const user = {
+      id: userRow.id.toString(),
+      email: userRow.email,
+      username: userRow.username,
+      name: userRow.name || userRow.username,
+      userType: userRow.user_type || "partier",
+      bio: userRow.bio || null,
+      avatar: userRow.avatar || null,
+      location: userRow.location || null,
+      verified: userRow.verified || false,
+      createdAt: userRow.created_at ? new Date(userRow.created_at).toISOString() : new Date().toISOString(),
+      followerCount: userRow.follower_count || 0,
+      followingCount: userRow.following_count || 0,
+      eventCount: userRow.event_count || 0,
+      badges: []
+    };
+
+    res.json(user);
   } catch (err) {
-    res.status(401).json({ error: "Expired or invalid refresh token" });
+    console.error("❌ Get current user error:", err);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -123,13 +235,33 @@ router.post("/refresh", (req, res) => {
 ---------------------------------------
 */
 router.post("/logout", (req, res) => {
-  const { refreshToken } = req.body;
-
-  if (refreshToken) {
-    db.prepare(`DELETE FROM refresh_tokens WHERE token = ?`).run(refreshToken);
-  }
-
+  // In a stateless JWT system, logout is handled client-side
+  // by removing the token. No server-side action needed.
   res.json({ message: "Logged out" });
+});
+
+/*
+---------------------------------------
+  DELETE ACCOUNT
+---------------------------------------
+*/
+router.delete("/delete-account", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer "))
+      return res.status(401).json({ error: "Unauthorized" });
+
+    const token = authHeader.substring(7);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key-change-in-production");
+
+    // Delete user from database
+    await db.query(`DELETE FROM users WHERE id = $1`, [decoded.userId]);
+
+    res.json({ message: "Account deleted successfully" });
+  } catch (err) {
+    console.error("Delete account error:", err);
+    res.status(500).json({ error: "Failed to delete account" });
+  }
 });
 
 export default router;

@@ -1,73 +1,675 @@
 import express from "express";
 import db from "../db/database.js";
+import jwt from "jsonwebtoken";
 
 const router = express.Router();
 
-// 🔹 Create a new event
-router.post("/create", (req, res) => {
-  const { creatorId, title, description, location, date } = req.body;
-
-  if (!creatorId || !title || !location || !date) {
-    return res.status(400).json({ error: "Missing required fields" });
+// Helper function to safely convert date to ISO8601 string
+const toISOString = (dateValue) => {
+  if (!dateValue) return new Date().toISOString();
+  try {
+    const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
+    if (isNaN(date.getTime())) {
+      console.warn("Invalid date value:", dateValue);
+      return new Date().toISOString();
+    }
+    return date.toISOString();
+  } catch (err) {
+    console.error("Error converting date to ISO8601:", err, dateValue);
+    return new Date().toISOString();
   }
+};
 
-  const stmt = db.prepare(
-    "INSERT INTO events (creator_id, title, description, location, date) VALUES (?, ?, ?, ?, ?)"
-  );
+// GET FEATURED EVENTS (promoted by brands)
+router.get("/featured", async (req, res) => {
+  try {
+    // Get events that are actively promoted by brands
+    const result = await db.query(
+      `SELECT DISTINCT
+        e.*,
+        u.username as host_username,
+        u.name as host_name,
+        u.avatar as host_avatar,
+        b.name as brand_name,
+        b.logo as brand_logo
+      FROM events e
+      LEFT JOIN users u ON e.creator_id = u.id
+      INNER JOIN event_promotions ep ON e.id = ep.event_id
+      INNER JOIN users b ON ep.brand_id = b.id
+      WHERE e.event_date > NOW()
+        AND ep.is_active = true
+        AND (ep.expires_at IS NULL OR ep.expires_at > NOW())
+        AND b.user_type = 'brand'
+      ORDER BY ep.promoted_at DESC, e.event_date ASC
+      LIMIT 20`
+    );
 
-  stmt.run([creatorId, title, description || "", location, date], function (err) {
-    if (err) {
-      return res.status(500).json({ error: "Database error", details: err });
-    }
-    return res.json({ success: true, eventId: this.lastID });
-  });
-});
+    // Format events to match iOS expectations
+    const crypto = require('crypto');
+    const events = result.rows.map(row => {
+      const eventId = row.id.toString();
+      const qrCode = row.qr_code || `sioree:event:${eventId}:${crypto.randomUUID()}`;
+      return {
+        id: eventId,
+        title: row.title,
+        description: row.description || "",
+        hostId: row.creator_id?.toString() || "",
+        hostName: row.host_name || row.host_username || "Unknown Host",
+        hostAvatar: row.host_avatar || null,
+        date: toISOString(row.event_date),
+        location: row.location || "",
+        images: [],
+        ticketPrice: row.ticket_price && parseFloat(row.ticket_price) > 0 ? parseFloat(row.ticket_price) : null,
+        capacity: row.capacity || null,
+        attendees: row.attendee_count || 0,
+        isLiked: false,
+        isSaved: false,
+        likes: row.likes || 0,
+        isFeatured: true, // These are featured events (promoted by brands)
+        qrCode: qrCode
+      };
+    });
 
-// 🔹 List all events
-router.get("/", (req, res) => {
-  const stmt = db.prepare("SELECT * FROM events ORDER BY date ASC");
-  stmt.all([], (err, rows) => {
-    if (err) {
-      return res.status(500).json({ error: "Database error", details: err });
-    }
-    return res.json({ events: rows });
-  });
-});
-
-// 🔹 Join an event
-router.post("/attend", (req, res) => {
-  const { userId, eventId } = req.body;
-
-  if (!userId || !eventId) {
-    return res.status(400).json({ error: "Missing required fields" });
+    res.json({ events });
+  } catch (err) {
+    console.error("Get featured events error:", err);
+    res.status(500).json({ error: "Failed to fetch featured events" });
   }
-
-  const stmt = db.prepare(
-    "INSERT INTO event_attendees (event_id, user_id) VALUES (?, ?)"
-  );
-
-  stmt.run([eventId, userId], function (err) {
-    if (err) {
-      return res.status(500).json({ error: "Database error", details: err });
-    }
-    return res.json({ success: true });
-  });
 });
 
-// 🔹 Get attendees for an event
-router.get("/:eventId/attendees", (req, res) => {
-  const id = req.params.eventId;
+// GET NEARBY EVENTS (requires authentication)
+router.get("/nearby", async (req, res) => {
+  try {
+    // Get user location from query params or headers (in production, get from user's profile)
+    const { latitude, longitude, radius = 50 } = req.query; // radius in km, default 50km
 
-  const stmt = db.prepare(
-    "SELECT users.id, users.username FROM event_attendees JOIN users ON users.id = event_attendees.user_id WHERE event_attendees.event_id = ?"
-  );
+    // Return upcoming events (excluding featured ones, or include them but mark them)
+    // In production, filter by location using PostGIS or calculate distance
+    const result = await db.query(
+      `SELECT 
+        e.*,
+        u.username as host_username,
+        u.name as host_name,
+        u.avatar as host_avatar,
+        CASE WHEN ep.id IS NOT NULL THEN true ELSE false END as is_featured
+      FROM events e
+      LEFT JOIN users u ON e.creator_id = u.id
+      LEFT JOIN event_promotions ep ON e.id = ep.event_id 
+        AND ep.is_active = true 
+        AND (ep.expires_at IS NULL OR ep.expires_at > NOW())
+      WHERE e.event_date > NOW()
+      ORDER BY e.event_date ASC
+      LIMIT 50`
+    );
 
-  stmt.all([id], (err, rows) => {
-    if (err) {
-      return res.status(500).json({ error: "Database error", details: err });
+    // Format events to match iOS expectations
+    const crypto = require('crypto');
+    const events = result.rows.map(row => {
+      const eventId = row.id.toString();
+      const qrCode = row.qr_code || `sioree:event:${eventId}:${crypto.randomUUID()}`;
+      return {
+        id: eventId,
+        title: row.title,
+        description: row.description || "",
+        hostId: row.creator_id?.toString() || "",
+        hostName: row.host_name || row.host_username || "Unknown Host",
+        hostAvatar: row.host_avatar || null,
+        date: toISOString(row.event_date),
+        location: row.location || "",
+        images: [], // Will be populated from media_uploads table if needed
+        ticketPrice: row.ticket_price && parseFloat(row.ticket_price) > 0 ? parseFloat(row.ticket_price) : null,
+        capacity: row.capacity || null,
+        attendees: row.attendee_count || 0,
+        isLiked: false,
+        isSaved: false,
+        likes: row.likes || 0,
+        isFeatured: row.is_featured || false,
+        qrCode: qrCode
+      };
+    });
+
+    res.json({ events });
+  } catch (err) {
+    console.error("Get nearby events error:", err);
+    res.status(500).json({ error: "Failed to fetch events" });
+  }
+});
+
+// CREATE EVENT
+router.post("/", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer "))
+      return res.status(401).json({ error: "Unauthorized" });
+
+    const token = authHeader.substring(7);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key-change-in-production");
+
+    // Support both event_date and date fields
+    const eventDate = req.body.event_date || req.body.date || req.body.eventDate;
+    const { title, description, location, ticket_price, ticketPrice, capacity } = req.body;
+
+    console.log("📥 Received event creation request:");
+    console.log("   Title:", title);
+    console.log("   Description:", description);
+    console.log("   Location:", location);
+    console.log("   Event Date:", eventDate);
+    console.log("   Ticket Price:", ticket_price || ticketPrice);
+    console.log("   Capacity:", capacity);
+
+    if (!title || !title.trim()) {
+      console.error("❌ Missing title");
+      return res.status(400).json({ error: "Title is required" });
     }
-    return res.json({ attendees: rows });
-  });
+    
+    if (!eventDate) {
+      console.error("❌ Missing event date");
+      return res.status(400).json({ error: "Event date is required" });
+    }
+    
+    if (!location || !location.trim()) {
+      console.error("❌ Missing location");
+      return res.status(400).json({ error: "Location is required" });
+    }
+    
+    // Handle ticket price - ensure it's a number
+    let ticketPriceValue = 0;
+    // Check both ticket_price and ticketPrice fields
+    const ticketPriceField = ticket_price !== undefined ? ticket_price : ticketPrice;
+    
+    if (ticketPriceField !== undefined && ticketPriceField !== null && ticketPriceField !== "") {
+      // Parse as number - handle both string and number types
+      let parsed;
+      if (typeof ticketPriceField === 'string') {
+        parsed = parseFloat(ticketPriceField);
+      } else if (typeof ticketPriceField === 'number') {
+        parsed = ticketPriceField;
+      } else {
+        parsed = Number(ticketPriceField);
+      }
+      
+      // Ensure it's a valid number and >= 0
+      if (!isNaN(parsed) && parsed >= 0) {
+        ticketPriceValue = parsed;
+      }
+    }
+    
+    // Ensure it's a number type (not string) for database
+    const dbTicketPrice = Number(ticketPriceValue);
+    
+    console.log("💰 Ticket price received:", ticketPriceField, "→ parsed:", ticketPriceValue, "→ DB:", dbTicketPrice);
+
+    const result = await db.query(
+      `INSERT INTO events (creator_id, title, description, location, event_date, ticket_price, capacity)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      [decoded.userId, title, description || null, location || null, eventDate, dbTicketPrice, capacity || null]
+    );
+
+    const eventRow = result.rows[0];
+    
+    // Get host info
+    const hostResult = await db.query(`SELECT username, name, avatar FROM users WHERE id = $1`, [decoded.userId]);
+    const host = hostResult.rows[0] || {};
+
+    // Generate unique QR code for the event
+    const crypto = require('crypto');
+    const eventId = eventRow.id.toString();
+    const qrCode = `sioree:event:${eventId}:${crypto.randomUUID()}`;
+    
+    // Format event to match iOS Event model expectations
+    // Required fields (using try container.decode): id, title, description, hostId, hostName, date, location
+    // Optional fields (using decodeIfPresent): hostAvatar, locationDetails, images, ticketPrice, capacity, attendeeCount, talentIds, status, createdAt, likes, isLiked, isSaved, isFeatured, qrCode
+    const event = {
+      id: eventId,
+      title: eventRow.title || "",
+      description: eventRow.description || "",
+      hostId: eventRow.creator_id?.toString() || decoded.userId.toString(),
+      hostName: host.name || host.username || "Unknown Host",
+      hostAvatar: host.avatar || null,
+      date: toISOString(eventRow.event_date),
+      location: eventRow.location || "",
+      images: [],
+      ticketPrice: eventRow.ticket_price && parseFloat(eventRow.ticket_price) > 0 ? parseFloat(eventRow.ticket_price) : null,
+      capacity: eventRow.capacity || null,
+      attendees: 0,  // Maps to attendeeCount via CodingKeys
+      talentIds: [],
+      status: "published",
+      created_at: toISOString(eventRow.created_at),  // Maps to createdAt via CodingKeys
+      likes: 0,
+      isLiked: false,
+      isSaved: false,
+      isFeatured: eventRow.is_featured || false,
+      qrCode: qrCode  // Unique QR code for the event
+    };
+    
+    // Validate all required fields are present
+    if (!event.id || !event.title || !event.hostId || !event.hostName || !event.date || !event.location) {
+      console.error("❌ Missing required fields in event:", event);
+      return res.status(500).json({ error: "Failed to create event: missing required fields" });
+    }
+
+    console.log("✅ Created event:", JSON.stringify(event, null, 2));
+    res.json(event);
+  } catch (err) {
+    console.error("❌ Create event error:", err);
+    console.error("   Error message:", err.message);
+    console.error("   Error stack:", err.stack);
+    const errorMessage = err.message || "Failed to create event";
+    res.status(500).json({ error: errorMessage });
+  }
+});
+
+// LIST EVENTS
+router.get("/", async (req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT 
+        e.*,
+        u.username as host_username,
+        u.name as host_name,
+        u.avatar as host_avatar
+      FROM events e
+      LEFT JOIN users u ON e.creator_id = u.id
+      ORDER BY e.event_date ASC
+      LIMIT 100`
+    );
+
+    const crypto = require('crypto');
+    const events = result.rows.map(row => {
+      const eventId = row.id.toString();
+      const qrCode = row.qr_code || `sioree:event:${eventId}:${crypto.randomUUID()}`;
+      return {
+        id: eventId,
+        title: row.title,
+        description: row.description || "",
+        hostId: row.creator_id?.toString() || "",
+        hostName: row.host_name || row.host_username || "Unknown Host",
+        hostAvatar: row.host_avatar || null,
+        date: toISOString(row.event_date),
+        location: row.location || "",
+        images: [],
+        ticketPrice: row.ticket_price && parseFloat(row.ticket_price) > 0 ? parseFloat(row.ticket_price) : null,
+        capacity: row.capacity || null,
+        attendees: row.attendee_count || 0,
+        isLiked: false,
+        isSaved: false,
+        likes: row.likes || 0,
+        isFeatured: row.is_featured || false,
+        qrCode: qrCode
+      };
+    });
+
+    res.json({ events });
+  } catch (err) {
+    console.error("List events error:", err);
+    res.status(500).json({ error: "Failed to fetch events" });
+  }
+});
+
+// Helper to get user ID from token
+function getUserIdFromToken(req) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
+  const token = authHeader.substring(7);
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key-change-in-production");
+    return decoded.userId;
+  } catch (err) {
+    return null;
+  }
+}
+
+// GET SINGLE EVENT
+router.get("/:id", async (req, res) => {
+  try {
+    const userId = getUserIdFromToken(req);
+    
+    const result = await db.query(
+      `SELECT 
+        e.*,
+        u.username as host_username,
+        u.name as host_name,
+        u.avatar as host_avatar,
+        COALESCE(el.likes_count, 0) as likes,
+        CASE WHEN ela.user_id IS NOT NULL THEN true ELSE false END as is_liked,
+        CASE WHEN esa.user_id IS NOT NULL THEN true ELSE false END as is_saved
+      FROM events e
+      LEFT JOIN users u ON e.creator_id = u.id
+      LEFT JOIN (
+        SELECT event_id, COUNT(*) as likes_count
+        FROM event_likes
+        GROUP BY event_id
+      ) el ON el.event_id = e.id
+      LEFT JOIN (
+        SELECT event_id, user_id
+        FROM event_likes
+        WHERE user_id = $2
+      ) ela ON ela.event_id = e.id
+      LEFT JOIN (
+        SELECT event_id, user_id
+        FROM event_saves
+        WHERE user_id = $2
+      ) esa ON esa.event_id = e.id
+      WHERE e.id = $1`,
+      [req.params.id, userId]
+    );
+
+    if (result.rows.length === 0)
+      return res.status(404).json({ error: "Event not found" });
+
+    const row = result.rows[0];
+    const crypto = require('crypto');
+    const eventId = row.id.toString();
+    // Generate QR code if not stored in DB (for backward compatibility)
+    const qrCode = row.qr_code || `sioree:event:${eventId}:${crypto.randomUUID()}`;
+    
+    const event = {
+      id: eventId,
+      title: row.title,
+      description: row.description || "",
+      hostId: row.creator_id?.toString() || "",
+      hostName: row.host_name || row.host_username || "Unknown Host",
+      hostAvatar: row.host_avatar || null,
+      date: toISOString(row.event_date),
+      location: row.location || "",
+      images: [],
+      ticketPrice: row.ticket_price && parseFloat(row.ticket_price) > 0 ? parseFloat(row.ticket_price) : null,
+      capacity: row.capacity || null,
+      attendees: row.attendee_count || 0,
+      isLiked: row.is_liked || false,
+      isSaved: row.is_saved || false,
+      likes: parseInt(row.likes) || 0,
+      isFeatured: row.is_featured || false,
+      status: "published",
+      createdAt: toISOString(row.created_at),
+      talentIds: [],
+      qrCode: qrCode
+    };
+
+    res.json(event);
+  } catch (err) {
+    console.error("Get event error:", err);
+    res.status(500).json({ error: "Failed to fetch event" });
+  }
+});
+
+// GET event attendees
+router.get("/:id/attendees", async (req, res) => {
+  try {
+    const eventId = req.params.id;
+    const result = await db.query(
+      `SELECT u.id, u.name, u.username, u.avatar, u.verified
+       FROM event_attendees ea
+       JOIN users u ON ea.user_id = u.id
+       WHERE ea.event_id = $1
+       ORDER BY ea.created_at DESC`,
+      [eventId]
+    );
+
+    const attendees = result.rows.map(row => ({
+      id: row.id.toString(),
+      name: row.name || row.username || "Unknown",
+      username: row.username || "",
+      avatar: row.avatar || null,
+      isVerified: row.verified || false
+    }));
+
+    res.json({ attendees });
+  } catch (err) {
+    console.error("Get attendees error:", err);
+    res.status(500).json({ error: "Failed to fetch attendees" });
+  }
+});
+
+// RSVP to event (POST)
+router.post("/:id/rsvp", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer "))
+      return res.status(401).json({ error: "Unauthorized" });
+
+    const token = authHeader.substring(7);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key-change-in-production");
+    const userId = decoded.userId;
+    const eventId = req.params.id;
+
+    // Check if already RSVPed
+    const checkResult = await db.query(
+      `SELECT * FROM event_attendees WHERE event_id = $1 AND user_id = $2`,
+      [eventId, userId]
+    );
+
+    if (checkResult.rows.length > 0) {
+      return res.json({ success: true, message: "Already RSVPed" });
+    }
+
+    // Add attendee
+    await db.query(
+      `INSERT INTO event_attendees (event_id, user_id) VALUES ($1, $2)`,
+      [eventId, userId]
+    );
+
+    // Update attendee count
+    await db.query(
+      `UPDATE events SET attendee_count = attendee_count + 1 WHERE id = $1`,
+      [eventId]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("RSVP error:", err);
+    res.status(500).json({ error: "Failed to RSVP" });
+  }
+});
+
+// Cancel RSVP (DELETE)
+router.delete("/:id/rsvp", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer "))
+      return res.status(401).json({ error: "Unauthorized" });
+
+    const token = authHeader.substring(7);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key-change-in-production");
+    const userId = decoded.userId;
+    const eventId = req.params.id;
+
+    // Remove attendee
+    await db.query(
+      `DELETE FROM event_attendees WHERE event_id = $1 AND user_id = $2`,
+      [eventId, userId]
+    );
+
+    // Update attendee count
+    await db.query(
+      `UPDATE events SET attendee_count = GREATEST(0, attendee_count - 1) WHERE id = $1`,
+      [eventId]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Cancel RSVP error:", err);
+    res.status(500).json({ error: "Failed to cancel RSVP" });
+  }
+});
+
+// LIKE/UNLIKE EVENT
+router.post("/:id/like", async (req, res) => {
+  try {
+    const userId = getUserIdFromToken(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const eventId = req.params.id;
+
+    // Check if already liked
+    const checkResult = await db.query(
+      `SELECT * FROM event_likes WHERE event_id = $1 AND user_id = $2`,
+      [eventId, userId]
+    );
+
+    if (checkResult.rows.length > 0) {
+      // Unlike
+      await db.query(
+        `DELETE FROM event_likes WHERE event_id = $1 AND user_id = $2`,
+        [eventId, userId]
+      );
+      await db.query(
+        `UPDATE events SET likes = GREATEST(0, likes - 1) WHERE id = $1`,
+        [eventId]
+      );
+      res.json({ liked: false });
+    } else {
+      // Like
+      await db.query(
+        `INSERT INTO event_likes (event_id, user_id) VALUES ($1, $2)`,
+        [eventId, userId]
+      );
+      await db.query(
+        `UPDATE events SET likes = likes + 1 WHERE id = $1`,
+        [eventId]
+      );
+      res.json({ liked: true });
+    }
+  } catch (err) {
+    console.error("Like event error:", err);
+    res.status(500).json({ error: "Failed to like/unlike event" });
+  }
+});
+
+// SAVE/UNSAVE EVENT
+router.post("/:id/save", async (req, res) => {
+  try {
+    const userId = getUserIdFromToken(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const eventId = req.params.id;
+
+    // Check if already saved
+    const checkResult = await db.query(
+      `SELECT * FROM event_saves WHERE event_id = $1 AND user_id = $2`,
+      [eventId, userId]
+    );
+
+    if (checkResult.rows.length > 0) {
+      // Unsave
+      await db.query(
+        `DELETE FROM event_saves WHERE event_id = $1 AND user_id = $2`,
+        [eventId, userId]
+      );
+      res.json({ saved: false });
+    } else {
+      // Save
+      await db.query(
+        `INSERT INTO event_saves (event_id, user_id) VALUES ($1, $2)`,
+        [eventId, userId]
+      );
+      res.json({ saved: true });
+    }
+  } catch (err) {
+    console.error("Save event error:", err);
+    res.status(500).json({ error: "Failed to save/unsave event" });
+  }
+});
+
+// POST promote event (for brands)
+router.post("/:id/promote", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    
+    const token = authHeader.substring(7);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key-change-in-production");
+    
+    // Check if user is a brand
+    const userResult = await db.query(`SELECT user_type FROM users WHERE id = $1`, [decoded.userId]);
+    if (userResult.rows.length === 0 || userResult.rows[0].user_type !== 'brand') {
+      return res.status(403).json({ error: "Only brands can promote events" });
+    }
+    
+    const eventId = req.params.id;
+    const { expiresAt, promotionBudget } = req.body;
+    
+    // Check if event exists
+    const eventResult = await db.query(`SELECT id FROM events WHERE id = $1`, [eventId]);
+    if (eventResult.rows.length === 0) {
+      return res.status(404).json({ error: "Event not found" });
+    }
+    
+    // Create or update promotion
+    const promotionResult = await db.query(
+      `INSERT INTO event_promotions (event_id, brand_id, expires_at, promotion_budget, is_active)
+       VALUES ($1, $2, $3, $4, true)
+       ON CONFLICT (event_id, brand_id) 
+       DO UPDATE SET 
+         expires_at = $3,
+         promotion_budget = $4,
+         is_active = true,
+         promoted_at = NOW()
+       RETURNING *`,
+      [eventId, decoded.userId, expiresAt || null, promotionBudget || 0]
+    );
+    
+    // Update event's is_featured flag
+    await db.query(`UPDATE events SET is_featured = true WHERE id = $1`, [eventId]);
+    
+    res.json({ 
+      success: true, 
+      promotion: promotionResult.rows[0],
+      message: "Event promoted successfully"
+    });
+  } catch (err) {
+    console.error("Promote event error:", err);
+    if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: "Invalid or expired token" });
+    }
+    res.status(500).json({ error: "Failed to promote event" });
+  }
+});
+
+// DELETE unpromote event (for brands)
+router.delete("/:id/promote", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    
+    const token = authHeader.substring(7);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key-change-in-production");
+    
+    const eventId = req.params.id;
+    
+    // Deactivate promotion
+    await db.query(
+      `UPDATE event_promotions 
+       SET is_active = false 
+       WHERE event_id = $1 AND brand_id = $2`,
+      [eventId, decoded.userId]
+    );
+    
+    // Check if any other brands are promoting this event
+    const activePromotions = await db.query(
+      `SELECT COUNT(*) as count FROM event_promotions 
+       WHERE event_id = $1 AND is_active = true`,
+      [eventId]
+    );
+    
+    // If no active promotions, unfeature the event
+    if (parseInt(activePromotions.rows[0].count) === 0) {
+      await db.query(`UPDATE events SET is_featured = false WHERE id = $1`, [eventId]);
+    }
+    
+    res.json({ success: true, message: "Event promotion removed" });
+  } catch (err) {
+    console.error("Unpromote event error:", err);
+    if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: "Invalid or expired token" });
+    }
+    res.status(500).json({ error: "Failed to remove promotion" });
+  }
 });
 
 export default router;

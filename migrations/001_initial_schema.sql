@@ -1,9 +1,18 @@
 -- Users table
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     username VARCHAR(100) UNIQUE NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255),
+    name VARCHAR(255),
+    bio TEXT,
+    avatar TEXT,
+    user_type VARCHAR(50) DEFAULT 'partier',
+    location VARCHAR(255),
+    verified BOOLEAN DEFAULT FALSE,
+    follower_count INTEGER DEFAULT 0,
+    following_count INTEGER DEFAULT 0,
+    event_count INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -38,13 +47,18 @@ CREATE TABLE messages (
 );
 
 -- Events
-CREATE TABLE events (
+CREATE TABLE IF NOT EXISTS events (
     id SERIAL PRIMARY KEY,
     creator_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     title VARCHAR(255) NOT NULL,
     description TEXT,
     location VARCHAR(255),
     event_date TIMESTAMP NOT NULL,
+    ticket_price DECIMAL(10, 2) DEFAULT 0,
+    capacity INTEGER,
+    attendee_count INTEGER DEFAULT 0,
+    likes INTEGER DEFAULT 0,
+    is_featured BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT NOW()
 );
 

@@ -1,98 +1,46 @@
-import Database from "better-sqlite3";
-import fs from "fs";
+import pg from "pg";
+import dotenv from "dotenv";
+dotenv.config();
 
-// Ensure database file exists
-const dbFile = "sioree.db";
-const dbExists = fs.existsSync(dbFile);
+// Parse connection string to determine SSL requirements
+const isLocalDB = process.env.DATABASE_URL?.includes("localhost") || 
+                  process.env.DATABASE_URL?.includes("127.0.0.1") ||
+                  !process.env.DATABASE_URL?.includes("supabase") && 
+                  !process.env.DATABASE_URL?.includes("amazonaws");
 
-// Create connection
-const db = new Database(dbFile);
+// Use connection pool for better performance and error handling
+const poolConfig = {
+  connectionString: process.env.DATABASE_URL,
+  max: 20, // Maximum number of clients in the pool
+  idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
+  connectionTimeoutMillis: 10000, // Return an error after 10 seconds if connection could not be established
+};
 
-// If DB is new, initialize tables
-if (!dbExists) {
-  console.log("Creating SQLite database schema...");
-
-  db.exec(`
-    CREATE TABLE users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT UNIQUE,
-      email TEXT UNIQUE,
-      password_hash TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE refresh_tokens (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER,
-      token TEXT,
-      expires_at TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE conversations (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      created_by INTEGER,
-      is_group INTEGER DEFAULT 0,
-      title TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE messages (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      conversation_id INTEGER,
-      sender_id INTEGER,
-      content TEXT,
-      media_url TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      read_at TEXT
-    );
-
-    CREATE TABLE events (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      creator_id INTEGER,
-      title TEXT,
-      description TEXT,
-      location TEXT,
-      event_date TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE event_attendees (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      event_id INTEGER,
-      user_id INTEGER,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE bank_accounts (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER,
-      plaid_access_token TEXT,
-      plaid_item_id TEXT,
-      institution_name TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE oauth_tokens (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER,
-      provider TEXT,
-      access_token TEXT,
-      refresh_token TEXT,
-      expires_at TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE media_uploads (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER,
-      file_url TEXT,
-      thumbnail_url TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  console.log("SQLite schema created.");
+// Only add SSL config for remote databases
+if (!isLocalDB && process.env.DATABASE_URL) {
+  poolConfig.ssl = {
+    rejectUnauthorized: false // Accept self-signed certificates for Supabase
+  };
 }
 
+const pool = new pg.Pool(poolConfig);
+
+// Test connection
+pool.query("SELECT NOW()")
+  .then(() => console.log("✅ Database pool connected"))
+  .catch(err => {
+    console.error("❌ Database connection error:", err.message);
+    if (!process.env.DATABASE_URL) {
+      console.error("⚠️ DATABASE_URL environment variable is not set!");
+    }
+  });
+
+// Export pool with query method for compatibility
+const db = {
+  query: (text, params) => pool.query(text, params),
+  pool: pool
+};
+
 export default db;
+
+

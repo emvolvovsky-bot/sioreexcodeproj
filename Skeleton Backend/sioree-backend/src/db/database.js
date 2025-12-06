@@ -8,29 +8,54 @@ const isLocalDB = process.env.DATABASE_URL?.includes("localhost") ||
                   (!process.env.DATABASE_URL?.includes("supabase") && 
                    !process.env.DATABASE_URL?.includes("amazonaws"));
 
-// Parse DATABASE_URL - ensure SSL mode is set correctly
+// Parse DATABASE_URL - ensure SSL mode and connection parameters are set correctly
 let databaseUrl = process.env.DATABASE_URL;
 if (databaseUrl && databaseUrl.includes("supabase")) {
   console.log("📊 Using Supabase database connection");
   // Log connection details (without exposing password)
-  const urlParts = new URL(databaseUrl);
-  console.log(`📊 Database host: ${urlParts.hostname}`);
-  console.log(`📊 Database port: ${urlParts.port || '5432'}`);
+  try {
+    const urlParts = new URL(databaseUrl);
+    console.log(`📊 Database host: ${urlParts.hostname}`);
+    console.log(`📊 Database port: ${urlParts.port || '5432'}`);
+  } catch (e) {
+    console.log("📊 Database URL format check");
+  }
   
-  // Ensure sslmode=require is in the connection string for proper SCRAM authentication
-  if (!databaseUrl.includes("sslmode=")) {
-    databaseUrl += (databaseUrl.includes("?") ? "&" : "?") + "sslmode=require";
+  // For pooler connections, ensure proper connection parameters
+  if (databaseUrl.includes("pooler")) {
+    // Pooler connections need specific parameters
+    const params = new URLSearchParams();
+    if (databaseUrl.includes("?")) {
+      const existingParams = databaseUrl.split("?")[1];
+      const existing = new URLSearchParams(existingParams);
+      existing.forEach((value, key) => params.set(key, value));
+    }
+    
+    // Set required parameters for pooler
+    params.set("sslmode", "require");
+    params.set("pgbouncer", "true"); // Important for pooler connections
+    
+    const baseUrl = databaseUrl.split("?")[0];
+    databaseUrl = `${baseUrl}?${params.toString()}`;
+    console.log("📊 Using pooler connection with pgbouncer=true");
+  } else {
+    // For direct connections, just ensure sslmode=require
+    if (!databaseUrl.includes("sslmode=")) {
+      databaseUrl += (databaseUrl.includes("?") ? "&" : "?") + "sslmode=require";
+    }
   }
 }
 
 // Use connection pool for better performance and error handling
 const poolConfig = {
   connectionString: databaseUrl || process.env.DATABASE_URL,
-  max: 20, // Maximum number of clients in the pool
+  max: 15, // Reduced for pooler connections (Supabase pooler limit)
   idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
   connectionTimeoutMillis: 10000, // Increased to 10 seconds for network latency
   keepAlive: true,
   keepAliveInitialDelayMillis: 10000,
+  // For pooler connections, we need to use transaction mode
+  statement_timeout: 30000, // 30 second statement timeout
 };
 
 // Always add SSL config for Supabase (required)

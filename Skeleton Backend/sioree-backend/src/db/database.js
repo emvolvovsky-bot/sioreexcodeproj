@@ -8,14 +8,19 @@ const isLocalDB = process.env.DATABASE_URL?.includes("localhost") ||
                   (!process.env.DATABASE_URL?.includes("supabase") && 
                    !process.env.DATABASE_URL?.includes("amazonaws"));
 
-// Parse DATABASE_URL - use as-is, but log for debugging
-const databaseUrl = process.env.DATABASE_URL;
+// Parse DATABASE_URL - ensure SSL mode is set correctly
+let databaseUrl = process.env.DATABASE_URL;
 if (databaseUrl && databaseUrl.includes("supabase")) {
   console.log("📊 Using Supabase database connection");
   // Log connection details (without exposing password)
   const urlParts = new URL(databaseUrl);
   console.log(`📊 Database host: ${urlParts.hostname}`);
   console.log(`📊 Database port: ${urlParts.port || '5432'}`);
+  
+  // Ensure sslmode=require is in the connection string for proper SCRAM authentication
+  if (!databaseUrl.includes("sslmode=")) {
+    databaseUrl += (databaseUrl.includes("?") ? "&" : "?") + "sslmode=require";
+  }
 }
 
 // Use connection pool for better performance and error handling

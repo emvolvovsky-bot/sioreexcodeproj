@@ -35,10 +35,12 @@ const poolConfig = {
 
 // Always add SSL config for Supabase (required)
 // Supabase uses self-signed certificates, so we need to disable certificate validation
-if (process.env.DATABASE_URL?.includes("supabase") || !isLocalDB) {
+const isSupabase = process.env.DATABASE_URL?.includes("supabase") || databaseUrl?.includes("supabase");
+if (isSupabase || !isLocalDB) {
   poolConfig.ssl = {
-    rejectUnauthorized: false // Accept self-signed certificates for Supabase
+    rejectUnauthorized: false // CRITICAL: Accept self-signed certificates for Supabase
   };
+  console.log("🔒 SSL configured with rejectUnauthorized: false for Supabase connection");
 }
 
 const pool = new pg.Pool(poolConfig);

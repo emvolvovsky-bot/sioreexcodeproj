@@ -111,8 +111,7 @@ router.post("/login", async (req, res) => {
 
     console.log("🔐 Login attempt for:", email);
 
-    // Get user from database with timeout protection
-    // Get user from database with timeout protection
+    // Get user from database with timeout protection and better error handling
     let result;
     try {
       result = await Promise.race([
@@ -121,15 +120,33 @@ router.post("/login", async (req, res) => {
           [email]
         ),
         new Promise((_, reject) => 
-          setTimeout(() => reject(new Error("Database query timeout after 8 seconds")), 8000)
+          setTimeout(() => reject(new Error("Database query timeout after 10 seconds")), 10000)
         )
       ]);
     } catch (dbError) {
       console.error("❌ Database query error:", dbError.message);
+      console.error("❌ Error code:", dbError.code);
+      console.error("❌ Error details:", {
+        errno: dbError.errno,
+        syscall: dbError.syscall,
+        address: dbError.address,
+        port: dbError.port
+      });
+      
       // Return a more user-friendly error
+      if (dbError.code === "ENETUNREACH" || dbError.message.includes("ENETUNREACH")) {
+        return res.status(503).json({ 
+          error: "Database connection failed. Please check your network configuration." 
+        });
+      }
       if (dbError.message.includes("timeout") || dbError.message.includes("Connection terminated")) {
         return res.status(503).json({ 
           error: "Database connection timeout. Please try again in a moment." 
+        });
+      }
+      if (dbError.code === "ECONNREFUSED") {
+        return res.status(503).json({ 
+          error: "Database server is not reachable. Please check your connection settings." 
         });
       }
       throw dbError;

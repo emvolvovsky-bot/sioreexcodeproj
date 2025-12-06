@@ -31,8 +31,17 @@ const poolConfig = {
 // Always add SSL config for Supabase (required)
 if (process.env.DATABASE_URL?.includes("supabase") || !isLocalDB) {
   poolConfig.ssl = {
-    rejectUnauthorized: false // Accept self-signed certificates for Supabase
+    rejectUnauthorized: false, // Accept self-signed certificates for Supabase
+    require: true // Require SSL connection
   };
+  
+  // For Supabase pooler connections, ensure proper SSL handling
+  if (process.env.DATABASE_URL?.includes("pooler")) {
+    poolConfig.ssl = {
+      rejectUnauthorized: false,
+      require: true
+    };
+  }
 }
 
 const pool = new pg.Pool(poolConfig);

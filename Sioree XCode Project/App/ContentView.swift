@@ -16,7 +16,6 @@ struct ContentView: View {
     @State private var selectedRole: UserRole?
     @State private var showRoleSelection = false
     @State private var showSplash = false
-    @State private var isBackendConnected = true // Always show as connected
 
     var body: some View {
         ZStack {
@@ -73,21 +72,6 @@ struct ContentView: View {
                         .onAppear { hasSeenOnboarding = true }
                 }
             }
-            }
-            
-            // Backend Status Indicator - Always show
-            VStack {
-                HStack {
-                    Spacer()
-                    Text("🔥")
-                        .font(.system(size: 24))
-                        .padding(8)
-                        .background(Color.black.opacity(0.3))
-                        .cornerRadius(8)
-                        .padding(.top, 8)
-                        .padding(.trailing, 8)
-                }
-                Spacer()
             }
         }
         .animation(.easeInOut(duration: 0.4), value: authViewModel.isAuthenticated)

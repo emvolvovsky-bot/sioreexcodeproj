@@ -199,12 +199,38 @@ router.post("/", async (req, res) => {
     
     console.log("💰 Ticket price received:", ticketPriceField, "→ parsed:", ticketPriceValue, "→ DB:", dbTicketPrice);
 
-    const result = await db.query(
-      `INSERT INTO events (creator_id, title, description, location, event_date, ticket_price, capacity, looking_for_talent_type)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING *`,
-      [decoded.userId, title, description || null, location || null, eventDate, dbTicketPrice, capacity || null, lookingForTalentType || null]
-    );
+    // Check if looking_for_talent_type column exists before including it in INSERT
+    let columnExists = false;
+    try {
+      const checkResult = await db.query(
+        `SELECT column_name 
+         FROM information_schema.columns 
+         WHERE table_name = 'events' 
+         AND column_name = 'looking_for_talent_type'`
+      );
+      columnExists = checkResult.rows.length > 0;
+    } catch (checkErr) {
+      // If we can't check, assume it doesn't exist to be safe
+      columnExists = false;
+    }
+    
+    let result;
+    if (columnExists) {
+      result = await db.query(
+        `INSERT INTO events (creator_id, title, description, location, event_date, ticket_price, capacity, looking_for_talent_type)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING *`,
+        [decoded.userId, title, description || null, location || null, eventDate, dbTicketPrice, capacity || null, lookingForTalentType || null]
+      );
+    } else {
+      // Column doesn't exist, insert without it
+      result = await db.query(
+        `INSERT INTO events (creator_id, title, description, location, event_date, ticket_price, capacity)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING *`,
+        [decoded.userId, title, description || null, location || null, eventDate, dbTicketPrice, capacity || null]
+      );
+    }
 
     const eventRow = result.rows[0];
     

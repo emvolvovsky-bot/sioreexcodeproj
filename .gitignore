@@ -1,6 +1,95 @@
+# Dependencies
 node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables and secrets
 .env
+.env.local
+.env.development
+.env.production
+.env.test
+*.env
+
+# Database files
 *.db
+*.sqlite
+*.sqlite3
+sioree.db
+database.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Bank account and payment details
+**/bank_accounts.json
+**/bank_details.json
+**/payment_details.json
+**/stripe_keys.json
+**/financial_data.json
+**/*bank*.json
+**/*payment*.json
+**/*financial*.json
+
+# Sensitive configuration files
+config/secrets.json
+secrets.json
+credentials.json
+*.pem
+*.key
+*.cert
+*.crt
+*.p12
+*.pfx
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# OS files
 .DS_Store
-node_modules/
-.env
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# Build artifacts
+dist/
+build/
+*.o
+*.a
+*.so
+*.dylib
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Coverage reports
+coverage/
+.nyc_output/
+
+# Backend specific
+Skeleton Backend/sioree-backend/sioree.db
+Skeleton Backend/sioree-backend/*.db
+Skeleton Backend/sioree-backend/.env
+Skeleton Backend/sioree-backend/node_modules/

@@ -25,7 +25,7 @@ const toISOString = (dateValue) => {
 router.get("/featured", async (req, res) => {
   try {
     // Get events that are actively promoted by brands
-    // Use subquery to get most recent promotion per event, then join for full details
+    // Use window function to get most recent promotion per event, then join for full details
     const result = await db.query(
       `SELECT 
         e.*,
@@ -38,15 +38,15 @@ router.get("/featured", async (req, res) => {
       FROM events e
       LEFT JOIN users u ON e.creator_id = u.id
       INNER JOIN (
-        SELECT DISTINCT ON (event_id)
+        SELECT 
           event_id,
           brand_id,
-          promoted_at
+          promoted_at,
+          ROW_NUMBER() OVER (PARTITION BY event_id ORDER BY promoted_at DESC) as rn
         FROM event_promotions
         WHERE is_active = true
           AND (expires_at IS NULL OR expires_at > NOW())
-        ORDER BY event_id, promoted_at DESC
-      ) latest_promo ON e.id = latest_promo.event_id
+      ) latest_promo ON e.id = latest_promo.event_id AND latest_promo.rn = 1
       INNER JOIN users b ON latest_promo.brand_id = b.id
       WHERE e.event_date > NOW()
         AND b.user_type = 'brand'

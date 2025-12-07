@@ -83,6 +83,12 @@ router.get("/featured", async (req, res) => {
     res.json({ events });
   } catch (err) {
     console.error("Get featured events error:", err);
+    console.error("Error details:", {
+      message: err.message,
+      code: err.code,
+      detail: err.detail,
+      hint: err.hint
+    });
     res.status(500).json({ error: "Failed to fetch featured events" });
   }
 });

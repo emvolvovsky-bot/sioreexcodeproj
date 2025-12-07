@@ -25,15 +25,16 @@ const toISOString = (dateValue) => {
 router.get("/featured", async (req, res) => {
   try {
     // Get events that are actively promoted by brands
+    // Use GROUP BY instead of DISTINCT to handle multiple promotions per event
     const result = await db.query(
-      `SELECT DISTINCT
+      `SELECT 
         e.*,
         u.username as host_username,
         u.name as host_name,
         u.avatar as host_avatar,
         b.name as brand_name,
         b.avatar as brand_avatar,
-        ep.promoted_at
+        MAX(ep.promoted_at) as promoted_at
       FROM events e
       LEFT JOIN users u ON e.creator_id = u.id
       INNER JOIN event_promotions ep ON e.id = ep.event_id
@@ -42,7 +43,8 @@ router.get("/featured", async (req, res) => {
         AND ep.is_active = true
         AND (ep.expires_at IS NULL OR ep.expires_at > NOW())
         AND b.user_type = 'brand'
-      ORDER BY ep.promoted_at DESC, e.event_date ASC
+      GROUP BY e.id, u.id, b.id
+      ORDER BY MAX(ep.promoted_at) DESC, e.event_date ASC
       LIMIT 20`
     );
 

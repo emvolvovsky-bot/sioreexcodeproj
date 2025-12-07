@@ -260,7 +260,7 @@ struct TalentMarketplaceProfileView: View {
             .onAppear {
                 updateSocialLinks()
             }
-            .onChange(of: currentUser) { _ in
+            .onChange(of: authViewModel.currentUser) { _ in
                 updateSocialLinks()
             }
         }

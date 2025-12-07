@@ -36,93 +36,124 @@ struct MyEventsView: View {
         }
     }
     
+    private var backgroundGradient: some View {
+        LinearGradient(
+            colors: [Color.sioreeBlack, Color.sioreeBlack.opacity(0.95), Color.sioreeCharcoal.opacity(0.1)],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+    
+    private var emptyStateView: some View {
+        VStack(spacing: Theme.Spacing.m) {
+            Image(systemName: "calendar.badge.plus")
+                .font(.system(size: 64))
+                .foregroundColor(Color.sioreeLightGrey)
+            Text("No events yet")
+                .font(.sioreeH3)
+                .foregroundColor(Color.sioreeWhite)
+            Text("Create your first event to get started")
+                .font(.sioreeBody)
+                .foregroundColor(Color.sioreeLightGrey.opacity(0.7))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, Theme.Spacing.xxl)
+    }
+    
+    private var eventsListView: some View {
+        ForEach(events) { event in
+            eventRowView(for: event)
+        }
+    }
+    
+    private func eventRowView(for event: Event) -> some View {
+        VStack(spacing: Theme.Spacing.s) {
+            HostEventCard(
+                event: event,
+                status: eventStatusString(for: event),
+                onTap: {
+                    // Navigate to event detail
+                }
+            )
+            
+            eventActionButtons(for: event)
+        }
+        .padding(.horizontal, Theme.Spacing.m)
+    }
+    
+    private func eventActionButtons(for event: Event) -> some View {
+        HStack(spacing: Theme.Spacing.m) {
+            // Delete Event Button
+            deleteButton(for: event)
+            
+            // Scan Tickets Button (only for upcoming events)
+            if event.date > Date() {
+                scanTicketsButton(for: event)
+            }
+        }
+    }
+    
+    private func deleteButton(for event: Event) -> some View {
+        Button(action: {
+            eventToDelete = event.id
+            showDeleteConfirmation = true
+        }) {
+            HStack {
+                Image(systemName: "trash")
+                Text("Delete Event")
+                    .font(.sioreeBody)
+            }
+            .foregroundColor(.red)
+            .frame(maxWidth: .infinity)
+            .padding(Theme.Spacing.m)
+            .background(Color.red.opacity(0.2))
+            .cornerRadius(Theme.CornerRadius.medium)
+        }
+    }
+    
+    private func scanTicketsButton(for event: Event) -> some View {
+        Button(action: {
+            selectedEventId = event.id
+            showQRScanner = true
+        }) {
+            HStack {
+                Image(systemName: "qrcode.viewfinder")
+                Text("Scan Tickets")
+                    .font(.sioreeBody)
+            }
+            .foregroundColor(.sioreeWhite)
+            .frame(maxWidth: .infinity)
+            .padding(Theme.Spacing.m)
+            .background(Color.sioreeIcyBlue)
+            .cornerRadius(Theme.CornerRadius.medium)
+        }
+    }
+    
+    private var contentView: some View {
+        ScrollView {
+            LazyVStack(spacing: Theme.Spacing.m) {
+                if homeViewModel.isLoading && !homeViewModel.hasLoaded {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, Theme.Spacing.xxl)
+                } else if events.isEmpty && homeViewModel.hasLoaded {
+                    emptyStateView
+                } else {
+                    eventsListView
+                }
+            }
+            .padding(.top, Theme.Spacing.s)
+            .padding(.bottom, Theme.Spacing.m)
+        }
+    }
+    
     var body: some View {
         NavigationStack {
             ZStack {
-                // Subtle gradient on black background
-                LinearGradient(
-                    colors: [Color.sioreeBlack, Color.sioreeBlack.opacity(0.95), Color.sioreeCharcoal.opacity(0.1)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
+                backgroundGradient
+                    .ignoresSafeArea()
                 
-                ScrollView {
-                    LazyVStack(spacing: Theme.Spacing.m) {
-                        if homeViewModel.isLoading && !homeViewModel.hasLoaded {
-                            ProgressView()
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, Theme.Spacing.xxl)
-                        } else if events.isEmpty && homeViewModel.hasLoaded {
-                            VStack(spacing: Theme.Spacing.m) {
-                                Image(systemName: "calendar.badge.plus")
-                                    .font(.system(size: 64))
-                                    .foregroundColor(Color.sioreeLightGrey)
-                                Text("No events yet")
-                                    .font(.sioreeH3)
-                                    .foregroundColor(Color.sioreeWhite)
-                                Text("Create your first event to get started")
-                                    .font(.sioreeBody)
-                                    .foregroundColor(Color.sioreeLightGrey.opacity(0.7))
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, Theme.Spacing.xxl)
-                        } else {
-                            ForEach(events) { event in
-                            VStack(spacing: Theme.Spacing.s) {
-                                HostEventCard(
-                                    event: event,
-                                    status: eventStatusString(for: event),
-                                    onTap: {
-                                        // Navigate to event detail
-                                    }
-                                )
-                                
-                                HStack(spacing: Theme.Spacing.m) {
-                                    // Delete Event Button (only for host's own events)
-                                    Button(action: {
-                                        eventToDelete = event.id
-                                        showDeleteConfirmation = true
-                                    }) {
-                                        HStack {
-                                            Image(systemName: "trash")
-                                            Text("Delete Event")
-                                                .font(.sioreeBody)
-                                        }
-                                        .foregroundColor(.red)
-                                        .frame(maxWidth: .infinity)
-                                        .padding(Theme.Spacing.m)
-                                        .background(Color.red.opacity(0.2))
-                                        .cornerRadius(Theme.CornerRadius.medium)
-                                    }
-                                    
-                                    // Scan Tickets Button (only for upcoming events)
-                                    if event.date > Date() {
-                                        Button(action: {
-                                            selectedEventId = event.id
-                                            showQRScanner = true
-                                        }) {
-                                            HStack {
-                                                Image(systemName: "qrcode.viewfinder")
-                                                Text("Scan Tickets")
-                                                    .font(.sioreeBody)
-                                            }
-                                            .foregroundColor(.sioreeWhite)
-                                            .frame(maxWidth: .infinity)
-                                            .padding(Theme.Spacing.m)
-                                            .background(Color.sioreeIcyBlue)
-                                            .cornerRadius(Theme.CornerRadius.medium)
-                                        }
-                                    }
-                                }
-                            }
-                            .padding(.horizontal, Theme.Spacing.m)
-                            }
-                        }
-                    }
-                    .padding(.top, Theme.Spacing.s)
-                    .padding(.bottom, Theme.Spacing.m)
-                }
+                contentView
                 .onAppear {
                     if !homeViewModel.hasLoaded {
                         homeViewModel.loadNearbyEvents()

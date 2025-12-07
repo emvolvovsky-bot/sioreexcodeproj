@@ -55,7 +55,7 @@ struct RoleRootView: View {
                 ("Gigs", "briefcase.fill", AnyView(TalentGigsView())),
                 ("Map", "map.fill", AnyView(MapViewPlaceholder())),
                 ("Inbox", "envelope.fill", AnyView(TalentInboxView())),
-                ("Profile", "person.fill", AnyView(TalentMarketplaceProfileView()))
+                ("Profile", "person.fill", AnyView(TalentMarketplaceProfileView().environmentObject(authViewModel)))
             ]
         case .brand:
             return [

@@ -8,17 +8,28 @@
 import SwiftUI
 
 struct TalentMarketplaceProfileView: View {
-    @State private var talent = MockData.sampleTalent.first!
+    @EnvironmentObject var authViewModel: AuthViewModel
+    @StateObject private var earningsViewModel = TalentEarningsViewModel.shared
     @State private var totalGigs = 45
     @State private var avgRating = 4.8
-    @State private var earningsThisMonth = "$3,500"
     @State private var showSettings = false
     @State private var showRoleSelection = false
     @State private var showClipsView = false
     @State private var showPortfolioView = false
     @State private var showEditAbout = false
-    @State private var aboutText = "Experienced \(MockData.sampleTalent.first!.roleText.lowercased()) with a passion for creating unforgettable experiences. Specializes in electronic music and seamless transitions. Available for events of all sizes, from intimate gatherings to large-scale festivals."
     @AppStorage("selectedUserRole") private var selectedRoleRaw: String = ""
+    
+    private var currentUser: User? {
+        authViewModel.currentUser
+    }
+    
+    private var aboutText: String {
+        currentUser?.bio ?? "Experienced talent with a passion for creating unforgettable experiences."
+    }
+    
+    private var earningsThisMonth: String {
+        "$\(earningsViewModel.earningsThisMonth)"
+    }
     
     // Mock data for clips, portfolio, and social media
     @State private var clips: [TalentClip] = [
@@ -34,12 +45,13 @@ struct TalentMarketplaceProfileView: View {
         PortfolioItem(id: "3", title: "Underground Rave", image: "music.note", date: "Aug 2024")
     ]
     
-    @State private var socialLinks: [SocialLink] = [
-        SocialLink(platform: .instagram, username: "@djmidnight", url: "https://instagram.com/djmidnight"),
-        SocialLink(platform: .tiktok, username: "@djmidnight", url: "https://tiktok.com/@djmidnight"),
-        SocialLink(platform: .youtube, username: "DJ Midnight", url: "https://youtube.com/@djmidnight"),
-        SocialLink(platform: .spotify, username: "DJ Midnight", url: "https://open.spotify.com/artist/djmidnight")
-    ]
+    @State private var socialLinks: [SocialLink] = []
+    
+    private func updateSocialLinks() {
+        guard let user = currentUser else { return }
+        // Initialize with empty array, can be populated from user data if available
+        socialLinks = []
+    }
     
     var body: some View {
         NavigationStack {
@@ -52,51 +64,38 @@ struct TalentMarketplaceProfileView: View {
                 )
                 .ignoresSafeArea()
                 
-                ScrollView {
-                    VStack(spacing: Theme.Spacing.xl) {
-                        // Profile Header
-                        VStack(spacing: Theme.Spacing.m) {
-                            ZStack {
-                                Circle()
-                                    .fill(Color.sioreeLightGrey.opacity(0.3))
-                                    .frame(width: 100, height: 100)
-                                
-                                Image(systemName: talent.imageName)
-                                    .font(.system(size: 50))
-                                    .foregroundColor(Color.sioreeIcyBlue)
-                            }
-                            
-                            Text(talent.name)
-                                .font(.sioreeH1)
-                                .foregroundColor(Color.sioreeWhite)
-                            
-                            Text(talent.roleText)
-                                .font(.sioreeH4)
-                                .foregroundColor(Color.sioreeLightGrey)
-                            
-                            HStack(spacing: Theme.Spacing.s) {
-                                Image(systemName: "star.fill")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(Color.sioreeWarmGlow)
-                                
-                                Text(String(format: "%.1f", avgRating))
-                                    .font(.sioreeH4)
-                                    .foregroundColor(Color.sioreeWhite)
-                                
-                                Text("(24 reviews)")
-                                    .font(.sioreeBodySmall)
-                                    .foregroundColor(Color.sioreeLightGrey)
-                            }
-                        }
-                        .padding(.top, Theme.Spacing.l)
+                Group {
+                    if currentUser == nil {
+                        ProgressView()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        ScrollView {
+                            VStack(spacing: Theme.Spacing.l) {
+                                // Profile Header
+                                if let user = currentUser {
+                                    ProfileHeaderView(user: user)
+                                    
+                                    // Stats - Followers, Following, Events, and Username
+                                    ProfileStatsView(
+                                        eventsHosted: user.eventCount,
+                                        eventsAttended: 0,
+                                        followers: user.followerCount,
+                                        following: user.followingCount,
+                                        username: user.username,
+                                        userType: user.userType,
+                                        userId: user.id
+                                    )
+                                }
                         
-                        // Metrics
-                        VStack(spacing: Theme.Spacing.m) {
-                            MetricCard(title: "Total Gigs", value: "\(totalGigs)")
-                            MetricCard(title: "Avg Rating", value: String(format: "%.1f", avgRating))
-                            MetricCard(title: "Earnings This Month", value: earningsThisMonth)
+                        // Metrics (only show if user is talent)
+                        if currentUser?.userType == .talent {
+                            VStack(spacing: Theme.Spacing.m) {
+                                MetricCard(title: "Total Gigs", value: "\(totalGigs)")
+                                MetricCard(title: "Avg Rating", value: String(format: "%.1f", avgRating))
+                                MetricCard(title: "Earnings This Month", value: earningsThisMonth)
+                            }
+                            .padding(.horizontal, Theme.Spacing.m)
                         }
-                        .padding(.horizontal, Theme.Spacing.m)
                         
                         // Bio Section
                         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
@@ -213,10 +212,12 @@ struct TalentMarketplaceProfileView: View {
                                     .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 2)
                             )
                         }
-                        .padding(.horizontal, Theme.Spacing.m)
-                        .padding(.bottom, Theme.Spacing.xl)
+                                .padding(.horizontal, Theme.Spacing.m)
+                                .padding(.bottom, Theme.Spacing.xl)
+                            }
+                            .padding(.vertical, Theme.Spacing.m)
+                        }
                     }
-                    .padding(.vertical, Theme.Spacing.m)
                 }
             }
             .navigationTitle("Profile")
@@ -251,7 +252,16 @@ struct TalentMarketplaceProfileView: View {
                 PortfolioView(items: $portfolioItems)
             }
             .sheet(isPresented: $showEditAbout) {
-                EditAboutView(aboutText: $aboutText)
+                EditAboutView(aboutText: Binding(
+                    get: { aboutText },
+                    set: { _ in }
+                ))
+            }
+            .onAppear {
+                updateSocialLinks()
+            }
+            .onChange(of: currentUser) { _ in
+                updateSocialLinks()
             }
         }
     }

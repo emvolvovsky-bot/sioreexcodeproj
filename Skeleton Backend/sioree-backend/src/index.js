@@ -22,6 +22,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: "*" } });
+
 // Make io available to routes
 app.set("io", io);
 
@@ -45,9 +48,6 @@ app.get("/health", (req, res) => {
 app.get("/api/health", (req, res) => {
   res.json({ status: "Backend running", database: "Supabase Postgres" });
 });
-
-const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
 
 io.on("connection", socket => {
   console.log("Client connected:", socket.id);

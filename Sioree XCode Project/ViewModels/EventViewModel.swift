@@ -84,8 +84,10 @@ class EventViewModel: ObservableObject {
     
     func rsvpToEvent() {
         guard var event = event else { return }
+        // Optimistically update UI
         isRSVPed = true
         event.isRSVPed = true
+        event.attendeeCount += 1
         self.event = event
         
         networkService.rsvpToEvent(eventId: event.id)
@@ -93,22 +95,21 @@ class EventViewModel: ObservableObject {
             .sink(
                 receiveCompletion: { [weak self] completion in
                     if case .failure = completion {
+                        // Revert on failure
                         self?.isRSVPed = false
                         if var event = self?.event {
                             event.isRSVPed = false
+                            if event.attendeeCount > 0 {
+                                event.attendeeCount -= 1
+                            }
                             self?.event = event
                         }
                     }
                 },
                 receiveValue: { [weak self] _ in
-                    // RSVP saved successfully - event will be removed from "Near Me" and appear in "Upcoming"
-                    if var event = self?.event {
-                        event.attendeeCount += 1
-                        event.isRSVPed = true
-                        self?.event = event
-                    }
-                    // Reload event to get updated status
-                    self?.loadEvent()
+                    // RSVP saved successfully - keep the optimistic update
+                    // Don't reload immediately to avoid flickering
+                    print("✅ RSVP saved successfully")
                 }
             )
             .store(in: &cancellables)
@@ -116,8 +117,12 @@ class EventViewModel: ObservableObject {
     
     func cancelRSVP() {
         guard var event = event else { return }
+        // Optimistically update UI
         isRSVPed = false
         event.isRSVPed = false
+        if event.attendeeCount > 0 {
+            event.attendeeCount -= 1
+        }
         self.event = event
         
         networkService.cancelRSVP(eventId: event.id)
@@ -125,24 +130,19 @@ class EventViewModel: ObservableObject {
             .sink(
                 receiveCompletion: { [weak self] completion in
                     if case .failure = completion {
+                        // Revert on failure
                         self?.isRSVPed = true
                         if var event = self?.event {
                             event.isRSVPed = true
+                            event.attendeeCount += 1
                             self?.event = event
                         }
                     }
                 },
                 receiveValue: { [weak self] _ in
-                    // RSVP cancelled successfully - event will be removed from "Upcoming" and appear in "Near Me" again
-                    if var event = self?.event {
-                        if event.attendeeCount > 0 {
-                            event.attendeeCount -= 1
-                        }
-                        event.isRSVPed = false
-                        self?.event = event
-                    }
-                    // Reload event to get updated status
-                    self?.loadEvent()
+                    // RSVP cancelled successfully - keep the optimistic update
+                    // Don't reload immediately to avoid flickering
+                    print("✅ RSVP cancelled successfully")
                 }
             )
             .store(in: &cancellables)

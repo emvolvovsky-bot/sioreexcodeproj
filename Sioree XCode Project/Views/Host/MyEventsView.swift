@@ -16,6 +16,8 @@ struct MyEventsView: View {
     @State private var showNewEvent = false
     @State private var showQRScanner = false
     @State private var selectedEventId: String?
+    @State private var eventToDelete: String?
+    @State private var showDeleteConfirmation = false
     
     private var events: [Event] {
         // Filter events to show only those created by the current user
@@ -67,7 +69,8 @@ struct MyEventsView: View {
                                 HStack(spacing: Theme.Spacing.m) {
                                     // Delete Event Button (only for host's own events)
                                     Button(action: {
-                                        deleteEvent(eventId: event.id)
+                                        eventToDelete = event.id
+                                        showDeleteConfirmation = true
                                     }) {
                                         HStack {
                                             Image(systemName: "trash")
@@ -139,6 +142,19 @@ struct MyEventsView: View {
                 if let eventId = selectedEventId {
                     QRCodeScannerView(eventId: eventId)
                 }
+            }
+            .alert("Delete Event", isPresented: $showDeleteConfirmation) {
+                Button("Cancel", role: .cancel) {
+                    eventToDelete = nil
+                }
+                Button("Delete", role: .destructive) {
+                    if let eventId = eventToDelete {
+                        deleteEvent(eventId: eventId)
+                    }
+                    eventToDelete = nil
+                }
+            } message: {
+                Text("This action is not recoverable. Are you sure you want to delete this event? It will be permanently removed and cannot be undone.")
             }
         }
     }

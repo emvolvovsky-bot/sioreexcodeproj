@@ -320,8 +320,12 @@ struct EventDetailView: View {
                                 bookingId: nil,
                                 onPaymentSuccess: { payment in
                                     // After successful payment, RSVP to event
-                                    viewModel.rsvpToEvent()
+                                    // This will add user to event_attendees and move event to "Upcoming"
                                     viewModel.showPaymentCheckout = false
+                                    // Small delay to ensure payment is processed
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                        viewModel.rsvpToEvent()
+                                    }
                                 }
                             )
                         }

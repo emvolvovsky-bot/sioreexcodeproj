@@ -49,8 +49,6 @@ class HomeViewModel: ObservableObject {
                     if self?.nearbyEvents.isEmpty == true && self?.hasLoaded == false {
                         self?.nearbyEvents = self?.generatePlaceholderNearbyEvents() ?? []
                     }
-                    // Update all events list
-                    self?.updateAllEvents()
                 }
             )
             .store(in: &cancellables)

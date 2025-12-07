@@ -125,7 +125,10 @@ struct MyEventsView: View {
                     // Update local events when homeViewModel events change
                     updateLocalEvents()
                 }
-                .onChange(of: homeViewModel.events) { _ in
+                .onChange(of: homeViewModel.nearbyEvents) { _ in
+                    updateLocalEvents()
+                }
+                .onChange(of: homeViewModel.featuredEvents) { _ in
                     updateLocalEvents()
                 }
             }
@@ -199,24 +202,24 @@ struct MyEventsView: View {
         networkService.deleteEvent(eventId: eventId)
             .receive(on: DispatchQueue.main)
             .sink(
-                receiveCompletion: { [weak self] completion in
+                receiveCompletion: { completion in
                     if case .failure(let error) = completion {
                         print("❌ Failed to delete event: \(error.localizedDescription)")
                         // Reload on failure to restore if delete failed
-                        self?.homeViewModel.loadNearbyEvents()
+                        homeViewModel.loadNearbyEvents()
                     } else {
                         print("✅ Delete request completed")
                     }
                 },
-                receiveValue: { [weak self] success in
+                receiveValue: { success in
                     print("✅ Delete response: \(success)")
                     if success {
                         // Event already removed optimistically, just reload to sync
-                        self?.homeViewModel.loadNearbyEvents()
+                        homeViewModel.loadNearbyEvents()
                     } else {
                         print("⚠️ Delete returned false - reloading to restore")
                         // Reload to restore if delete failed
-                        self?.homeViewModel.loadNearbyEvents()
+                        homeViewModel.loadNearbyEvents()
                     }
                 }
             )
@@ -475,7 +478,7 @@ struct NewEventPlaceholderView: View {
         )
         .receive(on: DispatchQueue.main)
         .sink(
-            receiveCompletion: { [self] completion in
+            receiveCompletion: { completion in
                 isCreating = false
                 if case .failure(let error) = completion {
                     print("❌ Failed to create event: \(error)")
@@ -513,7 +516,7 @@ struct NewEventPlaceholderView: View {
                     print("✅ Event creation completed")
                 }
             },
-            receiveValue: { [self] event in
+            receiveValue: { event in
                 isCreating = false
                 print("✅ Event created successfully: \(event.title)")
                 print("✅ Event ID: \(event.id)")

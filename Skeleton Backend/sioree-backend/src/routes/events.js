@@ -1,6 +1,7 @@
 import express from "express";
 import db from "../db/database.js";
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 
 const router = express.Router();
 
@@ -45,7 +46,6 @@ router.get("/featured", async (req, res) => {
     );
 
     // Format events to match iOS expectations
-    const crypto = require('crypto');
     const events = result.rows.map(row => {
       const eventId = row.id.toString();
       const qrCode = row.qr_code || `sioree:event:${eventId}:${crypto.randomUUID()}`;
@@ -103,7 +103,6 @@ router.get("/nearby", async (req, res) => {
     );
 
     // Format events to match iOS expectations
-    const crypto = require('crypto');
     const events = result.rows.map(row => {
       const eventId = row.id.toString();
       const qrCode = row.qr_code || `sioree:event:${eventId}:${crypto.randomUUID()}`;
@@ -213,7 +212,6 @@ router.post("/", async (req, res) => {
     const host = hostResult.rows[0] || {};
 
     // Generate unique QR code for the event
-    const crypto = require('crypto');
     const eventId = eventRow.id.toString();
     const qrCode = `sioree:event:${eventId}:${crypto.randomUUID()}`;
     
@@ -275,7 +273,6 @@ router.get("/", async (req, res) => {
       LIMIT 100`
     );
 
-    const crypto = require('crypto');
     const events = result.rows.map(row => {
       const eventId = row.id.toString();
       const qrCode = row.qr_code || `sioree:event:${eventId}:${crypto.randomUUID()}`;
@@ -359,7 +356,6 @@ router.get("/:id", async (req, res) => {
       return res.status(404).json({ error: "Event not found" });
 
     const row = result.rows[0];
-    const crypto = require('crypto');
     const eventId = row.id.toString();
     // Generate QR code if not stored in DB (for backward compatibility)
     const qrCode = row.qr_code || `sioree:event:${eventId}:${crypto.randomUUID()}`;

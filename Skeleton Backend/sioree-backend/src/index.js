@@ -22,6 +22,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Make io available to routes
+app.set("io", io);
+
 app.use("/api/auth", authRoutes);
 app.use("/api/events", eventRoutes);
 app.use("/api/messages", messageRoutes);
@@ -48,8 +51,29 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 io.on("connection", socket => {
   console.log("Client connected:", socket.id);
-  socket.on("send_message", payload => socket.broadcast.emit("receive_message", payload));
-  socket.on("disconnect", () => console.log("Client disconnected"));
+  
+  // Join conversation room
+  socket.on("join_conversation", (conversationId) => {
+    socket.join(`conversation:${conversationId}`);
+    console.log(`Client ${socket.id} joined conversation ${conversationId}`);
+  });
+  
+  // Leave conversation room
+  socket.on("leave_conversation", (conversationId) => {
+    socket.leave(`conversation:${conversationId}`);
+    console.log(`Client ${socket.id} left conversation ${conversationId}`);
+  });
+  
+  // Handle incoming messages (for real-time sync)
+  socket.on("send_message", payload => {
+    socket.broadcast.emit("receive_message", payload);
+    // Also emit to conversation room
+    if (payload.conversationId) {
+      io.to(`conversation:${payload.conversationId}`).emit("new_message", payload);
+    }
+  });
+  
+  socket.on("disconnect", () => console.log("Client disconnected:", socket.id));
 });
 
 const PORT = process.env.PORT || 4000;

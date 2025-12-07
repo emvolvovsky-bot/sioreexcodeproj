@@ -4,6 +4,11 @@ import jwt from "jsonwebtoken";
 
 const router = express.Router();
 
+// Helper to get Socket.io instance
+function getIO(req) {
+  return req.app.get("io");
+}
+
 // Helper to get user ID from token
 function getUserIdFromToken(req) {
   const authHeader = req.headers.authorization;
@@ -112,7 +117,7 @@ router.get("/:conversationId", async (req, res) => {
       timestamp: new Date(row.created_at).toISOString(),
       isRead: row.is_read || false,
       messageType: row.message_type || "text"
-    })).reversed();
+    })).reverse();
 
     res.json({ messages, hasMore: result.rows.length === limit });
   } catch (err) {
@@ -231,7 +236,7 @@ router.post("/", async (req, res) => {
     );
 
     const message = result.rows[0];
-    res.json({
+    const messageResponse = {
       id: message.id.toString(),
       conversationId: message.conversation_id.toString(),
       senderId: message.sender_id.toString(),
@@ -240,7 +245,17 @@ router.post("/", async (req, res) => {
       timestamp: new Date(message.created_at).toISOString(),
       isRead: message.is_read || false,
       messageType: message.message_type || "text"
-    });
+    };
+
+    // Emit message via Socket.io for real-time delivery
+    const io = getIO(req);
+    if (io) {
+      io.emit("receive_message", messageResponse);
+      // Also emit to specific conversation room
+      io.to(`conversation:${convId}`).emit("new_message", messageResponse);
+    }
+
+    res.json(messageResponse);
   } catch (err) {
     console.error("Send message error:", err);
     res.status(500).json({ error: "Failed to send message" });

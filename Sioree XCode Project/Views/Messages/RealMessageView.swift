@@ -16,6 +16,7 @@ struct RealMessageView: View {
     @State private var messageText = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @AppStorage("selectedUserRole") private var selectedRoleRaw: String = ""
     
     var body: some View {
         NavigationStack {
@@ -128,7 +129,9 @@ struct RealMessageView: View {
     
     private func loadMessages() {
         isLoading = true
-        messagingService.getMessages(conversationId: conversation.id)
+        // Pass the current role to filter messages by role
+        let currentRole = selectedRoleRaw.isEmpty ? nil : selectedRoleRaw
+        messagingService.getMessages(conversationId: conversation.id, role: currentRole)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
@@ -150,10 +153,13 @@ struct RealMessageView: View {
         let text = messageText
         messageText = ""
         
+        // Pass the current role when sending message
+        let currentRole = selectedRoleRaw.isEmpty ? nil : selectedRoleRaw
         messagingService.sendMessage(
             conversationId: conversation.id,
             receiverId: conversation.participantId,
-            text: text
+            text: text,
+            senderRole: currentRole
         )
         .receive(on: DispatchQueue.main)
         .sink(

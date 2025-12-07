@@ -15,6 +15,7 @@ struct PartierInboxView: View {
     @State private var errorMessage: String?
     @State private var showSearch = false
     @State private var cancellables = Set<AnyCancellable>()
+    @AppStorage("selectedUserRole") private var selectedRoleRaw: String = ""
     
     var body: some View {
         NavigationStack {
@@ -89,7 +90,9 @@ struct PartierInboxView: View {
     
     private func loadConversations() {
         isLoading = true
-        messagingService.getConversations()
+        // Pass the current role to filter messages by role
+        let currentRole = selectedRoleRaw.isEmpty ? "partier" : selectedRoleRaw
+        messagingService.getConversations(role: currentRole)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in

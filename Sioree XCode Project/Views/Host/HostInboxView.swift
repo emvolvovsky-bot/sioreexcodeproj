@@ -38,6 +38,7 @@ struct HostInboxView: View {
     @State private var selectedConversation: Conversation?
     @State private var errorMessage: String?
     @State private var showSearch = false
+    @AppStorage("selectedUserRole") private var selectedRoleRaw: String = ""
     
     var body: some View {
         NavigationStack {
@@ -127,7 +128,9 @@ struct HostInboxView: View {
     
     private func loadConversations() {
         isLoading = true
-        messagingService.getConversations()
+        // Pass the current role to filter messages by role
+        let currentRole = selectedRoleRaw.isEmpty ? "host" : selectedRoleRaw
+        messagingService.getConversations(role: currentRole)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in

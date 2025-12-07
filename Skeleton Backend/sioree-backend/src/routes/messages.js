@@ -22,14 +22,61 @@ function getUserIdFromToken(req) {
   }
 }
 
-// GET all conversations for current user
+// GET all conversations for current user (filtered by role if provided)
 router.get("/conversations", async (req, res) => {
   try {
     const userId = getUserIdFromToken(req);
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-    const result = await db.query(
-      `SELECT DISTINCT
+    // Get role from query parameter (partier, talent, host, brand)
+    const role = req.query.role;
+
+    // Build query with optional role filter
+    let query;
+    let params;
+    
+    if (role) {
+      // Filter conversations by role - only show conversations where messages were sent with this role
+      query = `SELECT DISTINCT
+        CASE 
+          WHEN c.user1_id = $1 THEN c.user2_id
+          ELSE c.user1_id
+        END as participant_id,
+        c.id as conversation_id,
+        u.name as participant_name,
+        u.username as participant_username,
+        u.avatar as participant_avatar,
+        m.text as last_message,
+        m.created_at as last_message_time,
+        COUNT(CASE WHEN m.is_read = false AND m.sender_id != $1 THEN 1 END) as unread_count
+      FROM conversations c
+      LEFT JOIN users u ON (
+        CASE 
+          WHEN c.user1_id = $1 THEN u.id = c.user2_id
+          ELSE u.id = c.user1_id
+        END
+      )
+      LEFT JOIN LATERAL (
+        SELECT text, created_at, is_read, sender_id
+        FROM messages
+        WHERE conversation_id = c.id
+          AND (sender_id = $1 AND sender_role = $2)
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) m ON true
+      WHERE (c.user1_id = $1 OR c.user2_id = $1)
+        AND EXISTS (
+          SELECT 1 FROM messages msg
+          WHERE msg.conversation_id = c.id
+            AND msg.sender_id = $1
+            AND msg.sender_role = $2
+        )
+      GROUP BY c.id, participant_id, u.name, u.username, u.avatar, m.text, m.created_at
+      ORDER BY m.created_at DESC NULLS LAST`;
+      params = [userId, role];
+    } else {
+      // No role filter - show all conversations (backward compatibility)
+      query = `SELECT DISTINCT
         CASE 
           WHEN c.user1_id = $1 THEN c.user2_id
           ELSE c.user1_id
@@ -57,9 +104,11 @@ router.get("/conversations", async (req, res) => {
       ) m ON true
       WHERE c.user1_id = $1 OR c.user2_id = $1
       GROUP BY c.id, participant_id, u.name, u.username, u.avatar, m.text, m.created_at
-      ORDER BY m.created_at DESC NULLS LAST`,
-      [userId]
-    );
+      ORDER BY m.created_at DESC NULLS LAST`;
+      params = [userId];
+    }
+
+    const result = await db.query(query, params);
 
     const conversations = result.rows.map(row => ({
       id: row.conversation_id.toString(),
@@ -79,7 +128,7 @@ router.get("/conversations", async (req, res) => {
   }
 });
 
-// GET messages for a conversation
+// GET messages for a conversation (filtered by role if provided)
 router.get("/:conversationId", async (req, res) => {
   try {
     const userId = getUserIdFromToken(req);
@@ -89,6 +138,7 @@ router.get("/:conversationId", async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = 50;
     const offset = (page - 1) * limit;
+    const role = req.query.role; // Get role from query parameter
 
     // Verify user is part of conversation and get other participant
     // Handle both string and integer conversationId
@@ -106,13 +156,28 @@ router.get("/:conversationId", async (req, res) => {
     // Determine the other participant (receiver for messages sent by current user)
     const otherUserId = conversation.user1_id === userId ? conversation.user2_id : conversation.user1_id;
 
-    const result = await db.query(
-      `SELECT * FROM messages 
+    // Build query with optional role filter
+    let query;
+    let params;
+    
+    if (role) {
+      // Filter messages by role - only show messages sent with this role
+      query = `SELECT * FROM messages 
+       WHERE conversation_id = $1 
+         AND (sender_id = $2 AND sender_role = $4)
+       ORDER BY created_at DESC 
+       LIMIT $3 OFFSET $5`;
+      params = [convId, userId, limit, role, offset];
+    } else {
+      // No role filter - show all messages (backward compatibility)
+      query = `SELECT * FROM messages 
        WHERE conversation_id = $1 
        ORDER BY created_at DESC 
-       LIMIT $2 OFFSET $3`,
-      [convId, limit, offset]
-    );
+       LIMIT $2 OFFSET $3`;
+      params = [convId, limit, offset];
+    }
+
+    const result = await db.query(query, params);
 
     const messages = result.rows.map(row => {
       // Determine receiver_id: if sender is current user, receiver is other user, otherwise receiver is current user
@@ -202,8 +267,15 @@ router.post("/", async (req, res) => {
     const userId = getUserIdFromToken(req);
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { conversationId, receiverId, text, messageType } = req.body;
+    const { conversationId, receiverId, text, messageType, senderRole } = req.body;
     if (!text) return res.status(400).json({ error: "Message text required" });
+    
+    // Get sender role from request body or from user's current user_type
+    let role = senderRole;
+    if (!role) {
+      const userResult = await db.query(`SELECT user_type FROM users WHERE id = $1`, [userId]);
+      role = userResult.rows[0]?.user_type || null;
+    }
 
     let convId = conversationId;
 
@@ -242,9 +314,9 @@ router.post("/", async (req, res) => {
 
     // Insert message
     const result = await db.query(
-      `INSERT INTO messages (conversation_id, sender_id, receiver_id, text, message_type, is_read)
-       VALUES ($1, $2, $3, $4, $5, false) RETURNING *`,
-      [convId, userId, receiver, text, messageType || "text"]
+      `INSERT INTO messages (conversation_id, sender_id, receiver_id, text, message_type, is_read, sender_role)
+       VALUES ($1, $2, $3, $4, $5, false, $6) RETURNING *`,
+      [convId, userId, receiver, text, messageType || "text", role]
     );
 
     const message = result.rows[0];

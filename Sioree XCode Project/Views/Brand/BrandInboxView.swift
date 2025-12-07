@@ -14,6 +14,7 @@ struct BrandInboxView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var cancellables = Set<AnyCancellable>()
+    @AppStorage("selectedUserRole") private var selectedRoleRaw: String = ""
     
     var body: some View {
         NavigationStack {
@@ -63,7 +64,9 @@ struct BrandInboxView: View {
     
     private func loadConversations() {
         isLoading = true
-        messagingService.getConversations()
+        // Pass the current role to filter messages by role
+        let currentRole = selectedRoleRaw.isEmpty ? "brand" : selectedRoleRaw
+        messagingService.getConversations(role: currentRole)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in

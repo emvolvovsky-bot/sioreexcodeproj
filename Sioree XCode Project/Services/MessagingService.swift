@@ -45,7 +45,7 @@ class MessagingService: ObservableObject {
     private let networkService = NetworkService()
     
     // MARK: - Get Conversations
-    func getConversations() -> AnyPublisher<[Conversation], Error> {
+    func getConversations(role: String? = nil) -> AnyPublisher<[Conversation], Error> {
         // ✅ Using real backend API
         let useMockMessaging = false
         
@@ -61,13 +61,19 @@ class MessagingService: ObservableObject {
         struct Response: Codable {
             let conversations: [Conversation]
         }
-        return networkService.request("/api/messages/conversations")
+        
+        var endpoint = "/api/messages/conversations"
+        if let role = role {
+            endpoint += "?role=\(role)"
+        }
+        
+        return networkService.request(endpoint)
             .map { (response: Response) in response.conversations }
             .eraseToAnyPublisher()
     }
     
     // MARK: - Get Messages for Conversation
-    func getMessages(conversationId: String, page: Int = 1) -> AnyPublisher<MessagesResponse, Error> {
+    func getMessages(conversationId: String, page: Int = 1, role: String? = nil) -> AnyPublisher<MessagesResponse, Error> {
         let useMockMessaging = false  // ✅ Using real backend
         
         if useMockMessaging {
@@ -83,11 +89,16 @@ class MessagingService: ObservableObject {
             .eraseToAnyPublisher()
         }
         
-        return networkService.request("/api/messages/\(conversationId)?page=\(page)")
+        var endpoint = "/api/messages/\(conversationId)?page=\(page)"
+        if let role = role {
+            endpoint += "&role=\(role)"
+        }
+        
+        return networkService.request(endpoint)
     }
     
     // MARK: - Send Message
-    func sendMessage(conversationId: String?, receiverId: String, text: String) -> AnyPublisher<Message, Error> {
+    func sendMessage(conversationId: String?, receiverId: String, text: String, senderRole: String? = nil) -> AnyPublisher<Message, Error> {
         let useMockMessaging = false  // ✅ Using real backend
         
         var body: [String: Any] = [
@@ -98,6 +109,10 @@ class MessagingService: ObservableObject {
         
         if let conversationId = conversationId {
             body["conversationId"] = conversationId
+        }
+        
+        if let senderRole = senderRole {
+            body["senderRole"] = senderRole
         }
         
         guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else {

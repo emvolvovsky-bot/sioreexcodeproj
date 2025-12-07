@@ -161,12 +161,13 @@ router.get("/nearby", async (req, res) => {
         images: [], // Will be populated from media_uploads table if needed
         ticketPrice: row.ticket_price && parseFloat(row.ticket_price) > 0 ? parseFloat(row.ticket_price) : null,
         capacity: row.capacity || null,
-        attendees: row.attendee_count || 0,
+        attendees: parseInt(row.attendee_count_actual) || 0, // Use actual count from event_attendees table
         isLiked: false,
         isSaved: false,
         likes: row.likes || 0,
         isFeatured: row.is_featured || false,
-        qrCode: qrCode
+        qrCode: qrCode,
+        isRSVPed: false // User is not RSVPed (otherwise it wouldn't be in "Near Me")
       };
     });
 

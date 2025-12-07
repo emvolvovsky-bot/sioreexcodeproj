@@ -12,6 +12,7 @@ import Combine
 class HomeViewModel: ObservableObject {
     @Published var featuredEvents: [Event] = []
     @Published var nearbyEvents: [Event] = []
+    @Published var events: [Event] = [] // All events (for MyEventsView)
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var hasLoaded = false
@@ -49,6 +50,8 @@ class HomeViewModel: ObservableObject {
                     if self?.nearbyEvents.isEmpty == true && self?.hasLoaded == false {
                         self?.nearbyEvents = self?.generatePlaceholderNearbyEvents() ?? []
                     }
+                    // Update all events list
+                    self?.updateAllEvents()
                 }
             )
             .store(in: &cancellables)

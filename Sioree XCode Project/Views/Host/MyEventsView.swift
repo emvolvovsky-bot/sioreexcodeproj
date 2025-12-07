@@ -19,9 +19,14 @@ struct MyEventsView: View {
     @State private var eventToDelete: String?
     @State private var showDeleteConfirmation = false
     
+    @State private var localEvents: [Event] = []
+    
     private var events: [Event] {
-        // Filter events to show only those created by the current user
-        homeViewModel.events.filter { $0.hostId == authViewModel.currentUser?.id }
+        // Use local events if available, otherwise filter from homeViewModel
+        if !localEvents.isEmpty {
+            return localEvents
+        }
+        return homeViewModel.events.filter { $0.hostId == authViewModel.currentUser?.id }
     }
     
     var body: some View {
@@ -115,6 +120,11 @@ struct MyEventsView: View {
                     if !homeViewModel.hasLoaded {
                         homeViewModel.loadNearbyEvents()
                     }
+                    // Update local events when homeViewModel events change
+                    updateLocalEvents()
+                }
+                .onChange(of: homeViewModel.events) { _ in
+                    updateLocalEvents()
                 }
             }
             .navigationTitle("My Events")
@@ -169,20 +179,40 @@ struct MyEventsView: View {
         }
     }
     
+    private func updateLocalEvents() {
+        localEvents = homeViewModel.events.filter { $0.hostId == authViewModel.currentUser?.id }
+    }
+    
     private func deleteEvent(eventId: String) {
+        print("🗑️ Deleting event: \(eventId)")
+        
+        // Optimistically remove from UI immediately
+        localEvents.removeAll { $0.id == eventId }
+        homeViewModel.nearbyEvents.removeAll { $0.id == eventId }
+        homeViewModel.featuredEvents.removeAll { $0.id == eventId }
+        
         let networkService = NetworkService()
         networkService.deleteEvent(eventId: eventId)
             .receive(on: DispatchQueue.main)
             .sink(
-                receiveCompletion: { completion in
+                receiveCompletion: { [weak self] completion in
                     if case .failure(let error) = completion {
                         print("❌ Failed to delete event: \(error.localizedDescription)")
+                        // Reload on failure to restore if delete failed
+                        self?.homeViewModel.loadNearbyEvents()
+                    } else {
+                        print("✅ Delete request completed")
                     }
                 },
-                receiveValue: { success in
+                receiveValue: { [weak self] success in
+                    print("✅ Delete response: \(success)")
                     if success {
-                        // Reload events after deletion
-                        homeViewModel.loadNearbyEvents()
+                        // Event already removed optimistically, just reload to sync
+                        self?.homeViewModel.loadNearbyEvents()
+                    } else {
+                        print("⚠️ Delete returned false - reloading to restore")
+                        // Reload to restore if delete failed
+                        self?.homeViewModel.loadNearbyEvents()
                     }
                 }
             )

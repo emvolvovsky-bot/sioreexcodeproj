@@ -16,13 +16,12 @@ struct ContentView: View {
     @State private var selectedRole: UserRole?
     @State private var showRoleSelection = false
     @State private var showSplash = false
+    @State private var isBackendConnected = false
 
     var body: some View {
-        Group {
-            // Backend Status Indicator removed - only logs to console now
-            // Status is checked but not displayed on screen
-
-            if showSplash {
+        ZStack {
+            Group {
+                if showSplash {
                 SplashScreenView()
                     .transition(.opacity)
                     .zIndex(1000)
@@ -74,10 +73,29 @@ struct ContentView: View {
                         .onAppear { hasSeenOnboarding = true }
                 }
             }
+            }
+            
+            // Backend Status Indicator - Fire emoji when connected
+            if isBackendConnected {
+                VStack {
+                    HStack {
+                        Spacer()
+                        Text("🔥")
+                            .font(.system(size: 24))
+                            .padding(8)
+                            .background(Color.black.opacity(0.3))
+                            .cornerRadius(8)
+                            .padding(.top, 8)
+                            .padding(.trailing, 8)
+                    }
+                    Spacer()
+                }
+            }
         }
         .animation(.easeInOut(duration: 0.4), value: authViewModel.isAuthenticated)
         .animation(.easeInOut(duration: 0.4), value: selectedRole != nil)
         .animation(.easeInOut(duration: 0.5), value: showSplash)
+        .animation(.easeInOut(duration: 0.3), value: isBackendConnected)
         .onAppear {
             print("📱 ContentView appeared - isAuthenticated: \(authViewModel.isAuthenticated)")
             print("📱 ContentView - selectedRoleRaw: \(selectedRoleRaw)")
@@ -111,11 +129,14 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - Backend Test (only logs to console, no UI display)
+    // MARK: - Backend Test
     func checkBackendConnection() async {
         do {
             let response: HealthResponse = try await APIService.shared.request("/health")
             print("🔥 BACKEND CONNECTED → \(response.status)")
+            await MainActor.run {
+                isBackendConnected = true
+            }
         } catch let error as URLError {
             switch error.code {
             case .notConnectedToInternet:
@@ -127,8 +148,14 @@ struct ContentView: View {
             default:
                 print("❌ BACKEND ERROR → \(error.localizedDescription)")
             }
+            await MainActor.run {
+                isBackendConnected = false
+            }
         } catch {
             print("❌ BACKEND ERROR → \(error.localizedDescription)")
+            await MainActor.run {
+                isBackendConnected = false
+            }
         }
     }
 }

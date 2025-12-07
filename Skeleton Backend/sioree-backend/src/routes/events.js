@@ -119,12 +119,18 @@ router.get("/nearby", async (req, res) => {
         u.username as host_username,
         u.name as host_name,
         u.avatar as host_avatar,
-        CASE WHEN ep.id IS NOT NULL THEN true ELSE false END as is_featured
+        CASE WHEN ep.id IS NOT NULL THEN true ELSE false END as is_featured,
+        COALESCE(attendee_count_actual.count, 0) as attendee_count_actual
       FROM events e
       LEFT JOIN users u ON e.creator_id = u.id
       LEFT JOIN event_promotions ep ON e.id = ep.event_id 
         AND ep.is_active = true 
         AND (ep.expires_at IS NULL OR ep.expires_at > NOW())
+      LEFT JOIN (
+        SELECT event_id, COUNT(DISTINCT user_id) as count
+        FROM event_attendees
+        GROUP BY event_id
+      ) attendee_count_actual ON attendee_count_actual.event_id = e.id
       WHERE e.event_date > NOW()`;
     
     // Exclude events user is already attending
@@ -402,7 +408,9 @@ router.get("/:id", async (req, res) => {
         u.avatar as host_avatar,
         COALESCE(el.likes_count, 0) as likes,
         CASE WHEN ela.user_id IS NOT NULL THEN true ELSE false END as is_liked,
-        CASE WHEN esa.user_id IS NOT NULL THEN true ELSE false END as is_saved
+        CASE WHEN esa.user_id IS NOT NULL THEN true ELSE false END as is_saved,
+        CASE WHEN ea.user_id IS NOT NULL THEN true ELSE false END as is_rsvped,
+        COALESCE(attendee_count_actual.count, 0) as attendee_count_actual
       FROM events e
       LEFT JOIN users u ON e.creator_id = u.id
       LEFT JOIN (
@@ -420,6 +428,16 @@ router.get("/:id", async (req, res) => {
         FROM event_saves
         WHERE user_id = $2
       ) esa ON esa.event_id = e.id
+      LEFT JOIN (
+        SELECT event_id, user_id
+        FROM event_attendees
+        WHERE user_id = $2
+      ) ea ON ea.event_id = e.id
+      LEFT JOIN (
+        SELECT event_id, COUNT(DISTINCT user_id) as count
+        FROM event_attendees
+        GROUP BY event_id
+      ) attendee_count_actual ON attendee_count_actual.event_id = e.id
       WHERE e.id = $1`,
       [req.params.id, userId]
     );
@@ -444,7 +462,7 @@ router.get("/:id", async (req, res) => {
       images: [],
       ticketPrice: row.ticket_price && parseFloat(row.ticket_price) > 0 ? parseFloat(row.ticket_price) : null,
       capacity: row.capacity || null,
-      attendees: row.attendee_count || 0,
+      attendees: parseInt(row.attendee_count_actual) || 0, // Use actual count from event_attendees table
       isLiked: row.is_liked || false,
       isSaved: row.is_saved || false,
       likes: parseInt(row.likes) || 0,
@@ -569,16 +587,25 @@ router.post("/:id/rsvp", async (req, res) => {
       return res.json({ success: true, message: "Already RSVPed" });
     }
 
-    // Add attendee
+    // Add attendee (use ON CONFLICT to prevent duplicates even if race condition occurs)
     await db.query(
-      `INSERT INTO event_attendees (event_id, user_id) VALUES ($1, $2)`,
+      `INSERT INTO event_attendees (event_id, user_id) 
+       VALUES ($1, $2)
+       ON CONFLICT (event_id, user_id) DO NOTHING`,
       [eventId, userId]
     );
 
-    // Update attendee count
-    await db.query(
-      `UPDATE events SET attendee_count = attendee_count + 1 WHERE id = $1`,
+    // Recalculate attendee count from actual table to ensure accuracy
+    const countResult = await db.query(
+      `SELECT COUNT(DISTINCT user_id) as count FROM event_attendees WHERE event_id = $1`,
       [eventId]
+    );
+    const actualCount = parseInt(countResult.rows[0]?.count || 0);
+    
+    // Update attendee count with actual count
+    await db.query(
+      `UPDATE events SET attendee_count = $1 WHERE id = $2`,
+      [actualCount, eventId]
     );
 
     res.json({ success: true });
@@ -606,10 +633,17 @@ router.delete("/:id/rsvp", async (req, res) => {
       [eventId, userId]
     );
 
-    // Update attendee count
-    await db.query(
-      `UPDATE events SET attendee_count = GREATEST(0, attendee_count - 1) WHERE id = $1`,
+    // Recalculate attendee count from actual table to ensure accuracy
+    const countResult = await db.query(
+      `SELECT COUNT(DISTINCT user_id) as count FROM event_attendees WHERE event_id = $1`,
       [eventId]
+    );
+    const actualCount = parseInt(countResult.rows[0]?.count || 0);
+    
+    // Update attendee count with actual count
+    await db.query(
+      `UPDATE events SET attendee_count = $1 WHERE id = $2`,
+      [actualCount, eventId]
     );
 
     res.json({ success: true });

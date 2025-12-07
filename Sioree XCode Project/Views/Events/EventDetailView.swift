@@ -282,7 +282,7 @@ struct EventDetailView: View {
                         VStack(spacing: 0) {
                             Divider()
                             Group {
-                                if viewModel.isRSVPed {
+                                if viewModel.isRSVPed || event.isRSVPed {
                                     CustomButton(
                                         title: "Cancel RSVP",
                                         variant: .secondary,

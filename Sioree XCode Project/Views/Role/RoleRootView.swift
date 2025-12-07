@@ -12,6 +12,7 @@ struct RoleRootView: View {
     let onRoleChange: () -> Void
     @State private var selectedTab = 0
     @AppStorage("selectedUserRole") private var selectedRoleRaw: String = ""
+    @EnvironmentObject var authViewModel: AuthViewModel
     
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -71,5 +72,6 @@ struct RoleRootView: View {
 
 #Preview {
     RoleRootView(role: .host, onRoleChange: {})
+        .environmentObject(AuthViewModel())
 }
 

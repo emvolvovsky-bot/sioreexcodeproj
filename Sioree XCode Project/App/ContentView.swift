@@ -47,6 +47,7 @@ struct ContentView: View {
                             }
                     } else if let role = selectedRole, hasCompletedRoleSelection {
                         RoleRootView(role: role, onRoleChange: {})
+                            .environmentObject(authViewModel)
                             .transition(.opacity.combined(with: .move(edge: .bottom)))
                     } else {
                         RoleSelectionView(selectedRole: $selectedRole, isChangingRole: false)

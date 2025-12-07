@@ -571,6 +571,7 @@ struct CardPaymentView: View {
                 )
             }
             .receive(on: DispatchQueue.main)
+            .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
                     isLoading = false

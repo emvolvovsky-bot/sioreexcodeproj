@@ -6,12 +6,16 @@
 //
 
 import SwiftUI
+import Combine
 
 struct PartierProfileView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @AppStorage("selectedUserRole") private var selectedRoleRaw: String = ""
     @State private var showRoleSelection = false
     @State private var showSettings = false
+    @State private var eventsAttendedCount = 0
+    @State private var cancellables = Set<AnyCancellable>()
+    private let networkService = NetworkService()
     
     private var currentUser: User? {
         authViewModel.currentUser
@@ -42,7 +46,7 @@ struct PartierProfileView: View {
                                     // Stats - Followers, Following, Events, and Username
                                     ProfileStatsView(
                                         eventsHosted: user.eventCount,
-                                        eventsAttended: 0, // Will be fetched separately if needed
+                                        eventsAttended: eventsAttendedCount,
                                         followers: user.followerCount,
                                         following: user.followingCount,
                                         username: user.username,
@@ -104,7 +108,27 @@ struct PartierProfileView: View {
                     }
                 ), isChangingRole: true)
             }
+            .onAppear {
+                loadEventsAttendedCount()
+            }
+            .onChange(of: authViewModel.currentUser?.id) { _ in
+                loadEventsAttendedCount()
+            }
         }
+    }
+    
+    private func loadEventsAttendedCount() {
+        guard let userId = currentUser?.id else { return }
+        
+        networkService.fetchAttendedEvents(userId: userId)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { _ in },
+                receiveValue: { events in
+                    eventsAttendedCount = events.count
+                }
+            )
+            .store(in: &cancellables)
     }
 }
 

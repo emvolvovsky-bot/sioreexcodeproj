@@ -15,6 +15,8 @@ struct UserProfileView: View {
     @State private var showMessageView = false
     @State private var selectedConversation: Conversation?
     @State private var cancellables = Set<AnyCancellable>()
+    @State private var eventsAttendedCount = 0
+    private let networkService = NetworkService()
     
     init(userId: String) {
         self.userId = userId
@@ -47,7 +49,7 @@ struct UserProfileView: View {
                             // Stats
                             ProfileStatsView(
                                 eventsHosted: user.eventCount,
-                                eventsAttended: 0,
+                                eventsAttended: eventsAttendedCount,
                                 followers: user.followerCount,
                                 following: user.followingCount,
                                 username: user.username,
@@ -145,7 +147,31 @@ struct UserProfileView: View {
             .sheet(item: $selectedConversation) { conversation in
                 RealMessageView(conversation: conversation)
             }
+            .onAppear {
+                loadEventsAttendedCount()
+            }
+            .onChange(of: viewModel.user?.id) { _ in
+                loadEventsAttendedCount()
+            }
         }
+    }
+    
+    private func loadEventsAttendedCount() {
+        // Only fetch count for partiers
+        guard let user = viewModel.user, user.userType == .partier else {
+            eventsAttendedCount = 0
+            return
+        }
+        
+        networkService.fetchAttendedEvents(userId: userId)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { _ in },
+                receiveValue: { events in
+                    eventsAttendedCount = events.count
+                }
+            )
+            .store(in: &cancellables)
     }
     
     @ViewBuilder

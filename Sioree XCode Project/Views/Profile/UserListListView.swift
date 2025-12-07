@@ -218,7 +218,16 @@ struct UserEventsListView: View {
     
     private func loadEvents() {
         isLoading = true
-        networkService.fetchUserEvents(userId: userId)
+        
+        // For partiers, fetch attended events; for others, fetch hosted events
+        let publisher: AnyPublisher<[Event], Error>
+        if userType == .partier {
+            publisher = networkService.fetchAttendedEvents(userId: userId)
+        } else {
+            publisher = networkService.fetchUserEvents(userId: userId)
+        }
+        
+        publisher
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in

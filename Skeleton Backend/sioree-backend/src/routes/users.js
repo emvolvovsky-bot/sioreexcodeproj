@@ -346,7 +346,6 @@ router.get("/:id/attended", async (req, res) => {
         WHERE user_id = $1
       ) esa ON esa.event_id = e.id
       WHERE ea.user_id = $1
-        AND e.event_date < NOW()
       ORDER BY e.event_date DESC`,
       [userId]
     );

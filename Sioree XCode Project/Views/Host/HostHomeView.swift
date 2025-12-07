@@ -28,87 +28,50 @@ struct HostHomeView: View {
                 .ignoresSafeArea()
                 
                 ScrollView {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-                        // Recent Signups Notifications
-                        if !recentSignups.isEmpty {
-                            VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                                Text("Recent Signups")
-                                    .font(.sioreeH2)
-                                    .foregroundColor(Color.sioreeWhite)
-                                    .padding(.horizontal, Theme.Spacing.m)
-                                
-                                VStack(spacing: Theme.Spacing.s) {
-                                    ForEach(recentSignups.prefix(10)) { signup in
-                                        NavigationLink(destination: UserProfileView(userId: signup.userId)) {
-                                            RecentSignupRow(signup: signup)
-                                        }
-                                        .buttonStyle(PlainButtonStyle())
-                                        .padding(.horizontal, Theme.Spacing.m)
-                                    }
-                                }
-                            }
+                    VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                        // Header
+                        Text("Recent Signups")
+                            .font(.sioreeH2)
+                            .foregroundColor(Color.sioreeWhite)
+                            .padding(.horizontal, Theme.Spacing.m)
                             .padding(.top, Theme.Spacing.m)
-                        }
                         
-                        // Tonight on Sioree
-                        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                            Text("Tonight on Sioree")
-                                .font(.sioreeH2)
-                                .foregroundColor(Color.sioreeWhite)
-                                .padding(.horizontal, Theme.Spacing.m)
-                                .padding(.top, -Theme.Spacing.m)
-                            
-                            if viewModel.isLoading && !viewModel.hasLoaded {
-                                ProgressView()
-                                    .frame(height: 200)
-                                    .frame(maxWidth: .infinity)
-                            } else if viewModel.events.isEmpty && viewModel.hasLoaded {
-                                VStack(spacing: Theme.Spacing.m) {
-                                    Image(systemName: "calendar.badge.exclamationmark")
-                                        .font(.system(size: 48))
-                                        .foregroundColor(Color.sioreeLightGrey)
-                                    Text("No events nearby")
-                                        .font(.sioreeH4)
-                                        .foregroundColor(Color.sioreeLightGrey)
-                                    Text("Check back later for new events")
-                                        .font(.sioreeBodySmall)
-                                        .foregroundColor(Color.sioreeLightGrey.opacity(0.7))
-                                }
+                        if isLoadingSignups {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .sioreeIcyBlue))
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, Theme.Spacing.xl)
-                            } else {
-                                ScrollView(.horizontal, showsIndicators: false) {
-                                    HStack(spacing: Theme.Spacing.m) {
-                                        ForEach(viewModel.events.filter { $0.isFeatured }) { event in
-                                            AppEventCard(event: event) {
-                                                // Navigate to event detail
-                                            }
-                                            .frame(width: 320)
-                                        }
+                        } else if recentSignups.isEmpty {
+                            // Empty state
+                            VStack(spacing: Theme.Spacing.m) {
+                                Image(systemName: "person.2.fill")
+                                    .font(.system(size: 60))
+                                    .foregroundColor(Color.sioreeIcyBlue.opacity(0.5))
+                                
+                                Text("No recent signups")
+                                    .font(.sioreeH3)
+                                    .foregroundColor(Color.sioreeWhite)
+                                
+                                Text("People who sign up for your events will appear here")
+                                    .font(.sioreeBody)
+                                    .foregroundColor(Color.sioreeLightGrey)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal, Theme.Spacing.xl)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, Theme.Spacing.xxl)
+                        } else {
+                            // Signups list
+                            VStack(spacing: Theme.Spacing.s) {
+                                ForEach(recentSignups) { signup in
+                                    NavigationLink(destination: UserProfileView(userId: signup.userId)) {
+                                        RecentSignupRow(signup: signup)
                                     }
+                                    .buttonStyle(PlainButtonStyle())
                                     .padding(.horizontal, Theme.Spacing.m)
                                 }
                             }
-                        }
-                        
-                        // Recommended Talent
-                        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                            Text("Recommended Talent")
-                                .font(.sioreeH2)
-                                .foregroundColor(Color.sioreeWhite)
-                                .padding(.horizontal, Theme.Spacing.m)
-                            
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: Theme.Spacing.m) {
-                                    ForEach(recommendedTalent) { talent in
-                                        TalentCard(talent: talent) {
-                                            // Navigate to talent detail
-                                        }
-                                        .frame(width: 300)
-                                    }
-                                }
-                                .padding(.horizontal, Theme.Spacing.m)
-                            }
+                            .padding(.top, Theme.Spacing.s)
                         }
                     }
                     .padding(.vertical, Theme.Spacing.m)

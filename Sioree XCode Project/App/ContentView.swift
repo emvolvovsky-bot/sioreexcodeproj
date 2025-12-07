@@ -16,7 +16,6 @@ struct ContentView: View {
     @State private var selectedRole: UserRole?
     @State private var showRoleSelection = false
     @State private var showSplash = false
-    @State private var isBackendConnected = false
 
     var body: some View {
         ZStack {
@@ -74,28 +73,10 @@ struct ContentView: View {
                 }
             }
             }
-            
-            // Backend Status Indicator - Fire emoji when connected
-            if isBackendConnected {
-                VStack {
-                    HStack {
-                        Spacer()
-                        Text("🔥")
-                            .font(.system(size: 24))
-                            .padding(8)
-                            .background(Color.black.opacity(0.3))
-                            .cornerRadius(8)
-                            .padding(.top, 8)
-                            .padding(.trailing, 8)
-                    }
-                    Spacer()
-                }
-            }
         }
         .animation(.easeInOut(duration: 0.4), value: authViewModel.isAuthenticated)
         .animation(.easeInOut(duration: 0.4), value: selectedRole != nil)
         .animation(.easeInOut(duration: 0.5), value: showSplash)
-        .animation(.easeInOut(duration: 0.3), value: isBackendConnected)
         .onAppear {
             print("📱 ContentView appeared - isAuthenticated: \(authViewModel.isAuthenticated)")
             print("📱 ContentView - selectedRoleRaw: \(selectedRoleRaw)")
@@ -109,11 +90,6 @@ struct ContentView: View {
 
             // Show splash on launch - always show for 2 seconds
             showSplash = true
-
-            // 🔥🔥 TEST BACKEND CONNECTION HERE
-            Task {
-                await checkBackendConnection()
-            }
         }
         .onChange(of: authViewModel.isAuthenticated) { oldValue, newValue in
             print("🔄 Auth state changed: \(oldValue) -> \(newValue)")
@@ -125,36 +101,6 @@ struct ContentView: View {
                     selectedRole = role
                     print("✅ Restored role from storage: \(role.rawValue)")
                 }
-            }
-        }
-    }
-
-    // MARK: - Backend Test
-    func checkBackendConnection() async {
-        do {
-            let response: HealthResponse = try await APIService.shared.request("/health")
-            print("🔥 BACKEND CONNECTED → \(response.status)")
-            await MainActor.run {
-                isBackendConnected = true
-            }
-        } catch let error as URLError {
-            switch error.code {
-            case .notConnectedToInternet:
-                print("❌ BACKEND ERROR → No Internet")
-            case .cannotConnectToHost:
-                print("❌ BACKEND ERROR → Cannot Connect to Backend")
-            case .timedOut:
-                print("❌ BACKEND ERROR → Connection Timeout")
-            default:
-                print("❌ BACKEND ERROR → \(error.localizedDescription)")
-            }
-            await MainActor.run {
-                isBackendConnected = false
-            }
-        } catch {
-            print("❌ BACKEND ERROR → \(error.localizedDescription)")
-            await MainActor.run {
-                isBackendConnected = false
             }
         }
     }

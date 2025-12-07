@@ -91,9 +91,11 @@ router.get("/:conversationId", async (req, res) => {
     const offset = (page - 1) * limit;
 
     // Verify user is part of conversation and get other participant
+    // Handle both string and integer conversationId
+    const convId = parseInt(conversationId) || conversationId;
     const convCheck = await db.query(
       `SELECT * FROM conversations WHERE id = $1 AND (user1_id = $2 OR user2_id = $2)`,
-      [conversationId, userId]
+      [convId, userId]
     );
 
     if (convCheck.rows.length === 0) {
@@ -109,7 +111,7 @@ router.get("/:conversationId", async (req, res) => {
        WHERE conversation_id = $1 
        ORDER BY created_at DESC 
        LIMIT $2 OFFSET $3`,
-      [conversationId, limit, offset]
+      [convId, limit, offset]
     );
 
     const messages = result.rows.map(row => {

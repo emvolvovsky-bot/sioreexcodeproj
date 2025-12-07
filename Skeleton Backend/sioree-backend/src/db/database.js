@@ -31,13 +31,17 @@ if (databaseUrl && databaseUrl.includes("supabase")) {
       existing.forEach((value, key) => params.set(key, value));
     }
     
-    // Set required parameters for pooler
-    params.set("sslmode", "require");
-    params.set("pgbouncer", "true"); // Important for pooler connections
+    // Set required parameters for pooler (these are critical for SCRAM authentication)
+    if (!params.has("sslmode")) {
+      params.set("sslmode", "require");
+    }
+    if (!params.has("pgbouncer")) {
+      params.set("pgbouncer", "true"); // Critical for pooler connections
+    }
     
     const baseUrl = databaseUrl.split("?")[0];
     databaseUrl = `${baseUrl}?${params.toString()}`;
-    console.log("📊 Using pooler connection with pgbouncer=true");
+    console.log("📊 Using pooler connection with pgbouncer=true and sslmode=require");
   } else {
     // For direct connections, just ensure sslmode=require
     if (!databaseUrl.includes("sslmode=")) {

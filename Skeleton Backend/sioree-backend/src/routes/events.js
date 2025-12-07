@@ -920,8 +920,15 @@ router.delete("/:id", async (req, res) => {
     }
     
     // Delete event (cascade will handle related records)
+    // First delete related records to avoid foreign key constraints
+    await db.query(`DELETE FROM event_attendees WHERE event_id = $1`, [eventId]);
+    await db.query(`DELETE FROM event_likes WHERE event_id = $1`, [eventId]);
+    await db.query(`DELETE FROM event_saves WHERE event_id = $1`, [eventId]);
+    await db.query(`DELETE FROM event_promotions WHERE event_id = $1`, [eventId]);
+    // Now delete the event
     await db.query(`DELETE FROM events WHERE id = $1`, [eventId]);
     
+    console.log(`✅ Event ${eventId} deleted successfully by user ${userId}`);
     res.json({ success: true, message: "Event deleted successfully" });
   } catch (err) {
     console.error("Delete event error:", err);

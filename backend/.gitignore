@@ -1,11 +1,13 @@
 node_modules/
-# Environment variables and secrets
+# Environment variables and secrets - NEVER COMMIT THESE
 .env
 .env.local
 .env.development
 .env.production
 .env.test
+.env.*
 *.env
+!*.env.example
 
 # Database files
 *.db

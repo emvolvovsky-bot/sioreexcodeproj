@@ -17,7 +17,12 @@ struct Constants {
         var baseURL: String {
             switch self {
             case .development:
-                return "http://192.168.1.200:4000"  // Local development
+                // Use environment variable or fallback to localhost
+                // Never hardcode IP addresses in production code
+                if let devURL = ProcessInfo.processInfo.environment["DEV_API_URL"] {
+                    return devURL
+                }
+                return "http://localhost:4000"  // Local development only
             case .production:
                 return "https://sioree-api.onrender.com"  // Render deployment
             }

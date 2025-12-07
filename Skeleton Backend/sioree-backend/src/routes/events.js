@@ -696,6 +696,26 @@ router.get("/looking-for/:talentType", async (req, res) => {
   try {
     const talentType = req.params.talentType;
     
+    // First check if the column exists
+    let columnExists = false;
+    try {
+      const checkResult = await db.query(
+        `SELECT column_name 
+         FROM information_schema.columns 
+         WHERE table_name = 'events' 
+         AND column_name = 'looking_for_talent_type'`
+      );
+      columnExists = checkResult.rows.length > 0;
+    } catch (checkErr) {
+      console.warn("Could not check for column existence:", checkErr);
+    }
+    
+    // If column doesn't exist, return empty array (migration not run yet)
+    if (!columnExists) {
+      console.warn("Column looking_for_talent_type does not exist. Please run migration 007_add_event_talent_needs.sql");
+      return res.json({ events: [] });
+    }
+    
     const result = await db.query(
       `SELECT 
         e.*,
@@ -738,6 +758,11 @@ router.get("/looking-for/:talentType", async (req, res) => {
 
     res.json({ events });
   } catch (err) {
+    // If error is about missing column, return empty array instead of error
+    if (err.code === '42703' || err.message?.includes('does not exist')) {
+      console.warn("Column looking_for_talent_type does not exist. Please run migration 007_add_event_talent_needs.sql");
+      return res.json({ events: [] });
+    }
     console.error("Get events looking for talent error:", err);
     res.status(500).json({ error: "Failed to fetch events" });
   }

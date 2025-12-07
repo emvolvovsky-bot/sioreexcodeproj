@@ -12,36 +12,42 @@ const isLocalDB = process.env.DATABASE_URL?.includes("localhost") ||
 let databaseUrl = process.env.DATABASE_URL;
 if (databaseUrl && databaseUrl.includes("supabase")) {
   console.log("📊 Using Supabase database connection");
-  // Log connection details (without exposing password)
-  try {
-    const urlParts = new URL(databaseUrl);
-    console.log(`📊 Database host: ${urlParts.hostname}`);
-    console.log(`📊 Database port: ${urlParts.port || '5432'}`);
-  } catch (e) {
-    console.log("📊 Database URL format check");
-  }
   
   // For pooler connections, ensure proper connection parameters
   if (databaseUrl.includes("pooler")) {
-    // Pooler connections need specific parameters
-    const params = new URLSearchParams();
-    if (databaseUrl.includes("?")) {
-      const existingParams = databaseUrl.split("?")[1];
-      const existing = new URLSearchParams(existingParams);
-      existing.forEach((value, key) => params.set(key, value));
-    }
-    
-    // Set required parameters for pooler (these are critical for SCRAM authentication)
-    if (!params.has("sslmode")) {
+    // Parse the URL to properly handle parameters
+    try {
+      const url = new URL(databaseUrl);
+      const params = new URLSearchParams(url.search);
+      
+      // Set required parameters for pooler (critical for SCRAM authentication)
       params.set("sslmode", "require");
-    }
-    if (!params.has("pgbouncer")) {
       params.set("pgbouncer", "true"); // Critical for pooler connections
+      
+      // Reconstruct URL with parameters
+      url.search = params.toString();
+      databaseUrl = url.toString();
+      
+      console.log(`📊 Database host: ${url.hostname}`);
+      console.log(`📊 Database port: ${url.port || '5432'}`);
+      console.log("📊 Using pooler connection with pgbouncer=true and sslmode=require");
+    } catch (e) {
+      // Fallback: manual string manipulation if URL parsing fails
+      console.log("📊 Using fallback URL parsing");
+      const params = new URLSearchParams();
+      if (databaseUrl.includes("?")) {
+        const existingParams = databaseUrl.split("?")[1];
+        const existing = new URLSearchParams(existingParams);
+        existing.forEach((value, key) => params.set(key, value));
+      }
+      
+      params.set("sslmode", "require");
+      params.set("pgbouncer", "true");
+      
+      const baseUrl = databaseUrl.split("?")[0];
+      databaseUrl = `${baseUrl}?${params.toString()}`;
+      console.log("📊 Using pooler connection with pgbouncer=true and sslmode=require (fallback)");
     }
-    
-    const baseUrl = databaseUrl.split("?")[0];
-    databaseUrl = `${baseUrl}?${params.toString()}`;
-    console.log("📊 Using pooler connection with pgbouncer=true and sslmode=require");
   } else {
     // For direct connections, just ensure sslmode=require
     if (!databaseUrl.includes("sslmode=")) {
@@ -55,21 +61,31 @@ const poolConfig = {
   connectionString: databaseUrl || process.env.DATABASE_URL,
   max: 15, // Reduced for pooler connections (Supabase pooler limit)
   idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-  connectionTimeoutMillis: 10000, // Increased to 10 seconds for network latency
+  connectionTimeoutMillis: 15000, // Increased to 15 seconds for network latency
   keepAlive: true,
   keepAliveInitialDelayMillis: 10000,
-  // For pooler connections, we need to use transaction mode
-  statement_timeout: 30000, // 30 second statement timeout
+  // Additional options for better connection handling
+  allowExitOnIdle: false,
 };
 
 // Always add SSL config for Supabase (required)
 // Supabase uses self-signed certificates, so we need to disable certificate validation
 const isSupabase = process.env.DATABASE_URL?.includes("supabase") || databaseUrl?.includes("supabase");
 if (isSupabase || !isLocalDB) {
-  poolConfig.ssl = {
-    rejectUnauthorized: false // CRITICAL: Accept self-signed certificates for Supabase
-  };
-  console.log("🔒 SSL configured with rejectUnauthorized: false for Supabase connection");
+  // For pooler connections, SSL is handled via connection string parameters
+  // But we still need to configure the SSL object for the pg library
+  if (databaseUrl?.includes("pooler")) {
+    // Pooler connections handle SSL via connection string, but we still need this for pg library
+    poolConfig.ssl = {
+      rejectUnauthorized: false // Accept self-signed certificates
+    };
+    console.log("🔒 SSL configured for pooler connection (rejectUnauthorized: false)");
+  } else {
+    poolConfig.ssl = {
+      rejectUnauthorized: false // CRITICAL: Accept self-signed certificates for Supabase
+    };
+    console.log("🔒 SSL configured with rejectUnauthorized: false for Supabase connection");
+  }
 }
 
 const pool = new pg.Pool(poolConfig);

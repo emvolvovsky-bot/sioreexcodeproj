@@ -22,16 +22,16 @@ struct RoleSelectionView: View {
             )
             .ignoresSafeArea()
             
-            VStack(spacing: Theme.Spacing.l) {
+            VStack(spacing: Theme.Spacing.s) {
                 // Logo - much bigger at the top
                 VStack(spacing: Theme.Spacing.m) {
                     LogoView(size: .large)
-                        .frame(width: 320, height: 320)
+                        .frame(width: 360, height: 360)
                 }
                 .padding(.top, Theme.Spacing.l)
                 
                 // Title - moved up closer to logo
-                VStack(spacing: Theme.Spacing.m) {
+                VStack(spacing: Theme.Spacing.xs) {
                     Text(isChangingRole ? "Feeling different?" : "Choose how you use Sioree")
                         .font(.sioreeH2)
                         .foregroundColor(Color.sioreeWhite)
@@ -43,9 +43,9 @@ struct RoleSelectionView: View {
                             .foregroundColor(Color.sioreeLightGrey)
                     }
                 }
-                .padding(.top, Theme.Spacing.s)
+                .padding(.top, Theme.Spacing.xs)
                 
-                // Role cards grid - moved up
+                // Role cards grid - moved up even more
                 LazyVGrid(columns: [
                     GridItem(.flexible()),
                     GridItem(.flexible())
@@ -62,7 +62,7 @@ struct RoleSelectionView: View {
                     }
                 }
                 .padding(.horizontal, Theme.Spacing.l)
-                .padding(.top, Theme.Spacing.m)
+                .padding(.top, Theme.Spacing.s)
                 
                 Spacer()
             }

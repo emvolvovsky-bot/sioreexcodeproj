@@ -19,8 +19,68 @@ import reviewRoutes from "./routes/reviews.js";
 dotenv.config();
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+
+// Security Headers Middleware
+app.use((req, res, next) => {
+  // Prevent XSS attacks
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-XSS-Protection", "1; mode=block");
+  
+  // Prevent MIME type sniffing
+  res.setHeader("Content-Security-Policy", "default-src 'self'");
+  
+  // Strict Transport Security (HSTS) - only in production
+  if (process.env.NODE_ENV === "production") {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+  
+  // Referrer Policy
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  
+  // Permissions Policy
+  res.setHeader("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
+  
+  // Remove server information
+  res.removeHeader("X-Powered-By");
+  
+  next();
+});
+
+// CORS Configuration - Restrict to specific origins
+const allowedOrigins = [
+  "https://sioree-api.onrender.com",
+  process.env.FRONTEND_URL,
+  process.env.ALLOWED_ORIGIN
+].filter(Boolean); // Remove undefined values
+
+// Add iOS app origins (if needed)
+if (process.env.NODE_ENV === "development") {
+  allowedOrigins.push("http://localhost:3000", "http://127.0.0.1:3000");
+}
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or Postman)
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  exposedHeaders: ["X-Total-Count"],
+  maxAge: 86400 // 24 hours
+};
+
+app.use(cors(corsOptions));
+app.use(express.json({ limit: "10mb" })); // Limit request body size
 
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
@@ -82,15 +142,26 @@ io.on("connection", socket => {
   socket.on("disconnect", () => console.log("Client disconnected:", socket.id));
 });
 
+// Request logging middleware (sanitized - no IPs or sensitive data)
+app.use((req, res, next) => {
+  // Log requests without exposing sensitive information
+  const sanitizedUrl = req.url.replace(/\/api\/[^\/]+\/[^\/]+/g, "/api/*/***"); // Hide IDs
+  console.log(`📥 ${req.method} ${sanitizedUrl}`);
+  next();
+});
+
 const PORT = process.env.PORT || 4000;
-// Listen on all interfaces (0.0.0.0) so phone can connect via IP address
+const API_URL = process.env.API_URL || `https://sioree-api.onrender.com`;
+
+// Listen on all interfaces (required for Render)
 server.listen(PORT, "0.0.0.0", () => {
   console.log("═══════════════════════════════════════════════════════════");
   console.log(`✅ Sioree Backend Server is RUNNING`);
   console.log(`📡 Port: ${PORT}`);
-  console.log(`🌐 Health Check: http://localhost:${PORT}/health`);
-  console.log(`🔗 API Base: http://localhost:${PORT}/api`);
+  console.log(`🌐 API URL: ${API_URL}`);
   console.log(`📊 Database: ${process.env.DATABASE_URL ? "Connected" : "Not connected"}`);
   console.log(`💳 Stripe: ${process.env.STRIPE_SECRET_KEY ? "Configured" : "Not configured"}`);
+  console.log(`🔒 Security Headers: Enabled`);
+  console.log(`🌍 CORS: ${allowedOrigins.length > 0 ? "Configured" : "Open (development)"}`);
   console.log("═══════════════════════════════════════════════════════════");
 });

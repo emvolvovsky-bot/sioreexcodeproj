@@ -197,16 +197,17 @@ const testConnection = async (retries = 3) => {
         console.error("   4. Missing sslmode=require parameter (should be auto-added)");
         console.error("   5. Connection string format is incorrect");
         
-        // Log connection string info (without password)
+        // Log connection string info (without password or sensitive details)
         if (databaseUrl) {
           try {
             const url = new URL(databaseUrl);
+            const hostname = url.hostname.includes("supabase") ? "supabase.co" : url.hostname.split(".").slice(-2).join(".");
             console.error(`📋 Connection string check:`);
-            console.error(`   Host: ${url.hostname}`);
-            console.error(`   Port: ${url.port}`);
-            console.error(`   User: ${url.username}`);
+            console.error(`   Host: ${hostname}`);
+            console.error(`   Port: ${url.port || '5432'}`);
+            console.error(`   User: ${url.username ? "***" : "Not set"}`);
             console.error(`   Has password: ${url.password ? 'Yes' : 'NO - THIS IS THE PROBLEM!'}`);
-            console.error(`   Parameters: ${url.search}`);
+            // Don't log search parameters as they may contain sensitive info
           } catch (e) {
             console.error(`   Could not parse connection string`);
           }

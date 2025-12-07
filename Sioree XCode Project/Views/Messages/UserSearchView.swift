@@ -250,9 +250,7 @@ struct UserSearchRow: View {
                 .stroke(Color.sioreeIcyBlue.opacity(0.2), lineWidth: 2)
         )
         .sheet(isPresented: $showMessageView) {
-            // Navigate to message view with this user
-            // This will be handled by creating a conversation
-            Text("Message view for \(user.name ?? user.username)")
+            CreateConversationView(userId: user.id, userName: user.name ?? user.username)
         }
     }
     

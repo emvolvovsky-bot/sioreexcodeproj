@@ -24,12 +24,12 @@ struct RoleSelectionView: View {
             
             VStack(spacing: Theme.Spacing.xxl) {
                 Spacer()
-                    .frame(height: 40)
+                    .frame(height: 80)
                 
-                // Logo - bigger and lower
+                // Logo - much bigger and lower
                 VStack(spacing: Theme.Spacing.m) {
                     LogoView(size: .large)
-                        .frame(width: 200, height: 200)
+                        .frame(width: 280, height: 280)
                 }
                 
                 Spacer()

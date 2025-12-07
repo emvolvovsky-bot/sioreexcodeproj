@@ -161,10 +161,13 @@ router.get("/:conversationId", async (req, res) => {
     let params;
     
     if (role) {
-      // Filter messages by role - only show messages sent with this role
+      // Filter messages by role - show messages sent by current user with this role, or received from others
       query = `SELECT * FROM messages 
        WHERE conversation_id = $1 
-         AND (sender_id = $2 AND sender_role = $4)
+         AND (
+           (sender_id = $2 AND sender_role = $4) OR
+           (sender_id != $2)
+         )
        ORDER BY created_at DESC 
        LIMIT $3 OFFSET $5`;
       params = [convId, userId, limit, role, offset];

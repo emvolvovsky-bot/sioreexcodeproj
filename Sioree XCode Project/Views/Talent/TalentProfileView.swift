@@ -39,111 +39,61 @@ struct TalentProfileView: View {
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
                         ScrollView {
-                            VStack(spacing: Theme.Spacing.xl) {
-                                // Profile Card - Same as Host
+                            VStack(spacing: Theme.Spacing.l) {
+                                // Profile Header
                                 if let user = currentUser {
-                                    VStack(spacing: Theme.Spacing.m) {
-                                        Text(user.name ?? user.username)
-                                            .font(.sioreeH1)
-                                            .foregroundColor(Color.sioreeWhite)
-                                        
-                                        if let bio = user.bio, !bio.isEmpty {
-                                            Text(bio)
-                                                .font(.sioreeBody)
-                                                .foregroundColor(Color.sioreeLightGrey)
-                                                .multilineTextAlignment(.center)
+                                    ProfileHeaderView(user: user)
+                                    
+                                    // Stats - Followers, Following, Events, and Username
+                                    ProfileStatsView(
+                                        eventsHosted: user.eventCount,
+                                        eventsAttended: 0,
+                                        followers: user.followerCount,
+                                        following: user.followingCount,
+                                        username: user.username,
+                                        userType: user.userType,
+                                        userId: user.id
+                                    )
+                                    
+                                    // Earnings Breakdown (Only visible to talent)
+                                    if isTalentUser {
+                                        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                                            Text("Earnings Breakdown")
+                                                .font(.sioreeH4)
+                                                .foregroundColor(Color.sioreeWhite)
                                                 .padding(.horizontal, Theme.Spacing.m)
-                                        }
-                                        
-                                        HStack(spacing: Theme.Spacing.l) {
-                                            VStack {
-                                                Text("\(user.followerCount)")
-                                                    .font(.sioreeH3)
-                                                    .foregroundColor(Color.sioreeWhite)
-                                                Text("Followers")
-                                                    .font(.sioreeCaption)
-                                                    .foregroundColor(Color.sioreeLightGrey)
-                                            }
                                             
-                                            VStack {
-                                                Text("\(user.eventCount)")
-                                                    .font(.sioreeH3)
-                                                    .foregroundColor(Color.sioreeWhite)
-                                                Text("Gigs")
-                                                    .font(.sioreeCaption)
-                                                    .foregroundColor(Color.sioreeLightGrey)
-                                            }
-                                            
-                                            // Earnings This Month (Only visible to talent)
-                                            if isTalentUser {
-                                                VStack {
-                                                    Text("$\(earningsViewModel.earningsThisMonth)")
-                                                        .font(.sioreeH3)
-                                                        .foregroundColor(Color.sioreeWarmGlow)
-                                                    Text("Earnings")
-                                                        .font(.sioreeCaption)
-                                                        .foregroundColor(Color.sioreeLightGrey)
-                                                }
-                                            } else {
-                                                VStack {
-                                                    Text(user.email)
+                                            HStack {
+                                                VStack(alignment: .leading) {
+                                                    Text("This Month")
                                                         .font(.sioreeBodySmall)
                                                         .foregroundColor(Color.sioreeLightGrey)
-                                                    Text("Email")
-                                                        .font(.sioreeCaption)
-                                                        .foregroundColor(Color.sioreeLightGrey)
+                                                    Text("$\(earningsViewModel.earningsThisMonth)")
+                                                        .font(.sioreeH4)
+                                                        .foregroundColor(Color.sioreeWarmGlow)
                                                 }
-                                            }
-                                        }
-                                        
-                                        // Earnings Breakdown (Only visible to talent)
-                                        if isTalentUser {
-                                            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                                                Text("Earnings Breakdown")
-                                                    .font(.sioreeH4)
-                                                    .foregroundColor(Color.sioreeWhite)
-                                                    .padding(.top, Theme.Spacing.m)
                                                 
-                                                HStack {
-                                                    VStack(alignment: .leading) {
-                                                        Text("This Month")
-                                                            .font(.sioreeBodySmall)
-                                                            .foregroundColor(Color.sioreeLightGrey)
-                                                        Text("$\(earningsViewModel.earningsThisMonth)")
-                                                            .font(.sioreeH4)
-                                                            .foregroundColor(Color.sioreeWarmGlow)
-                                                    }
-                                                    
-                                                    Spacer()
-                                                    
-                                                    VStack(alignment: .trailing) {
-                                                        Text("Total")
-                                                            .font(.sioreeBodySmall)
-                                                            .foregroundColor(Color.sioreeLightGrey)
-                                                        Text("$\(earningsViewModel.totalEarnings)")
-                                                            .font(.sioreeH4)
-                                                            .foregroundColor(Color.sioreeIcyBlue)
-                                                    }
+                                                Spacer()
+                                                
+                                                VStack(alignment: .trailing) {
+                                                    Text("Total")
+                                                        .font(.sioreeBodySmall)
+                                                        .foregroundColor(Color.sioreeLightGrey)
+                                                    Text("$\(earningsViewModel.totalEarnings)")
+                                                        .font(.sioreeH4)
+                                                        .foregroundColor(Color.sioreeIcyBlue)
                                                 }
                                             }
-                                            .padding(Theme.Spacing.m)
-                                            .background(Color.sioreeIcyBlue.opacity(0.1))
-                                            .cornerRadius(Theme.CornerRadius.medium)
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                                                    .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 1)
-                                            )
                                         }
+                                        .padding(Theme.Spacing.m)
+                                        .background(Color.sioreeLightGrey.opacity(0.1))
+                                        .cornerRadius(Theme.CornerRadius.medium)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                                                .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 1)
+                                        )
+                                        .padding(.horizontal, Theme.Spacing.m)
                                     }
-                                    .padding(Theme.Spacing.l)
-                                    .frame(maxWidth: .infinity)
-                                    .background(Color.sioreeLightGrey.opacity(0.1))
-                                    .cornerRadius(Theme.CornerRadius.medium)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                                            .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 2)
-                                    )
-                                    .padding(.horizontal, Theme.Spacing.m)
                                 }
                                 
                                 // Role Switch Button

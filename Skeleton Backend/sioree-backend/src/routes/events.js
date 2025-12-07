@@ -41,8 +41,7 @@ router.get("/featured", async (req, res) => {
         SELECT 
           event_id,
           brand_id,
-          promoted_at,
-          ROW_NUMBER() OVER (PARTITION BY event_id ORDER BY promoted_at DESC) as rn
+          promoted_at
         FROM event_promotions
         WHERE is_active = true
           AND (expires_at IS NULL OR expires_at > NOW())

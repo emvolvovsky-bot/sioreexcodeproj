@@ -34,66 +34,25 @@ struct HostProfileView: View {
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
                         ScrollView {
-                            VStack(spacing: Theme.Spacing.xl) {
-                                // Profile Card
+                            VStack(spacing: Theme.Spacing.l) {
+                                // Profile Header
                                 if let user = currentUser {
-                                    VStack(spacing: Theme.Spacing.m) {
-                                        Text(user.name ?? user.username)
-                                            .font(.sioreeH1)
-                                            .foregroundColor(Color.sioreeWhite)
-                                        
-                                        if let bio = user.bio, !bio.isEmpty {
-                                            Text(bio)
-                                                .font(.sioreeBody)
-                                                .foregroundColor(Color.sioreeLightGrey)
-                                                .multilineTextAlignment(.center)
-                                                .padding(.horizontal, Theme.Spacing.m)
-                                        }
-                                        
-                                        HStack(spacing: Theme.Spacing.l) {
-                                            VStack {
-                                                Text("\(user.followerCount)")
-                                                    .font(.sioreeH3)
-                                                    .foregroundColor(Color.sioreeWhite)
-                                                Text("Followers")
-                                                    .font(.sioreeCaption)
-                                                    .foregroundColor(Color.sioreeLightGrey)
-                                            }
-                                            
-                                            VStack {
-                                                Text("\(user.eventCount)")
-                                                    .font(.sioreeH3)
-                                                    .foregroundColor(Color.sioreeWhite)
-                                                Text("Events Hosted")
-                                                    .font(.sioreeCaption)
-                                                    .foregroundColor(Color.sioreeLightGrey)
-                                            }
-                                            
-                                            VStack {
-                                                Text("@\(user.username)")
-                                                    .font(.sioreeBodySmall)
-                                                    .foregroundColor(Color.sioreeLightGrey)
-                                                Text("Username")
-                                                    .font(.sioreeCaption)
-                                                    .foregroundColor(Color.sioreeLightGrey)
-                                            }
-                                        }
-                                    }
-                                    .padding(Theme.Spacing.l)
-                                    .frame(maxWidth: .infinity)
-                                    .background(Color.sioreeLightGrey.opacity(0.1))
-                                    .cornerRadius(Theme.CornerRadius.medium)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                                            .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 2)
+                                    ProfileHeaderView(user: user)
+                                    
+                                    // Stats - Followers, Following, Events, and Username
+                                    ProfileStatsView(
+                                        eventsHosted: user.eventCount,
+                                        eventsAttended: 0,
+                                        followers: user.followerCount,
+                                        following: user.followingCount,
+                                        username: user.username,
+                                        userType: user.userType,
+                                        userId: user.id
                                     )
-                                    .padding(.horizontal, Theme.Spacing.m)
-                                }
-                                
-                                // Host History
-                                if let userId = currentUser?.id {
-                                    VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                                        NavigationLink(destination: HostHistoryView(hostId: userId, hostName: currentUser?.name ?? currentUser?.username ?? "")) {
+                                    
+                                    // Host History (only for hosts)
+                                    if user.userType == .host {
+                                        NavigationLink(destination: HostHistoryView(hostId: user.id, hostName: user.name ?? user.username)) {
                                             HStack {
                                                 Image(systemName: "photo.on.rectangle.angled")
                                                     .font(.system(size: 20))

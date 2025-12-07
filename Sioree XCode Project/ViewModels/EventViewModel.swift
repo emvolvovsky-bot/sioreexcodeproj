@@ -83,9 +83,10 @@ class EventViewModel: ObservableObject {
     }
     
     func rsvpToEvent() {
-        guard let event = event else { return }
+        guard var event = event else { return }
         isRSVPed = true
-        event?.isRSVPed = true
+        event.isRSVPed = true
+        self.event = event
         
         networkService.rsvpToEvent(eventId: event.id)
             .receive(on: DispatchQueue.main)
@@ -93,12 +94,19 @@ class EventViewModel: ObservableObject {
                 receiveCompletion: { [weak self] completion in
                     if case .failure = completion {
                         self?.isRSVPed = false
-                        self?.event?.isRSVPed = false
+                        if var event = self?.event {
+                            event.isRSVPed = false
+                            self?.event = event
+                        }
                     }
                 },
                 receiveValue: { [weak self] _ in
                     // RSVP saved successfully - event will be removed from "Near Me" and appear in "Upcoming"
-                    self?.event?.attendeeCount += 1
+                    if var event = self?.event {
+                        event.attendeeCount += 1
+                        event.isRSVPed = true
+                        self?.event = event
+                    }
                     // Reload event to get updated status
                     self?.loadEvent()
                 }
@@ -107,9 +115,10 @@ class EventViewModel: ObservableObject {
     }
     
     func cancelRSVP() {
-        guard let event = event else { return }
+        guard var event = event else { return }
         isRSVPed = false
-        event?.isRSVPed = false
+        event.isRSVPed = false
+        self.event = event
         
         networkService.cancelRSVP(eventId: event.id)
             .receive(on: DispatchQueue.main)
@@ -117,13 +126,20 @@ class EventViewModel: ObservableObject {
                 receiveCompletion: { [weak self] completion in
                     if case .failure = completion {
                         self?.isRSVPed = true
-                        self?.event?.isRSVPed = true
+                        if var event = self?.event {
+                            event.isRSVPed = true
+                            self?.event = event
+                        }
                     }
                 },
                 receiveValue: { [weak self] _ in
                     // RSVP cancelled successfully - event will be removed from "Upcoming" and appear in "Near Me" again
-                    if let count = self?.event?.attendeeCount, count > 0 {
-                        self?.event?.attendeeCount -= 1
+                    if var event = self?.event {
+                        if event.attendeeCount > 0 {
+                            event.attendeeCount -= 1
+                        }
+                        event.isRSVPed = false
+                        self?.event = event
                     }
                     // Reload event to get updated status
                     self?.loadEvent()

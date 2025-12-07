@@ -78,37 +78,38 @@ struct PartierHomeView: View {
                                             .padding(.horizontal, Theme.Spacing.m)
                                         }
                                     }
-                                } else if !viewModel.featuredEvents.isEmpty {
-                                VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                                    HStack {
-                                        Text("Featured")
-                                            .font(.sioreeH2)
-                                            .foregroundColor(Color.sioreeWhite)
-                                        
-                                        Spacer()
-                                        
-                                        // Badge indicating these are brand promotions
-                                        HStack(spacing: Theme.Spacing.xs) {
-                                            Image(systemName: "star.fill")
-                                                .font(.system(size: 12))
-                                                .foregroundColor(.sioreeWarmGlow)
-                                            Text("Brand Promoted")
-                                                .font(.sioreeCaption)
-                                                .foregroundColor(.sioreeLightGrey)
-                                        }
-                                    }
-                                    .padding(.horizontal, Theme.Spacing.m)
-                                    
-                                    ScrollView(.horizontal, showsIndicators: false) {
-                                        HStack(spacing: Theme.Spacing.m) {
-                                            ForEach(viewModel.featuredEvents) { event in
-                                                AppEventCard(event: event) {
-                                                    // Navigation handled by AppEventCard's sheet
-                                                }
-                                                .frame(width: 320)
+                                } else {
+                                    VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                                        HStack {
+                                            Text("Featured")
+                                                .font(.sioreeH2)
+                                                .foregroundColor(Color.sioreeWhite)
+                                            
+                                            Spacer()
+                                            
+                                            // Badge indicating these are brand promotions
+                                            HStack(spacing: Theme.Spacing.xs) {
+                                                Image(systemName: "star.fill")
+                                                    .font(.system(size: 12))
+                                                    .foregroundColor(.sioreeWarmGlow)
+                                                Text("Brand Promoted")
+                                                    .font(.sioreeCaption)
+                                                    .foregroundColor(.sioreeLightGrey)
                                             }
                                         }
                                         .padding(.horizontal, Theme.Spacing.m)
+                                        
+                                        ScrollView(.horizontal, showsIndicators: false) {
+                                            HStack(spacing: Theme.Spacing.m) {
+                                                ForEach(viewModel.featuredEvents) { event in
+                                                    AppEventCard(event: event) {
+                                                        // Navigation handled by AppEventCard's sheet
+                                                    }
+                                                    .frame(width: 320)
+                                                }
+                                            }
+                                            .padding(.horizontal, Theme.Spacing.m)
+                                        }
                                     }
                                 }
                             }

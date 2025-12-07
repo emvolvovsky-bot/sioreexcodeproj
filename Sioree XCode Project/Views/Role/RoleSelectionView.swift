@@ -25,7 +25,7 @@ struct RoleSelectionView: View {
             VStack(spacing: Theme.Spacing.s) {
                 // Logo - much bigger at the top
                 VStack(spacing: Theme.Spacing.m) {
-                    LogoView(size: .extraLarge)
+                    LogoView(size: .xlarge)
                 }
                 .padding(.top, Theme.Spacing.l)
                 

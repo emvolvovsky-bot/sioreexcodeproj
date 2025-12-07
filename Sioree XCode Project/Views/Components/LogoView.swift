@@ -11,6 +11,7 @@ enum LogoSize {
     case small
     case medium
     case large
+    case xlarge
     case extraLarge
     
     var dimension: CGFloat {
@@ -18,6 +19,7 @@ enum LogoSize {
         case .small: return 60
         case .medium: return 100
         case .large: return 150
+        case .xlarge: return 255
         case .extraLarge: return 360
         }
     }

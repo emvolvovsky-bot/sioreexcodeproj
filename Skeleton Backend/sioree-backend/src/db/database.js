@@ -151,6 +151,19 @@ const pool = new pg.Pool(poolConfig);
 
 // Test connection with timeout and retry logic
 const testConnection = async (retries = 3) => {
+  console.log("🔌 Attempting to connect to database...");
+  console.log(`📊 Database URL configured: ${databaseUrl ? "Yes" : "No"}`);
+  if (databaseUrl) {
+    try {
+      const url = new URL(databaseUrl);
+      console.log(`📊 Database host: ${url.hostname}`);
+      console.log(`📊 Database port: ${url.port || '5432'}`);
+      console.log(`📊 Database user: ${url.username}`);
+    } catch (e) {
+      console.log("📊 Could not parse database URL");
+    }
+  }
+  
   for (let i = 0; i < retries; i++) {
     try {
       const result = await Promise.race([
@@ -159,7 +172,11 @@ const testConnection = async (retries = 3) => {
           setTimeout(() => reject(new Error("Connection timeout")), 10000)
         )
       ]);
-      console.log("✅ Database pool connected");
+      console.log("═══════════════════════════════════════════════════════════");
+      console.log("✅ DATABASE CONNECTED SUCCESSFULLY");
+      console.log(`📊 Database time: ${result.rows[0].now}`);
+      console.log(`📊 Connection pool: ${pool.totalCount} total, ${pool.idleCount} idle, ${pool.waitingCount} waiting`);
+      console.log("═══════════════════════════════════════════════════════════");
       return;
     } catch (err) {
       console.error(`❌ Database connection attempt ${i + 1}/${retries} failed:`, err.message);

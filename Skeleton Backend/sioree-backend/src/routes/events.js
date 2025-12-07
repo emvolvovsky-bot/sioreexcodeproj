@@ -32,7 +32,8 @@ router.get("/featured", async (req, res) => {
         u.name as host_name,
         u.avatar as host_avatar,
         b.name as brand_name,
-        b.avatar as brand_avatar
+        b.avatar as brand_avatar,
+        ep.promoted_at
       FROM events e
       LEFT JOIN users u ON e.creator_id = u.id
       INNER JOIN event_promotions ep ON e.id = ep.event_id

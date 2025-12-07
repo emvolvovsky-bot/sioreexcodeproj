@@ -243,6 +243,12 @@ class NetworkService {
             .eraseToAnyPublisher()
     }
     
+    func fetchRecentEventSignups() -> AnyPublisher<[EventSignup], Error> {
+        return request("/api/events/host/recent-signups")
+            .map { (response: EventSignupsResponse) in response.signups }
+            .eraseToAnyPublisher()
+    }
+    
     func createEvent(title: String, description: String, date: Date, time: Date, location: String, images: [String], ticketPrice: Double?, capacity: Int? = nil, talentIds: [String] = [], lookingForTalentType: String? = nil) -> AnyPublisher<Event, Error> {
         // Combine date and time for event_date
         let calendar = Calendar.current

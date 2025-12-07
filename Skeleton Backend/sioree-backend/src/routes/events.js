@@ -401,6 +401,61 @@ router.get("/:id", async (req, res) => {
   }
 });
 
+// GET recent signups for host's events (for host home page notifications)
+router.get("/host/recent-signups", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer "))
+      return res.status(401).json({ error: "Unauthorized" });
+
+    const token = authHeader.substring(7);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key-change-in-production");
+    const hostId = decoded.userId;
+
+    // Get recent signups (last 24 hours) for events created by this host
+    const result = await db.query(
+      `SELECT 
+        ea.id as signup_id,
+        ea.created_at as signed_up_at,
+        ea.event_id,
+        e.title as event_title,
+        e.event_date,
+        u.id as user_id,
+        u.name as user_name,
+        u.username as user_username,
+        u.avatar as user_avatar
+      FROM event_attendees ea
+      INNER JOIN events e ON ea.event_id = e.id
+      INNER JOIN users u ON ea.user_id = u.id
+      WHERE e.creator_id = $1
+        AND ea.created_at > NOW() - INTERVAL '24 hours'
+      ORDER BY ea.created_at DESC
+      LIMIT 50`,
+      [hostId]
+    );
+
+    const signups = result.rows.map(row => ({
+      id: row.signup_id.toString(),
+      signedUpAt: toISOString(row.signed_up_at),
+      eventId: row.event_id.toString(),
+      eventTitle: row.event_title,
+      eventDate: toISOString(row.event_date),
+      userId: row.user_id.toString(),
+      userName: row.user_name || row.user_username,
+      userUsername: row.user_username,
+      userAvatar: row.user_avatar || null
+    }));
+
+    res.json({ signups });
+  } catch (err) {
+    console.error("Get recent signups error:", err);
+    if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: "Invalid or expired token" });
+    }
+    res.status(500).json({ error: "Failed to fetch recent signups" });
+  }
+});
+
 // GET event attendees
 router.get("/:id/attendees", async (req, res) => {
   try {

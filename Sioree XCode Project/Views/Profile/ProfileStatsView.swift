@@ -33,7 +33,7 @@ struct ProfileStatsView: View {
     var body: some View {
         VStack(spacing: Theme.Spacing.m) {
             HStack(spacing: 0) {
-                // Show Followers for all user types (including partiers)
+                // Always show Followers first
                 StatItem(
                     value: Helpers.formatNumber(followers),
                     label: "Followers",
@@ -45,6 +45,7 @@ struct ProfileStatsView: View {
                 Divider()
                     .frame(height: 40)
                 
+                // Always show Following second
                 StatItem(
                     value: Helpers.formatNumber(following),
                     label: "Following",
@@ -66,7 +67,8 @@ struct ProfileStatsView: View {
                             showEventsList = true
                         }
                     )
-                } else if eventsHosted > 0 {
+                } else {
+                    // For non-partiers, show Events Hosted (even if 0)
                     Divider()
                         .frame(height: 40)
                     StatItem(

@@ -90,8 +90,11 @@ struct TalentGigsView: View {
                                             .padding(.horizontal, Theme.Spacing.m)
                                         
                                         ForEach(upcomingGigs) { gig in
-                                            GigRow(gig: gig)
-                                                .padding(.horizontal, Theme.Spacing.m)
+                                            NavigationLink(destination: GigDetailView(gig: gig)) {
+                                                GigRow(gig: gig)
+                                            }
+                                            .buttonStyle(PlainButtonStyle())
+                                            .padding(.horizontal, Theme.Spacing.m)
                                         }
                                     }
                                     .padding(.top, Theme.Spacing.m)
@@ -106,8 +109,11 @@ struct TalentGigsView: View {
                                             .padding(.horizontal, Theme.Spacing.m)
                                         
                                         ForEach(pastGigs) { gig in
-                                            GigRow(gig: gig)
-                                                .padding(.horizontal, Theme.Spacing.m)
+                                            NavigationLink(destination: GigDetailView(gig: gig)) {
+                                                GigRow(gig: gig)
+                                            }
+                                            .buttonStyle(PlainButtonStyle())
+                                            .padding(.horizontal, Theme.Spacing.m)
                                         }
                                     }
                                     .padding(.top, Theme.Spacing.m)

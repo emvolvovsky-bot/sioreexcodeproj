@@ -44,7 +44,41 @@ struct PartierHomeView: View {
                             .padding(.vertical, Theme.Spacing.xxl)
                         } else {
                             // Featured Events (promoted by brands) - Horizontal Scroll
-                            if !viewModel.featuredEvents.isEmpty {
+                            // Always show Featured section if we have events or placeholders
+                            if !viewModel.featuredEvents.isEmpty || viewModel.hasLoaded {
+                                if viewModel.featuredEvents.isEmpty {
+                                    // Show placeholders for Featured
+                                    let placeholderFeatured = HomeViewModel().generatePlaceholderFeaturedEvents()
+                                    VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                                        HStack {
+                                            Text("Featured")
+                                                .font(.sioreeH2)
+                                                .foregroundColor(Color.sioreeWhite)
+                                            
+                                            Spacer()
+                                            
+                                            HStack(spacing: Theme.Spacing.xs) {
+                                                Image(systemName: "star.fill")
+                                                    .font(.system(size: 12))
+                                                    .foregroundColor(.sioreeWarmGlow)
+                                                Text("Brand Promoted")
+                                                    .font(.sioreeCaption)
+                                                    .foregroundColor(.sioreeLightGrey)
+                                            }
+                                        }
+                                        .padding(.horizontal, Theme.Spacing.m)
+                                        
+                                        ScrollView(.horizontal, showsIndicators: false) {
+                                            HStack(spacing: Theme.Spacing.m) {
+                                                ForEach(placeholderFeatured) { event in
+                                                    AppEventCard(event: event) {}
+                                                        .frame(width: 320)
+                                                }
+                                            }
+                                            .padding(.horizontal, Theme.Spacing.m)
+                                        }
+                                    }
+                                } else if !viewModel.featuredEvents.isEmpty {
                                 VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                                     HStack {
                                         Text("Featured")
@@ -79,25 +113,23 @@ struct PartierHomeView: View {
                                 }
                             }
                             
-                            // Near You - Horizontal Scroll
-                            if !viewModel.nearbyEvents.isEmpty {
-                                VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                                    Text("Near You")
-                                        .font(.sioreeH2)
-                                        .foregroundColor(Color.sioreeWhite)
-                                        .padding(.horizontal, Theme.Spacing.m)
-                                    
-                                    ScrollView(.horizontal, showsIndicators: false) {
-                                        HStack(spacing: Theme.Spacing.m) {
-                                            ForEach(viewModel.nearbyEvents) { event in
-                                                AppEventCard(event: event) {
-                                                    // Navigation handled by AppEventCard's sheet
-                                                }
-                                                .frame(width: 320)
+                            // Near You - Horizontal Scroll (always show, with placeholders if empty)
+                            VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                                Text("Near You")
+                                    .font(.sioreeH2)
+                                    .foregroundColor(Color.sioreeWhite)
+                                    .padding(.horizontal, Theme.Spacing.m)
+                                
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: Theme.Spacing.m) {
+                                        ForEach(viewModel.nearbyEvents.isEmpty ? viewModel.generatePlaceholderNearbyEvents() : viewModel.nearbyEvents) { event in
+                                            AppEventCard(event: event) {
+                                                // Navigation handled by AppEventCard's sheet
                                             }
+                                            .frame(width: 320)
                                         }
-                                        .padding(.horizontal, Theme.Spacing.m)
                                     }
+                                    .padding(.horizontal, Theme.Spacing.m)
                                 }
                             }
                         }

@@ -45,6 +45,10 @@ class HomeViewModel: ObservableObject {
                         self?.featuredEvents = events
                         print("✅ Loaded \(events.count) featured events")
                     }
+                    // Ensure nearby events also get placeholders if empty
+                    if self?.nearbyEvents.isEmpty == true && self?.hasLoaded == false {
+                        self?.nearbyEvents = self?.generatePlaceholderNearbyEvents() ?? []
+                    }
                 }
             )
             .store(in: &cancellables)
@@ -74,6 +78,7 @@ class HomeViewModel: ObservableObject {
                         self?.nearbyEvents = events
                         print("✅ Loaded \(events.count) nearby events")
                     }
+                    self?.isLoading = false
                     self?.hasLoaded = true
                 }
             )
@@ -81,7 +86,7 @@ class HomeViewModel: ObservableObject {
     }
     
     // Generate realistic placeholder featured events (promoted by brands)
-    private func generatePlaceholderFeaturedEvents() -> [Event] {
+    func generatePlaceholderFeaturedEvents() -> [Event] {
         let calendar = Calendar.current
         let now = Date()
         
@@ -150,7 +155,7 @@ class HomeViewModel: ObservableObject {
     }
     
     // Generate realistic placeholder nearby events
-    private func generatePlaceholderNearbyEvents() -> [Event] {
+    func generatePlaceholderNearbyEvents() -> [Event] {
         let calendar = Calendar.current
         let now = Date()
         

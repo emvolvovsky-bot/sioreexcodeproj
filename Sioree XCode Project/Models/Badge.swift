@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct Badge: Identifiable, Codable {
+struct Badge: Identifiable, Codable, Equatable {
     let id: String
     var name: String
     var description: String

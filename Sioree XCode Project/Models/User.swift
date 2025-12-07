@@ -14,7 +14,7 @@ enum UserType: String, Codable {
     case brand
 }
 
-struct User: Identifiable, Codable {
+struct User: Identifiable, Codable, Equatable {
     let id: String
     var email: String
     var username: String
@@ -121,6 +121,24 @@ struct User: Identifiable, Codable {
         self.followingCount = followingCount
         self.eventCount = eventCount
         self.badges = badges
+    }
+    
+    // MARK: - Equatable
+    static func == (lhs: User, rhs: User) -> Bool {
+        return lhs.id == rhs.id &&
+               lhs.email == rhs.email &&
+               lhs.username == rhs.username &&
+               lhs.name == rhs.name &&
+               lhs.bio == rhs.bio &&
+               lhs.avatar == rhs.avatar &&
+               lhs.userType == rhs.userType &&
+               lhs.location == rhs.location &&
+               lhs.verified == rhs.verified &&
+               lhs.createdAt == rhs.createdAt &&
+               lhs.followerCount == rhs.followerCount &&
+               lhs.followingCount == rhs.followingCount &&
+               lhs.eventCount == rhs.eventCount &&
+               lhs.badges == rhs.badges
     }
 }
 

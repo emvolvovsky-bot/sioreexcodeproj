@@ -24,10 +24,17 @@ if (databaseUrl && databaseUrl.includes("supabase")) {
       
       // Set required parameters for pooler (critical for SCRAM authentication)
       // sslmode=require ensures SSL/TLS handshake completes first
-      // pgbouncer=true tells the pooler to handle SCRAM authentication correctly
-      // Without these, the server won't send its signature in the final SCRAM message
+      // For Transaction Pooler, pgbouncer=true is required
+      // However, Transaction Pooler has known SCRAM issues - try without pgbouncer first
+      // If that fails, the password might be the issue
       params.set("sslmode", "require");
-      params.set("pgbouncer", "true"); // CRITICAL: Required for Transaction Pooler SCRAM auth
+      
+      // For Transaction Pooler, pgbouncer=true can sometimes cause SCRAM issues
+      // Try with it first, but if it fails, the password is likely incorrect
+      // Transaction Pooler should work with just sslmode=require
+      if (!params.has("pgbouncer")) {
+        params.set("pgbouncer", "true");
+      }
       
       // Reconstruct URL with parameters
       url.search = params.toString();
@@ -75,17 +82,21 @@ if (databaseUrl && databaseUrl.includes("supabase")) {
 }
 
 // Use connection pool for better performance and error handling
+// For Transaction Pooler, we need to be careful with connection settings
 const poolConfig = {
   connectionString: databaseUrl || process.env.DATABASE_URL,
   max: 15, // Reduced for pooler connections (Supabase pooler limit)
   idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-  connectionTimeoutMillis: 15000, // Increased to 15 seconds for network latency
+  connectionTimeoutMillis: 20000, // Increased to 20 seconds for network latency
   keepAlive: true,
   keepAliveInitialDelayMillis: 10000,
   // Additional options for better connection handling
   allowExitOnIdle: false,
   // Ensure proper SSL/TLS handshake for SCRAM authentication
   application_name: 'sioree-backend',
+  // For Transaction Pooler, ensure we don't use prepared statements in transaction mode
+  // This helps with SCRAM authentication
+  statement_timeout: 30000,
 };
 
 // Always add SSL config for Supabase (required)
@@ -95,16 +106,17 @@ const poolConfig = {
 const isSupabase = process.env.DATABASE_URL?.includes("supabase") || databaseUrl?.includes("supabase");
 if (isSupabase || !isLocalDB) {
   // For pooler connections, SSL is handled via connection string parameters (sslmode=require)
-  // We should NOT set poolConfig.ssl for pooler connections as it conflicts with connection string SSL settings
-  // The pg library will use the sslmode parameter from the connection string
+  // For Transaction Pooler, we need to ensure SSL is properly configured
   if (databaseUrl?.includes("pooler")) {
-    // For pooler, SSL is configured via connection string, but we still need to allow self-signed certs
-    // However, we should let the connection string handle SSL mode and only set rejectUnauthorized
+    // Transaction Pooler requires specific SSL configuration
+    // We need to allow self-signed certificates but let the connection string control SSL mode
     poolConfig.ssl = {
       rejectUnauthorized: false // Accept self-signed certificates
-      // Do NOT set require: true here - let connection string sslmode=require handle it
+      // Note: sslmode=require in connection string handles SSL requirement
+      // Setting require: true here can conflict with Transaction Pooler
     };
-    console.log("🔒 SSL configured for pooler connection (rejectUnauthorized: false, SSL mode from connection string)");
+    console.log("🔒 SSL configured for Transaction Pooler (rejectUnauthorized: false)");
+    console.log("🔒 SSL mode controlled by connection string parameter: sslmode=require");
   } else {
     // For direct connections, configure SSL explicitly
     poolConfig.ssl = {

@@ -35,8 +35,18 @@ if (databaseUrl && databaseUrl.includes("supabase")) {
       
       console.log(`📊 Database host: ${url.hostname}`);
       console.log(`📊 Database port: ${url.port || '5432'}`);
+      console.log(`📊 Database user: ${url.username}`);
+      console.log(`📊 Connection parameters: ${params.toString()}`);
       console.log("📊 Using pooler connection with pgbouncer=true and sslmode=require");
       console.log("📊 These parameters ensure SCRAM authentication completes with server signature");
+      
+      // Verify critical parameters are present
+      if (!params.has("pgbouncer") || params.get("pgbouncer") !== "true") {
+        console.error("⚠️ WARNING: pgbouncer parameter is missing or incorrect!");
+      }
+      if (!params.has("sslmode") || params.get("sslmode") !== "require") {
+        console.error("⚠️ WARNING: sslmode parameter is missing or incorrect!");
+      }
     } catch (e) {
       // Fallback: manual string manipulation if URL parsing fails
       console.log("📊 Using fallback URL parsing");
@@ -121,6 +131,39 @@ const testConnection = async (retries = 3) => {
       return;
     } catch (err) {
       console.error(`❌ Database connection attempt ${i + 1}/${retries} failed:`, err.message);
+      console.error(`❌ Error code: ${err.code || 'N/A'}`);
+      console.error(`❌ Error details:`, {
+        errno: err.errno,
+        syscall: err.syscall,
+        address: err.address,
+        port: err.port
+      });
+      
+      // For SCRAM errors, provide specific guidance
+      if (err.message.includes("SCRAM") || err.message.includes("server signature")) {
+        console.error("⚠️ SCRAM Authentication Error - Common causes:");
+        console.error("   1. Incorrect database password in DATABASE_URL");
+        console.error("   2. Password contains special characters that need URL encoding");
+        console.error("   3. Missing pgbouncer=true parameter (should be auto-added)");
+        console.error("   4. Missing sslmode=require parameter (should be auto-added)");
+        console.error("   5. Connection string format is incorrect");
+        
+        // Log connection string info (without password)
+        if (databaseUrl) {
+          try {
+            const url = new URL(databaseUrl);
+            console.error(`📋 Connection string check:`);
+            console.error(`   Host: ${url.hostname}`);
+            console.error(`   Port: ${url.port}`);
+            console.error(`   User: ${url.username}`);
+            console.error(`   Has password: ${url.password ? 'Yes' : 'NO - THIS IS THE PROBLEM!'}`);
+            console.error(`   Parameters: ${url.search}`);
+          } catch (e) {
+            console.error(`   Could not parse connection string`);
+          }
+        }
+      }
+      
       if (i < retries - 1) {
         console.log(`⏳ Retrying in 2 seconds...`);
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -131,6 +174,7 @@ const testConnection = async (retries = 3) => {
         } else {
           console.error("⚠️ Check your DATABASE_URL connection string");
           console.error("⚠️ Make sure your Supabase database allows connections from Render's IP addresses");
+          console.error("⚠️ Verify your database password is correct and URL-encoded if needed");
         }
       }
     }

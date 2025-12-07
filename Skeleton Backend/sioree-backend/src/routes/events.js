@@ -208,6 +208,13 @@ router.post("/", async (req, res) => {
 
     const eventRow = result.rows[0];
     
+    // Handle talent IDs if provided (specific talent selected)
+    if (talentIds && Array.isArray(talentIds) && talentIds.length > 0) {
+      // TODO: Create event_talent relationships if needed
+      // For now, we'll store them in the event response
+      console.log("📋 Event created with \(talentIds.length) selected talent");
+    }
+    
     // Get host info
     const hostResult = await db.query(`SELECT username, name, avatar FROM users WHERE id = $1`, [decoded.userId]);
     const host = hostResult.rows[0] || {};
@@ -232,7 +239,7 @@ router.post("/", async (req, res) => {
       ticketPrice: eventRow.ticket_price && parseFloat(eventRow.ticket_price) > 0 ? parseFloat(eventRow.ticket_price) : null,
       capacity: eventRow.capacity || null,
       attendees: 0,  // Maps to attendeeCount via CodingKeys
-      talentIds: [],
+      talentIds: talentIds && Array.isArray(talentIds) ? talentIds : [],
       status: "published",
       created_at: toISOString(eventRow.created_at),  // Maps to createdAt via CodingKeys
       likes: 0,

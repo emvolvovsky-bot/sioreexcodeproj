@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Combine
 
 enum GigStatus: String {
     case requested = "Requested"

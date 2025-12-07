@@ -1,5 +1,5 @@
 import express from "express";
-import { createPaymentIntent } from "../services/payments.js";
+import { createPaymentIntent, confirmPaymentIntent, createPaymentMethod } from "../services/payments.js";
 import db from "../db/database.js";
 import jwt from "jsonwebtoken";
 
@@ -134,29 +134,80 @@ router.post("/create-method", async (req, res) => {
     const userId = getUserIdFromToken(req);
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { number, exp_month, exp_year, cvc, name } = req.body;
+    const { number, exp_month, exp_year, cvc, zip } = req.body;
     
     if (!number || !exp_month || !exp_year || !cvc) {
       return res.status(400).json({ error: "Card details are required" });
     }
 
-    // In production, create payment method via Stripe API
-    // For now, return a mock payment method
-    const paymentMethod = {
-      id: "pm_mock_" + Date.now(),
-      type: "card",
-      card: {
-        last4: number.slice(-4),
-        brand: "visa",
-        exp_month: exp_month,
-        exp_year: exp_year
-      }
-    };
+    // Create payment method via Stripe API
+    const paymentMethod = await createPaymentMethod({
+      number: number.replace(/\s/g, ""), // Remove spaces
+      exp_month: parseInt(exp_month),
+      exp_year: parseInt(exp_year),
+      cvc: cvc,
+      zip: zip
+    });
 
     res.json({ paymentMethod });
   } catch (err) {
     console.error("Create payment method error:", err);
-    res.status(500).json({ error: "Failed to create payment method" });
+    res.status(500).json({ error: err.message || "Failed to create payment method" });
+  }
+});
+
+// POST /api/payments/confirm - Confirm payment with payment method
+router.post("/confirm", async (req, res) => {
+  try {
+    const userId = getUserIdFromToken(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { paymentIntentId, paymentMethodId } = req.body;
+    
+    if (!paymentIntentId || !paymentMethodId) {
+      return res.status(400).json({ error: "Payment intent ID and payment method ID are required" });
+    }
+
+    // Confirm payment intent with Stripe
+    const paymentIntent = await confirmPaymentIntent(paymentIntentId, paymentMethodId);
+    
+    // Try to create payment record in database (if table exists)
+    let paymentRecord = null;
+    try {
+      const result = await db.query(
+        `INSERT INTO payments (user_id, amount, status, transaction_id, payment_method, created_at)
+         VALUES ($1, $2, $3, $4, $5, NOW())
+         RETURNING *`,
+        [
+          userId,
+          paymentIntent.amount / 100, // Convert from cents to dollars
+          paymentIntent.status === "succeeded" ? "paid" : "pending",
+          paymentIntent.id,
+          paymentMethodId
+        ]
+      );
+      paymentRecord = result.rows[0];
+    } catch (dbErr) {
+      // If payments table doesn't exist, continue without saving to DB
+      console.warn("Payments table doesn't exist, skipping DB save:", dbErr.message);
+    }
+
+    // Return payment object matching iOS Payment model
+    const payment = {
+      id: paymentRecord?.id?.toString() || paymentIntent.id,
+      userId: userId,
+      amount: paymentIntent.amount / 100, // Convert from cents to dollars
+      method: "credit_card", // or determine from payment method type
+      status: paymentIntent.status === "succeeded" ? "paid" : "pending",
+      transactionId: paymentIntent.id,
+      description: paymentIntent.description || "Sioree Payment",
+      createdAt: paymentRecord?.created_at?.toISOString() || new Date().toISOString()
+    };
+
+    res.json(payment);
+  } catch (err) {
+    console.error("Confirm payment error:", err);
+    res.status(500).json({ error: err.message || "Failed to confirm payment" });
   }
 });
 

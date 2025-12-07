@@ -33,3 +33,51 @@ export async function createPaymentIntent(amount, hostStripeAccountId) {
     throw err;
   }
 }
+
+export async function createPaymentMethod(cardDetails) {
+  try {
+    const { number, exp_month, exp_year, cvc, zip } = cardDetails;
+    
+    const paymentMethod = await stripe.paymentMethods.create({
+      type: "card",
+      card: {
+        number: number,
+        exp_month: exp_month,
+        exp_year: exp_year,
+        cvc: cvc
+      },
+      billing_details: {
+        address: {
+          postal_code: zip
+        }
+      }
+    });
+    
+    return {
+      id: paymentMethod.id,
+      type: paymentMethod.type,
+      card: paymentMethod.card ? {
+        brand: paymentMethod.card.brand,
+        last4: paymentMethod.card.last4,
+        expMonth: paymentMethod.card.exp_month,
+        expYear: paymentMethod.card.exp_year
+      } : null
+    };
+  } catch (err) {
+    console.error("Stripe create payment method error:", err);
+    throw err;
+  }
+}
+
+export async function confirmPaymentIntent(paymentIntentId, paymentMethodId) {
+  try {
+    const paymentIntent = await stripe.paymentIntents.confirm(paymentIntentId, {
+      payment_method: paymentMethodId
+    });
+    
+    return paymentIntent;
+  } catch (err) {
+    console.error("Stripe confirm payment intent error:", err);
+    throw err;
+  }
+}

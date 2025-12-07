@@ -82,7 +82,60 @@ class StripePaymentService: ObservableObject {
             return Fail(error: NetworkError.unknown).eraseToAnyPublisher()
         }
         
+        struct PaymentResponse: Codable {
+            let id: String
+            let userId: String
+            let amount: Double
+            let method: String
+            let status: String
+            let transactionId: String?
+            let description: String?
+            let createdAt: String
+        }
+        
         return networkService.request("/api/payments/confirm", method: "POST", body: jsonData)
+            .map { (response: PaymentResponse) -> Payment in
+                // Convert response to Payment model
+                let paymentMethod: PaymentMethod
+                switch response.method {
+                case "credit_card", "debit_card":
+                    paymentMethod = response.method == "credit_card" ? .creditCard : .debitCard
+                case "apple_pay":
+                    paymentMethod = .applePay
+                default:
+                    paymentMethod = .creditCard
+                }
+                
+                let paymentStatus: PaymentStatus
+                switch response.status {
+                case "paid":
+                    paymentStatus = .paid
+                case "pending":
+                    paymentStatus = .pending
+                case "failed":
+                    paymentStatus = .failed
+                case "refunded":
+                    paymentStatus = .refunded
+                default:
+                    paymentStatus = .pending
+                }
+                
+                let dateFormatter = ISO8601DateFormatter()
+                dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                let createdAt = dateFormatter.date(from: response.createdAt) ?? Date()
+                
+                return Payment(
+                    id: response.id,
+                    userId: response.userId,
+                    amount: response.amount,
+                    method: paymentMethod,
+                    status: paymentStatus,
+                    transactionId: response.transactionId,
+                    description: response.description,
+                    createdAt: createdAt
+                )
+            }
+            .eraseToAnyPublisher()
     }
     
     // MARK: - Process Apple Pay

@@ -79,7 +79,7 @@ struct RoleCard: View {
                 
                 Text(role.displayName)
                     .font(.sioreeH4)
-                    .foregroundColor(Color.sioreeBlack)
+                    .foregroundColor(Color.sioreeWhite)
             }
             .frame(maxWidth: .infinity)
             .frame(height: 120)

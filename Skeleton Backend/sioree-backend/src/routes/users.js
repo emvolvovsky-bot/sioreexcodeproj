@@ -181,13 +181,17 @@ router.post("/:id/follow", async (req, res) => {
         [followerId, followingId]
       );
       
-      // Update counts
+      // Recalculate counts from follows table to avoid double counting
       await db.query(
-        `UPDATE users SET follower_count = GREATEST(0, follower_count - 1) WHERE id = $1`,
+        `UPDATE users SET follower_count = (
+          SELECT COUNT(*) FROM follows WHERE following_id = users.id
+        ) WHERE id = $1`,
         [followingId]
       );
       await db.query(
-        `UPDATE users SET following_count = GREATEST(0, following_count - 1) WHERE id = $1`,
+        `UPDATE users SET following_count = (
+          SELECT COUNT(*) FROM follows WHERE follower_id = users.id
+        ) WHERE id = $1`,
         [followerId]
       );
 
@@ -199,13 +203,17 @@ router.post("/:id/follow", async (req, res) => {
         [followerId, followingId]
       );
       
-      // Update counts
+      // Recalculate counts from follows table to avoid double counting
       await db.query(
-        `UPDATE users SET follower_count = follower_count + 1 WHERE id = $1`,
+        `UPDATE users SET follower_count = (
+          SELECT COUNT(*) FROM follows WHERE following_id = users.id
+        ) WHERE id = $1`,
         [followingId]
       );
       await db.query(
-        `UPDATE users SET following_count = following_count + 1 WHERE id = $1`,
+        `UPDATE users SET following_count = (
+          SELECT COUNT(*) FROM follows WHERE follower_id = users.id
+        ) WHERE id = $1`,
         [followerId]
       );
 
@@ -217,22 +225,91 @@ router.post("/:id/follow", async (req, res) => {
   }
 });
 
-// GET check if following
-router.get("/:id/following", async (req, res) => {
+// GET followers list for a user (must come before /:id/following to avoid route conflict)
+router.get("/:id/followers", async (req, res) => {
   try {
-    const followerId = getUserIdFromToken(req);
-    if (!followerId) return res.status(401).json({ error: "Unauthorized" });
-
-    const followingId = req.params.id;
+    const userId = req.params.id;
+    
+    // Get all users who follow this user (follower_id in follows table where following_id = userId)
     const result = await db.query(
-      `SELECT * FROM follows WHERE follower_id = $1 AND following_id = $2`,
-      [followerId, followingId]
+      `SELECT DISTINCT
+        u.id, u.email, u.username, u.name, u.bio, u.avatar, u.user_type, u.verified,
+        u.location, u.created_at,
+        (SELECT COUNT(*) FROM follows WHERE following_id = u.id) as follower_count,
+        (SELECT COUNT(*) FROM follows WHERE follower_id = u.id) as following_count,
+        (SELECT COUNT(*) FROM events WHERE creator_id = u.id) as event_count
+      FROM follows f
+      INNER JOIN users u ON f.follower_id = u.id
+      WHERE f.following_id = $1
+      ORDER BY u.username`,
+      [userId]
     );
 
-    res.json({ following: result.rows.length > 0 });
+    const users = result.rows.map(row => ({
+      id: row.id.toString(),
+      email: row.email,
+      username: row.username,
+      name: row.name,
+      bio: row.bio || null,
+      avatar: row.avatar || null,
+      userType: row.user_type,
+      verified: row.verified || false,
+      location: row.location || null,
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+      followerCount: parseInt(row.follower_count) || 0,
+      followingCount: parseInt(row.following_count) || 0,
+      eventCount: parseInt(row.event_count) || 0,
+      badges: []
+    }));
+
+    res.json({ users });
   } catch (err) {
-    console.error("Check following error:", err);
-    res.status(500).json({ error: "Failed to check follow status" });
+    console.error("Get followers error:", err);
+    res.status(500).json({ error: "Failed to fetch followers" });
+  }
+});
+
+// GET following list for a user
+router.get("/:id/following-list", async (req, res) => {
+  try {
+    const userId = req.params.id;
+    
+    // Get all users this user is following (following_id in follows table where follower_id = userId)
+    const result = await db.query(
+      `SELECT DISTINCT
+        u.id, u.email, u.username, u.name, u.bio, u.avatar, u.user_type, u.verified,
+        u.location, u.created_at,
+        (SELECT COUNT(*) FROM follows WHERE following_id = u.id) as follower_count,
+        (SELECT COUNT(*) FROM follows WHERE follower_id = u.id) as following_count,
+        (SELECT COUNT(*) FROM events WHERE creator_id = u.id) as event_count
+      FROM follows f
+      INNER JOIN users u ON f.following_id = u.id
+      WHERE f.follower_id = $1
+      ORDER BY u.username`,
+      [userId]
+    );
+
+    const users = result.rows.map(row => ({
+      id: row.id.toString(),
+      email: row.email,
+      username: row.username,
+      name: row.name,
+      bio: row.bio || null,
+      avatar: row.avatar || null,
+      userType: row.user_type,
+      verified: row.verified || false,
+      location: row.location || null,
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+      followerCount: parseInt(row.follower_count) || 0,
+      followingCount: parseInt(row.following_count) || 0,
+      eventCount: parseInt(row.event_count) || 0,
+      badges: []
+    }));
+
+    res.json({ users });
+  } catch (err) {
+    console.error("Get following list error:", err);
+    res.status(500).json({ error: "Failed to fetch following list" });
   }
 });
 

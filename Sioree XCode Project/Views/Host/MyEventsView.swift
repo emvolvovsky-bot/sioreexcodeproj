@@ -63,6 +63,10 @@ struct MyEventsView: View {
     private var eventsListView: some View {
         ForEach(events) { event in
             eventRowView(for: event)
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .scale(scale: 0.95)),
+                    removal: .opacity.combined(with: .scale(scale: 0.95))
+                ))
         }
     }
     
@@ -229,10 +233,12 @@ struct MyEventsView: View {
     private func deleteEvent(eventId: String) {
         print("🗑️ Deleting event: \(eventId)")
         
-        // Optimistically remove from UI immediately
-        localEvents.removeAll { $0.id == eventId }
-        homeViewModel.nearbyEvents.removeAll { $0.id == eventId }
-        homeViewModel.featuredEvents.removeAll { $0.id == eventId }
+        // Animate removal from UI
+        withAnimation(.easeInOut(duration: 0.3)) {
+            localEvents.removeAll { $0.id == eventId }
+            homeViewModel.nearbyEvents.removeAll { $0.id == eventId }
+            homeViewModel.featuredEvents.removeAll { $0.id == eventId }
+        }
         
         let networkService = NetworkService()
         networkService.deleteEvent(eventId: eventId)
@@ -242,7 +248,9 @@ struct MyEventsView: View {
                     if case .failure(let error) = completion {
                         print("❌ Failed to delete event: \(error.localizedDescription)")
                         // Reload on failure to restore if delete failed
-                        homeViewModel.loadNearbyEvents()
+                        withAnimation {
+                            homeViewModel.loadNearbyEvents()
+                        }
                     } else {
                         print("✅ Delete request completed")
                     }
@@ -251,11 +259,15 @@ struct MyEventsView: View {
                     print("✅ Delete response: \(success)")
                     if success {
                         // Event already removed optimistically, just reload to sync
-                        homeViewModel.loadNearbyEvents()
+                        withAnimation {
+                            homeViewModel.loadNearbyEvents()
+                        }
                     } else {
                         print("⚠️ Delete returned false - reloading to restore")
                         // Reload to restore if delete failed
-                        homeViewModel.loadNearbyEvents()
+                        withAnimation {
+                            homeViewModel.loadNearbyEvents()
+                        }
                     }
                 }
             )

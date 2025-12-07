@@ -426,6 +426,24 @@ class NetworkService {
         return request("/api/users/\(userId)/follow", method: "POST")
     }
     
+    func fetchFollowers(userId: String) -> AnyPublisher<[User], Error> {
+        struct Response: Codable {
+            let users: [User]
+        }
+        return request("/api/users/\(userId)/followers")
+            .map { (response: Response) in response.users }
+            .eraseToAnyPublisher()
+    }
+    
+    func fetchFollowing(userId: String) -> AnyPublisher<[User], Error> {
+        struct Response: Codable {
+            let users: [User]
+        }
+        return request("/api/users/\(userId)/following-list")
+            .map { (response: Response) in response.users }
+            .eraseToAnyPublisher()
+    }
+    
     // MARK: - Talent
     func fetchTalent(category: TalentCategory?, searchQuery: String?) -> AnyPublisher<[Talent], Error> {
         var endpoint = "/api/talent"

@@ -58,6 +58,7 @@ struct UserListListView: View {
                             Text("\(users.count) \(listType == .followers ? "Followers" : "Following")")
                                 .foregroundColor(.sioreeLightGrey)
                         }
+                        .id(UUID()) // Force refresh when users change
                     }
                     .scrollContentBackground(.hidden)
                     .listStyle(.insetGrouped)
@@ -81,12 +82,34 @@ struct UserListListView: View {
     
     private func loadUsers() {
         isLoading = true
-        // TODO: Implement API endpoint to fetch followers/following list
-        // For now, use placeholder data
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            users = []
-            isLoading = false
+        
+        let publisher: AnyPublisher<[User], Error>
+        if listType == .followers {
+            publisher = networkService.fetchFollowers(userId: userId)
+        } else {
+            publisher = networkService.fetchFollowing(userId: userId)
         }
+        
+        publisher
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { [self] completion in
+                    isLoading = false
+                    if case .failure(let error) = completion {
+                        print("❌ Failed to load \(listType == .followers ? "followers" : "following"): \(error)")
+                    }
+                },
+                receiveValue: { [self] fetchedUsers in
+                    // Remove duplicates based on user ID to prevent double counting
+                    var uniqueUsers: [String: User] = [:]
+                    for user in fetchedUsers {
+                        uniqueUsers[user.id] = user
+                    }
+                    users = Array(uniqueUsers.values)
+                    isLoading = false
+                }
+            )
+            .store(in: &cancellables)
     }
 }
 

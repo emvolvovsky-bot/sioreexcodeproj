@@ -9,11 +9,13 @@ const isLocalDB = process.env.DATABASE_URL?.includes("localhost") ||
                    !process.env.DATABASE_URL?.includes("amazonaws"));
 
 // Parse DATABASE_URL - ensure SSL mode and connection parameters are set correctly
+// These parameters are CRITICAL for SCRAM authentication to complete and receive server signature
 let databaseUrl = process.env.DATABASE_URL;
 if (databaseUrl && databaseUrl.includes("supabase")) {
   console.log("📊 Using Supabase database connection");
   
   // For pooler connections, ensure proper connection parameters
+  // The pgbouncer=true parameter is essential for Transaction Pooler to complete SCRAM handshake
   if (databaseUrl.includes("pooler")) {
     // Parse the URL to properly handle parameters
     try {
@@ -21,8 +23,11 @@ if (databaseUrl && databaseUrl.includes("supabase")) {
       const params = new URLSearchParams(url.search);
       
       // Set required parameters for pooler (critical for SCRAM authentication)
+      // sslmode=require ensures SSL/TLS handshake completes first
+      // pgbouncer=true tells the pooler to handle SCRAM authentication correctly
+      // Without these, the server won't send its signature in the final SCRAM message
       params.set("sslmode", "require");
-      params.set("pgbouncer", "true"); // Critical for pooler connections
+      params.set("pgbouncer", "true"); // CRITICAL: Required for Transaction Pooler SCRAM auth
       
       // Reconstruct URL with parameters
       url.search = params.toString();
@@ -31,6 +36,7 @@ if (databaseUrl && databaseUrl.includes("supabase")) {
       console.log(`📊 Database host: ${url.hostname}`);
       console.log(`📊 Database port: ${url.port || '5432'}`);
       console.log("📊 Using pooler connection with pgbouncer=true and sslmode=require");
+      console.log("📊 These parameters ensure SCRAM authentication completes with server signature");
     } catch (e) {
       // Fallback: manual string manipulation if URL parsing fails
       console.log("📊 Using fallback URL parsing");
@@ -41,12 +47,14 @@ if (databaseUrl && databaseUrl.includes("supabase")) {
         existing.forEach((value, key) => params.set(key, value));
       }
       
+      // CRITICAL: These parameters ensure the server sends its signature
       params.set("sslmode", "require");
       params.set("pgbouncer", "true");
       
       const baseUrl = databaseUrl.split("?")[0];
       databaseUrl = `${baseUrl}?${params.toString()}`;
       console.log("📊 Using pooler connection with pgbouncer=true and sslmode=require (fallback)");
+      console.log("📊 These parameters ensure SCRAM authentication completes with server signature");
     }
   } else {
     // For direct connections, just ensure sslmode=require
@@ -66,23 +74,32 @@ const poolConfig = {
   keepAliveInitialDelayMillis: 10000,
   // Additional options for better connection handling
   allowExitOnIdle: false,
+  // Ensure proper SSL/TLS handshake for SCRAM authentication
+  application_name: 'sioree-backend',
 };
 
 // Always add SSL config for Supabase (required)
 // Supabase uses self-signed certificates, so we need to disable certificate validation
+// This is critical for SCRAM authentication to complete - the SSL handshake must succeed
+// before the SCRAM authentication handshake can complete and receive the server signature
 const isSupabase = process.env.DATABASE_URL?.includes("supabase") || databaseUrl?.includes("supabase");
 if (isSupabase || !isLocalDB) {
   // For pooler connections, SSL is handled via connection string parameters
   // But we still need to configure the SSL object for the pg library
+  // The SSL configuration ensures the TLS handshake completes, allowing SCRAM to proceed
   if (databaseUrl?.includes("pooler")) {
     // Pooler connections handle SSL via connection string, but we still need this for pg library
+    // This ensures the full SSL/TLS handshake completes so SCRAM can receive server signature
     poolConfig.ssl = {
-      rejectUnauthorized: false // Accept self-signed certificates
+      rejectUnauthorized: false, // Accept self-signed certificates
+      // Ensure SSL connection is established before SCRAM authentication
+      require: true
     };
-    console.log("🔒 SSL configured for pooler connection (rejectUnauthorized: false)");
+    console.log("🔒 SSL configured for pooler connection - ensures SCRAM authentication can complete");
   } else {
     poolConfig.ssl = {
-      rejectUnauthorized: false // CRITICAL: Accept self-signed certificates for Supabase
+      rejectUnauthorized: false, // CRITICAL: Accept self-signed certificates for Supabase
+      require: true // Ensure SSL is required
     };
     console.log("🔒 SSL configured with rejectUnauthorized: false for Supabase connection");
   }

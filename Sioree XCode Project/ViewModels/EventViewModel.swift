@@ -58,11 +58,11 @@ class EventViewModel: ObservableObject {
         isRSVPed = false
     }
     
-    func createEvent(title: String, description: String, date: Date, time: Date, location: String, images: [String], ticketPrice: Double?) {
+    func createEvent(title: String, description: String, date: Date, time: Date, location: String, images: [String], ticketPrice: Double?, talentIds: [String] = [], lookingForTalentType: String? = nil) {
         isLoading = true
         errorMessage = nil
         
-        networkService.createEvent(title: title, description: description, date: date, time: time, location: location, images: images, ticketPrice: ticketPrice)
+        networkService.createEvent(title: title, description: description, date: date, time: time, location: location, images: images, ticketPrice: ticketPrice, talentIds: talentIds, lookingForTalentType: lookingForTalentType)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { [weak self] completion in

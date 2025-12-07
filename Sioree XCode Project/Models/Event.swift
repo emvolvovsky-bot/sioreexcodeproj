@@ -40,6 +40,7 @@ struct Event: Identifiable, Codable {
     var isSaved: Bool
     var isFeatured: Bool
     var qrCode: String? // Unique QR code for the event
+    var lookingForTalentType: String? // Type of talent the host is looking for (e.g., "DJ", "Bartender")
     
     enum CodingKeys: String, CodingKey {
         case id, title, description, location, images, capacity, likes
@@ -57,6 +58,7 @@ struct Event: Identifiable, Codable {
         case isSaved = "isSaved"
         case isFeatured = "isFeatured"
         case qrCode = "qrCode"
+        case lookingForTalentType = "lookingForTalentType"
     }
     
     init(from decoder: Decoder) throws {
@@ -90,6 +92,7 @@ struct Event: Identifiable, Codable {
         isSaved = try container.decodeIfPresent(Bool.self, forKey: .isSaved) ?? false
         isFeatured = try container.decodeIfPresent(Bool.self, forKey: .isFeatured) ?? false
         qrCode = try container.decodeIfPresent(String.self, forKey: .qrCode)
+        lookingForTalentType = try container.decodeIfPresent(String.self, forKey: .lookingForTalentType)
     }
     
     init(id: String = UUID().uuidString,
@@ -113,7 +116,8 @@ struct Event: Identifiable, Codable {
          isLiked: Bool = false,
          isSaved: Bool = false,
          isFeatured: Bool = false,
-         qrCode: String? = nil) {
+         qrCode: String? = nil,
+         lookingForTalentType: String? = nil) {
         self.id = id
         self.title = title
         self.description = description
@@ -136,6 +140,7 @@ struct Event: Identifiable, Codable {
         self.isSaved = isSaved
         self.isFeatured = isFeatured
         self.qrCode = qrCode
+        self.lookingForTalentType = lookingForTalentType
     }
     
     // Generate unique QR code for event

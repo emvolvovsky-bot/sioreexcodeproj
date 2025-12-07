@@ -233,7 +233,17 @@ class NetworkService {
         return request("/api/events/\(eventId)")
     }
     
-    func createEvent(title: String, description: String, date: Date, time: Date, location: String, images: [String], ticketPrice: Double?, capacity: Int? = nil) -> AnyPublisher<Event, Error> {
+    func fetchEventsLookingForTalent(talentType: String) -> AnyPublisher<[Event], Error> {
+        struct Response: Codable {
+            let events: [Event]
+        }
+        let encodedType = talentType.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? talentType
+        return request("/api/events/looking-for/\(encodedType)")
+            .map { (response: Response) in response.events }
+            .eraseToAnyPublisher()
+    }
+    
+    func createEvent(title: String, description: String, date: Date, time: Date, location: String, images: [String], ticketPrice: Double?, capacity: Int? = nil, talentIds: [String] = [], lookingForTalentType: String? = nil) -> AnyPublisher<Event, Error> {
         // Combine date and time for event_date
         let calendar = Calendar.current
         let dateComponents = calendar.dateComponents([.year, .month, .day], from: date)
@@ -267,6 +277,16 @@ class NetworkService {
         // Add capacity if provided
         if let capacity = capacity {
             body["capacity"] = capacity
+        }
+        
+        // Add talent IDs if provided
+        if !talentIds.isEmpty {
+            body["talentIds"] = talentIds
+        }
+        
+        // Add looking for talent type if provided
+        if let talentType = lookingForTalentType {
+            body["lookingForTalentType"] = talentType
         }
         
         print("📤 Creating event with body: \(body)")

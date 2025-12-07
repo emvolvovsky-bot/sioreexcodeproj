@@ -38,6 +38,7 @@ struct Gig: Identifiable {
 }
 
 struct TalentGigsView: View {
+    @EnvironmentObject var authViewModel: AuthViewModel
     @State private var myGigs: [Gig] = [
         Gig(eventName: "Halloween Mansion Party", hostName: "LindaFlora", date: Calendar.current.date(byAdding: .day, value: 5, to: Date()) ?? Date(), rate: "$500", status: .confirmed),
         Gig(eventName: "Rooftop Sunset Sessions", hostName: "Skyline Events", date: Calendar.current.date(byAdding: .day, value: 3, to: Date()) ?? Date(), rate: "$750", status: .requested),
@@ -47,6 +48,10 @@ struct TalentGigsView: View {
     @State private var showFindEvents = false
     @State private var selectedTalentType = "DJ"
     @State private var selectedTab = 0 // 0 = My Gigs, 1 = Find Events
+    @State private var eventsLookingForTalent: [Event] = []
+    @State private var isLoadingEvents = false
+    @State private var eventsError: String?
+    private let networkService = NetworkService()
     
     var upcomingGigs: [Gig] {
         myGigs.filter { $0.date >= Date() }
@@ -167,24 +172,51 @@ struct TalentGigsView: View {
                                 .padding(.horizontal, Theme.Spacing.m)
                                 .padding(.top, Theme.Spacing.m)
                                 
-                                // Show message when no events found
-                                VStack(spacing: Theme.Spacing.m) {
-                                    Image(systemName: "magnifyingglass")
-                                        .font(.system(size: 50))
-                                        .foregroundColor(.sioreeLightGrey.opacity(0.5))
-                                    
-                                    Text("No one needs \(selectedTalentType.lowercased()) yet")
-                                        .font(.sioreeH4)
-                                        .foregroundColor(.sioreeWhite)
-                                    
-                                    Text("Check back later for events that need \(selectedTalentType.lowercased())")
-                                        .font(.sioreeBody)
-                                        .foregroundColor(.sioreeLightGrey)
-                                        .multilineTextAlignment(.center)
+                                if isLoadingEvents {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .sioreeIcyBlue))
+                                        .padding(.vertical, Theme.Spacing.xl)
+                                } else if !eventsLookingForTalent.isEmpty {
+                                    // Show events that need this talent type
+                                    VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                                        Text("Events Looking For \(selectedTalentType)")
+                                            .font(.sioreeH4)
+                                            .foregroundColor(.sioreeWhite)
+                                            .padding(.horizontal, Theme.Spacing.m)
+                                        
+                                        ForEach(eventsLookingForTalent) { event in
+                                            NavigationLink(destination: EventDetailView(eventId: event.id)) {
+                                                EventCard(
+                                                    event: event,
+                                                    onTap: {},
+                                                    onLike: {},
+                                                    onSave: {}
+                                                )
+                                            }
+                                            .buttonStyle(PlainButtonStyle())
+                                            .padding(.horizontal, Theme.Spacing.m)
+                                        }
+                                    }
+                                } else {
+                                    // Show message when no events found
+                                    VStack(spacing: Theme.Spacing.m) {
+                                        Image(systemName: "magnifyingglass")
+                                            .font(.system(size: 50))
+                                            .foregroundColor(.sioreeLightGrey.opacity(0.5))
+                                        
+                                        Text("No one needs \(selectedTalentType.lowercased()) yet")
+                                            .font(.sioreeH4)
+                                            .foregroundColor(.sioreeWhite)
+                                        
+                                        Text("Check back later for events that need \(selectedTalentType.lowercased())")
+                                            .font(.sioreeBody)
+                                            .foregroundColor(.sioreeLightGrey)
+                                            .multilineTextAlignment(.center)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, Theme.Spacing.xl)
+                                    .padding(.horizontal, Theme.Spacing.m)
                                 }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, Theme.Spacing.xl)
-                                .padding(.horizontal, Theme.Spacing.m)
                             }
                             .padding(.bottom, Theme.Spacing.m)
                         }
@@ -196,8 +228,51 @@ struct TalentGigsView: View {
             .sheet(isPresented: $showFindEvents) {
                 FindEventsForTalentView(selectedTalentType: $selectedTalentType)
             }
+            .onChange(of: selectedTalentType) { oldValue, newValue in
+                loadEventsForTalentType()
+            }
+            .onAppear {
+                // Get talent type from current user if available
+                if let user = authViewModel.currentUser,
+                   let talentCategory = getTalentCategoryFromUser(user) {
+                    selectedTalentType = talentCategory.rawValue
+                }
+                loadEventsForTalentType()
+            }
         }
     }
+    
+    private func loadEventsForTalentType() {
+        guard !selectedTalentType.isEmpty else { return }
+        isLoadingEvents = true
+        eventsError = nil
+        
+        networkService.fetchEventsLookingForTalent(talentType: selectedTalentType)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    isLoadingEvents = false
+                    if case .failure(let error) = completion {
+                        eventsError = error.localizedDescription
+                        print("❌ Failed to load events: \(error)")
+                    }
+                },
+                receiveValue: { events in
+                    isLoadingEvents = false
+                    eventsLookingForTalent = events
+                    print("✅ Loaded \(events.count) events looking for \(selectedTalentType)")
+                }
+            )
+            .store(in: &cancellables)
+    }
+    
+    private func getTalentCategoryFromUser(_ user: User) -> TalentCategory? {
+        // TODO: Get talent category from user profile
+        // For now, return nil and let user select
+        return nil
+    }
+    
+    @State private var cancellables = Set<AnyCancellable>()
 }
 
 struct GigRow: View {

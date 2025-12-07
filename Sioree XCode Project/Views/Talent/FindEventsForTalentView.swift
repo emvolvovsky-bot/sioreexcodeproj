@@ -10,7 +10,10 @@ import SwiftUI
 struct FindEventsForTalentView: View {
     @Environment(\.dismiss) var dismiss
     @Binding var selectedTalentType: String
-    @State private var talentTypes = ["DJ", "Bartender", "Photographer", "Security", "MC", "Videographer", "Lighting", "Sound Engineer"]
+    // Use TalentCategory enum for consistency
+    private var talentTypes: [String] {
+        TalentCategory.allCases.map { $0.rawValue }
+    }
     
     var body: some View {
         NavigationStack {

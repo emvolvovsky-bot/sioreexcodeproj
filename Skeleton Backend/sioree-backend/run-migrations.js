@@ -22,7 +22,8 @@ async function runMigrations() {
       "003_add_messaging_tables.sql",
       "004_add_social_features.sql",
       "005_add_event_promotions.sql",
-      "006_add_reviews.sql"
+      "006_add_reviews.sql",
+      "007_add_event_talent_needs.sql"
     ];
     
     for (const file of migrationFiles) {

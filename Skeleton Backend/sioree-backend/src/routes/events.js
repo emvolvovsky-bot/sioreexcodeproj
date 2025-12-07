@@ -66,7 +66,8 @@ router.get("/featured", async (req, res) => {
         isSaved: false,
         likes: row.likes || 0,
         isFeatured: true, // These are featured events (promoted by brands)
-        qrCode: qrCode
+        qrCode: qrCode,
+        lookingForTalentType: row.looking_for_talent_type || null
       };
     });
 
@@ -199,10 +200,10 @@ router.post("/", async (req, res) => {
     console.log("💰 Ticket price received:", ticketPriceField, "→ parsed:", ticketPriceValue, "→ DB:", dbTicketPrice);
 
     const result = await db.query(
-      `INSERT INTO events (creator_id, title, description, location, event_date, ticket_price, capacity)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO events (creator_id, title, description, location, event_date, ticket_price, capacity, looking_for_talent_type)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [decoded.userId, title, description || null, location || null, eventDate, dbTicketPrice, capacity || null]
+      [decoded.userId, title, description || null, location || null, eventDate, dbTicketPrice, capacity || null, lookingForTalentType || null]
     );
 
     const eventRow = result.rows[0];
@@ -238,7 +239,8 @@ router.post("/", async (req, res) => {
       isLiked: false,
       isSaved: false,
       isFeatured: eventRow.is_featured || false,
-      qrCode: qrCode  // Unique QR code for the event
+      qrCode: qrCode,  // Unique QR code for the event
+      lookingForTalentType: eventRow.looking_for_talent_type || null
     };
     
     // Validate all required fields are present
@@ -293,7 +295,8 @@ router.get("/", async (req, res) => {
         isSaved: false,
         likes: row.likes || 0,
         isFeatured: row.is_featured || false,
-        qrCode: qrCode
+        qrCode: qrCode,
+        lookingForTalentType: row.looking_for_talent_type || null
       };
     });
 
@@ -376,6 +379,7 @@ router.get("/:id", async (req, res) => {
       isLiked: row.is_liked || false,
       isSaved: row.is_saved || false,
       likes: parseInt(row.likes) || 0,
+      lookingForTalentType: row.looking_for_talent_type || null,
       isFeatured: row.is_featured || false,
       status: "published",
       createdAt: toISOString(row.created_at),
@@ -622,6 +626,58 @@ router.post("/:id/promote", async (req, res) => {
       return res.status(401).json({ error: "Invalid or expired token" });
     }
     res.status(500).json({ error: "Failed to promote event" });
+  }
+});
+
+// GET events looking for specific talent type (for talent users)
+router.get("/looking-for/:talentType", async (req, res) => {
+  try {
+    const talentType = req.params.talentType;
+    
+    const result = await db.query(
+      `SELECT 
+        e.*,
+        u.username as host_username,
+        u.name as host_name,
+        u.avatar as host_avatar
+      FROM events e
+      LEFT JOIN users u ON e.creator_id = u.id
+      WHERE e.looking_for_talent_type = $1
+        AND e.event_date > NOW()
+      ORDER BY e.event_date ASC
+      LIMIT 50`,
+      [talentType]
+    );
+
+    const events = result.rows.map(row => {
+      const eventId = row.id.toString();
+      const qrCode = row.qr_code || `sioree:event:${eventId}:${crypto.randomUUID()}`;
+      return {
+        id: eventId,
+        title: row.title,
+        description: row.description || "",
+        hostId: row.creator_id?.toString() || "",
+        hostName: row.host_name || row.host_username || "Unknown Host",
+        hostAvatar: row.host_avatar || null,
+        date: toISOString(row.event_date),
+        location: row.location || "",
+        images: [],
+        ticketPrice: row.ticket_price && parseFloat(row.ticket_price) > 0 ? parseFloat(row.ticket_price) : null,
+        capacity: row.capacity || null,
+        attendees: row.attendee_count || 0,
+        isLiked: false,
+        isSaved: false,
+        likes: row.likes || 0,
+        isFeatured: row.is_featured || false,
+        qrCode: qrCode,
+        lookingForTalentType: row.looking_for_talent_type || null
+      };
+    });
+
+    res.json({ events });
+  } catch (err) {
+    console.error("Get events looking for talent error:", err);
+    res.status(500).json({ error: "Failed to fetch events" });
   }
 });
 

@@ -90,7 +90,7 @@ router.get("/:conversationId", async (req, res) => {
     const limit = 50;
     const offset = (page - 1) * limit;
 
-    // Verify user is part of conversation
+    // Verify user is part of conversation and get other participant
     const convCheck = await db.query(
       `SELECT * FROM conversations WHERE id = $1 AND (user1_id = $2 OR user2_id = $2)`,
       [conversationId, userId]
@@ -100,6 +100,10 @@ router.get("/:conversationId", async (req, res) => {
       return res.status(404).json({ error: "Conversation not found" });
     }
 
+    const conversation = convCheck.rows[0];
+    // Determine the other participant (receiver for messages sent by current user)
+    const otherUserId = conversation.user1_id === userId ? conversation.user2_id : conversation.user1_id;
+
     const result = await db.query(
       `SELECT * FROM messages 
        WHERE conversation_id = $1 
@@ -108,16 +112,22 @@ router.get("/:conversationId", async (req, res) => {
       [conversationId, limit, offset]
     );
 
-    const messages = result.rows.map(row => ({
-      id: row.id.toString(),
-      conversationId: row.conversation_id.toString(),
-      senderId: row.sender_id.toString(),
-      receiverId: row.receiver_id.toString(),
-      text: row.text || "",
-      timestamp: new Date(row.created_at).toISOString(),
-      isRead: row.is_read || false,
-      messageType: row.message_type || "text"
-    })).reverse();
+    const messages = result.rows.map(row => {
+      // Determine receiver_id: if sender is current user, receiver is other user, otherwise receiver is current user
+      const messageSenderId = row.sender_id;
+      const messageReceiverId = messageSenderId === userId ? otherUserId : userId;
+      
+      return {
+        id: row.id.toString(),
+        conversationId: row.conversation_id.toString(),
+        senderId: row.sender_id.toString(),
+        receiverId: messageReceiverId ? messageReceiverId.toString() : (row.receiver_id ? row.receiver_id.toString() : ""),
+        text: row.text || row.content || "",
+        timestamp: new Date(row.created_at).toISOString(),
+        isRead: row.is_read || false,
+        messageType: row.message_type || "text"
+      };
+    }).reverse();
 
     res.json({ messages, hasMore: result.rows.length === limit });
   } catch (err) {

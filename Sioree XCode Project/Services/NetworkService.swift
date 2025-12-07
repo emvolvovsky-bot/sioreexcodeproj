@@ -362,6 +362,24 @@ class NetworkService {
             .eraseToAnyPublisher()
     }
     
+    func fetchUpcomingAttendingEvents() -> AnyPublisher<[Event], Error> {
+        struct Response: Codable {
+            let events: [Event]
+        }
+        return request("/api/events/attending/upcoming")
+            .map { (response: Response) in response.events }
+            .eraseToAnyPublisher()
+    }
+    
+    func deleteEvent(eventId: String) -> AnyPublisher<Bool, Error> {
+        struct Response: Codable {
+            let success: Bool
+        }
+        return request("/api/events/\(eventId)", method: "DELETE")
+            .map { (response: Response) in response.success }
+            .eraseToAnyPublisher()
+    }
+    
     func fetchUserPosts(userId: String) -> AnyPublisher<[Post], Error> {
         return request("/api/users/\(userId)/posts")
     }

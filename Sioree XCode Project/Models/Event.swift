@@ -39,6 +39,7 @@ struct Event: Identifiable, Codable {
     var isLiked: Bool
     var isSaved: Bool
     var isFeatured: Bool
+    var isRSVPed: Bool // Whether the current user has RSVPed to this event
     var qrCode: String? // Unique QR code for the event
     var lookingForTalentType: String? // Type of talent the host is looking for (e.g., "DJ", "Bartender")
     
@@ -57,6 +58,7 @@ struct Event: Identifiable, Codable {
         case isLiked = "isLiked"
         case isSaved = "isSaved"
         case isFeatured = "isFeatured"
+        case isRSVPed = "isRSVPed"
         case qrCode = "qrCode"
         case lookingForTalentType = "lookingForTalentType"
     }
@@ -91,6 +93,7 @@ struct Event: Identifiable, Codable {
         isLiked = try container.decodeIfPresent(Bool.self, forKey: .isLiked) ?? false
         isSaved = try container.decodeIfPresent(Bool.self, forKey: .isSaved) ?? false
         isFeatured = try container.decodeIfPresent(Bool.self, forKey: .isFeatured) ?? false
+        isRSVPed = try container.decodeIfPresent(Bool.self, forKey: .isRSVPed) ?? false
         qrCode = try container.decodeIfPresent(String.self, forKey: .qrCode)
         lookingForTalentType = try container.decodeIfPresent(String.self, forKey: .lookingForTalentType)
     }
@@ -116,6 +119,7 @@ struct Event: Identifiable, Codable {
          isLiked: Bool = false,
          isSaved: Bool = false,
          isFeatured: Bool = false,
+         isRSVPed: Bool = false,
          qrCode: String? = nil,
          lookingForTalentType: String? = nil) {
         self.id = id
@@ -139,6 +143,7 @@ struct Event: Identifiable, Codable {
         self.isLiked = isLiked
         self.isSaved = isSaved
         self.isFeatured = isFeatured
+        self.isRSVPed = isRSVPed
         self.qrCode = qrCode
         self.lookingForTalentType = lookingForTalentType
     }

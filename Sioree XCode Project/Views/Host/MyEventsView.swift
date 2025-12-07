@@ -64,22 +64,40 @@ struct MyEventsView: View {
                                     }
                                 )
                                 
-                                // Scan Tickets Button (only for upcoming events)
-                                if event.date > Date() {
+                                HStack(spacing: Theme.Spacing.m) {
+                                    // Delete Event Button (only for host's own events)
                                     Button(action: {
-                                        selectedEventId = event.id
-                                        showQRScanner = true
+                                        deleteEvent(eventId: event.id)
                                     }) {
                                         HStack {
-                                            Image(systemName: "qrcode.viewfinder")
-                                            Text("Scan Tickets")
+                                            Image(systemName: "trash")
+                                            Text("Delete Event")
                                                 .font(.sioreeBody)
                                         }
-                                        .foregroundColor(.sioreeWhite)
+                                        .foregroundColor(.red)
                                         .frame(maxWidth: .infinity)
                                         .padding(Theme.Spacing.m)
-                                        .background(Color.sioreeIcyBlue)
+                                        .background(Color.red.opacity(0.2))
                                         .cornerRadius(Theme.CornerRadius.medium)
+                                    }
+                                    
+                                    // Scan Tickets Button (only for upcoming events)
+                                    if event.date > Date() {
+                                        Button(action: {
+                                            selectedEventId = event.id
+                                            showQRScanner = true
+                                        }) {
+                                            HStack {
+                                                Image(systemName: "qrcode.viewfinder")
+                                                Text("Scan Tickets")
+                                                    .font(.sioreeBody)
+                                            }
+                                            .foregroundColor(.sioreeWhite)
+                                            .frame(maxWidth: .infinity)
+                                            .padding(Theme.Spacing.m)
+                                            .background(Color.sioreeIcyBlue)
+                                            .cornerRadius(Theme.CornerRadius.medium)
+                                        }
                                     }
                                 }
                             }
@@ -134,6 +152,28 @@ struct MyEventsView: View {
             return "Draft"
         }
     }
+    
+    private func deleteEvent(eventId: String) {
+        let networkService = NetworkService()
+        networkService.deleteEvent(eventId: eventId)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    if case .failure(let error) = completion {
+                        print("❌ Failed to delete event: \(error.localizedDescription)")
+                    }
+                },
+                receiveValue: { success in
+                    if success {
+                        // Reload events after deletion
+                        homeViewModel.loadNearbyEvents()
+                    }
+                }
+            )
+            .store(in: &cancellables)
+    }
+    
+    @State private var cancellables = Set<AnyCancellable>()
 }
 
 

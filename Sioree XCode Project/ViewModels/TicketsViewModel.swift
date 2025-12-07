@@ -50,15 +50,17 @@ class TicketsViewModel: ObservableObject {
             .store(in: &cancellables)
         
         // Fetch upcoming events (events user RSVPed to that are in the future)
-        // For now, we'll use nearby events as upcoming
-        networkService.fetchNearbyEvents()
+        networkService.fetchUpcomingAttendingEvents()
             .receive(on: DispatchQueue.main)
             .sink(
-                receiveCompletion: { _ in },
+                receiveCompletion: { [weak self] completion in
+                    if case .failure(let error) = completion {
+                        print("❌ Failed to load upcoming events: \(error.localizedDescription)")
+                    }
+                },
                 receiveValue: { [weak self] events in
-                    // Filter to only events in the future
-                    let now = Date()
-                    self?.upcomingEvents = events.filter { $0.date > now }
+                    // These are already filtered to be upcoming and user is attending
+                    self?.upcomingEvents = events
                 }
             )
             .store(in: &cancellables)

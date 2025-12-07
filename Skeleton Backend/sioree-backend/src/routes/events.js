@@ -99,10 +99,23 @@ router.get("/nearby", async (req, res) => {
     // Get user location from query params or headers (in production, get from user's profile)
     const { latitude, longitude, radius = 50 } = req.query; // radius in km, default 50km
 
+    // Get user ID if authenticated (to exclude events they're attending)
+    let userId = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      try {
+        const token = authHeader.substring(7);
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key-change-in-production");
+        userId = decoded.userId;
+      } catch (err) {
+        // Invalid token, continue without filtering
+      }
+    }
+
     // Return upcoming events (excluding featured ones, or include them but mark them)
+    // EXCLUDE events the user is already attending (they should see those in "Upcoming Events" instead)
     // In production, filter by location using PostGIS or calculate distance
-    const result = await db.query(
-      `SELECT 
+    let query = `SELECT 
         e.*,
         u.username as host_username,
         u.name as host_name,
@@ -113,10 +126,19 @@ router.get("/nearby", async (req, res) => {
       LEFT JOIN event_promotions ep ON e.id = ep.event_id 
         AND ep.is_active = true 
         AND (ep.expires_at IS NULL OR ep.expires_at > NOW())
-      WHERE e.event_date > NOW()
-      ORDER BY e.event_date ASC
-      LIMIT 50`
-    );
+      WHERE e.event_date > NOW()`;
+    
+    // Exclude events user is already attending
+    if (userId) {
+      query += ` AND NOT EXISTS (
+        SELECT 1 FROM event_attendees ea 
+        WHERE ea.event_id = e.id AND ea.user_id = $1
+      )`;
+    }
+    
+    query += ` ORDER BY e.event_date ASC LIMIT 50`;
+    
+    const result = await db.query(query, userId ? [userId] : []);
 
     // Format events to match iOS expectations
     const events = result.rows.map(row => {
@@ -432,7 +454,8 @@ router.get("/:id", async (req, res) => {
       status: "published",
       createdAt: toISOString(row.created_at),
       talentIds: [],
-      qrCode: qrCode
+      qrCode: qrCode,
+      isRSVPed: row.is_rsvped || false  // Include RSVP status in response
     };
 
     res.json(event);
@@ -806,6 +829,103 @@ router.get("/looking-for/:talentType", async (req, res) => {
     }
     console.error("Get events looking for talent error:", err);
     res.status(500).json({ error: "Failed to fetch events" });
+  }
+});
+
+// GET EVENTS USER IS ATTENDING (upcoming events)
+router.get("/attending/upcoming", async (req, res) => {
+  try {
+    const userId = getUserIdFromToken(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    // Get events user is attending that are in the future
+    const result = await db.query(
+      `SELECT 
+        e.*,
+        u.username as host_username,
+        u.name as host_name,
+        u.avatar as host_avatar,
+        CASE WHEN ep.id IS NOT NULL THEN true ELSE false END as is_featured
+      FROM events e
+      INNER JOIN event_attendees ea ON e.id = ea.event_id
+      LEFT JOIN users u ON e.creator_id = u.id
+      LEFT JOIN event_promotions ep ON e.id = ep.event_id 
+        AND ep.is_active = true 
+        AND (ep.expires_at IS NULL OR ep.expires_at > NOW())
+      WHERE ea.user_id = $1
+        AND e.event_date > NOW()
+      ORDER BY e.event_date ASC`,
+      [userId]
+    );
+
+    // Format events to match iOS expectations
+    const events = result.rows.map(row => {
+      const eventId = row.id.toString();
+      const qrCode = row.qr_code || `sioree:event:${eventId}:${crypto.randomUUID()}`;
+      return {
+        id: eventId,
+        title: row.title,
+        description: row.description || "",
+        hostId: row.creator_id?.toString() || "",
+        hostName: row.host_name || row.host_username || "Unknown Host",
+        hostAvatar: row.host_avatar || null,
+        date: toISOString(row.event_date),
+        location: row.location || "",
+        images: [],
+        ticketPrice: row.ticket_price && parseFloat(row.ticket_price) > 0 ? parseFloat(row.ticket_price) : null,
+        capacity: row.capacity || null,
+        attendees: row.attendee_count || 0,
+        isLiked: false,
+        isSaved: false,
+        likes: row.likes || 0,
+        isFeatured: row.is_featured || false,
+        isRSVPed: true, // User is attending these events
+        qrCode: qrCode,
+        lookingForTalentType: row.looking_for_talent_type || null
+      };
+    });
+
+    res.json({ events });
+  } catch (err) {
+    console.error("Get attending events error:", err);
+    res.status(500).json({ error: "Failed to fetch attending events" });
+  }
+});
+
+// DELETE EVENT (host only)
+router.delete("/:id", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    
+    const token = authHeader.substring(7);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key-change-in-production");
+    const userId = decoded.userId;
+    const eventId = req.params.id;
+    
+    // Check if user is the creator of this event
+    const eventResult = await db.query(
+      `SELECT creator_id FROM events WHERE id = $1`,
+      [eventId]
+    );
+    
+    if (eventResult.rows.length === 0) {
+      return res.status(404).json({ error: "Event not found" });
+    }
+    
+    if (eventResult.rows[0].creator_id.toString() !== userId) {
+      return res.status(403).json({ error: "Only the event creator can delete this event" });
+    }
+    
+    // Delete event (cascade will handle related records)
+    await db.query(`DELETE FROM events WHERE id = $1`, [eventId]);
+    
+    res.json({ success: true, message: "Event deleted successfully" });
+  } catch (err) {
+    console.error("Delete event error:", err);
+    res.status(500).json({ error: "Failed to delete event" });
   }
 });
 

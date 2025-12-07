@@ -54,9 +54,9 @@ const allowedOrigins = [
   process.env.ALLOWED_ORIGIN
 ].filter(Boolean); // Remove undefined values
 
-// Add iOS app origins (if needed)
+// Add development origins only in development mode
 if (process.env.NODE_ENV === "development") {
-  allowedOrigins.push("http://localhost:3000", "http://127.0.0.1:3000");
+  allowedOrigins.push("http://localhost:3000");
 }
 
 const corsOptions = {

@@ -119,8 +119,8 @@ class ProfileViewModel: ObservableObject {
                     }
                 },
                 receiveValue: { [weak self] _ in
-                    if let user = self?.user {
-                        self?.user?.followerCount += self?.isFollowing ? 1 : -1
+                    if let user = self?.user, let isFollowing = self?.isFollowing {
+                        self?.user?.followerCount += isFollowing ? 1 : -1
                     }
                     // Refresh follow status to ensure it persists
                     self?.checkFollowStatus()

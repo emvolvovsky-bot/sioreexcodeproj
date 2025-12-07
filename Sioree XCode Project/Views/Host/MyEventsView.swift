@@ -154,19 +154,19 @@ struct MyEventsView: View {
                     .ignoresSafeArea()
                 
                 contentView
-                .onAppear {
-                    if !homeViewModel.hasLoaded {
-                        homeViewModel.loadNearbyEvents()
-                    }
-                    // Update local events when homeViewModel events change
-                    updateLocalEvents()
+            }
+            .onAppear {
+                if !homeViewModel.hasLoaded {
+                    homeViewModel.loadNearbyEvents()
                 }
-                .onChange(of: homeViewModel.nearbyEvents) { _ in
-                    updateLocalEvents()
-                }
-                .onChange(of: homeViewModel.featuredEvents) { _ in
-                    updateLocalEvents()
-                }
+                // Update local events when homeViewModel events change
+                updateLocalEvents()
+            }
+            .onReceive(homeViewModel.$nearbyEvents) { _ in
+                updateLocalEvents()
+            }
+            .onReceive(homeViewModel.$featuredEvents) { _ in
+                updateLocalEvents()
             }
             .navigationTitle("My Events")
             .navigationBarTitleDisplayMode(.large)

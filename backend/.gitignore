@@ -1,19 +1,91 @@
 node_modules/
+# Environment variables and secrets
 .env
 .env.local
+.env.development
 .env.production
-.DS_Store
+.env.test
+*.env
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+sioree.db
+database.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Bank account and payment details
+**/bank_accounts.json
+**/bank_details.json
+**/payment_details.json
+**/stripe_keys.json
+**/financial_data.json
+**/*bank*.json
+**/*payment*.json
+**/*financial*.json
+
+# Sensitive configuration files
+config/secrets.json
+secrets.json
+credentials.json
+*.pem
+*.key
+*.cert
+*.crt
+*.p12
+*.pfx
+
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-coverage/
-.nyc_output/
-dist/
-build/
+lerna-debug.log*
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
 *.swp
 *.swo
 *~
+.project
+.classpath
+.settings/
+
+# Build artifacts
+dist/
+build/
+coverage/
+.nyc_output/
+*.o
+*.a
+*.so
+*.dylib
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
 
 
 

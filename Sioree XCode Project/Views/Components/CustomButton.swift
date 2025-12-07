@@ -49,6 +49,8 @@ struct CustomButton: View {
                 .font(size.fontSize)
                 .fontWeight(.semibold)
                 .foregroundColor(textColor)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
                 .frame(maxWidth: .infinity)
                 .frame(height: size.height)
                 .background(backgroundColor)

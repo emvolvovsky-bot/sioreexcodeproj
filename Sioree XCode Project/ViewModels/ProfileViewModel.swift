@@ -103,6 +103,7 @@ class ProfileViewModel: ObservableObject {
     
     func toggleFollow() {
         guard let userId = user?.id else { return }
+        let wasFollowing = isFollowing
         isFollowing.toggle()
         
         networkService.toggleFollow(userId: userId)
@@ -110,13 +111,19 @@ class ProfileViewModel: ObservableObject {
             .sink(
                 receiveCompletion: { [weak self] completion in
                     if case .failure = completion {
-                        self?.isFollowing.toggle()
+                        // Revert on error
+                        self?.isFollowing = wasFollowing
+                    } else {
+                        // On success, refresh follow status to ensure it persists
+                        self?.checkFollowStatus()
                     }
                 },
                 receiveValue: { [weak self] _ in
                     if let user = self?.user {
-                        self?.user?.followerCount += self?.isFollowing ?? false ? 1 : -1
+                        self?.user?.followerCount += self?.isFollowing ? 1 : -1
                     }
+                    // Refresh follow status to ensure it persists
+                    self?.checkFollowStatus()
                 }
             )
             .store(in: &cancellables)

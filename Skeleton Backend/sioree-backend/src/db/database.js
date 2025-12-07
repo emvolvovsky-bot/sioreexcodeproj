@@ -44,15 +44,25 @@ if (databaseUrl && databaseUrl.includes("supabase")) {
       console.log(`📊 Database port: ${url.port || '5432'}`);
       console.log(`📊 Database user: ${url.username}`);
       console.log(`📊 Connection parameters: ${params.toString()}`);
-      console.log("📊 Using pooler connection with pgbouncer=true and sslmode=require");
-      console.log("📊 These parameters ensure SCRAM authentication completes with server signature");
+      
+      // Transaction Pooler vs Session Pooler
+      if (url.port === "6543" || url.port === 6543) {
+        console.log("📊 Using Transaction Pooler (port 6543)");
+        console.log("📊 Transaction Pooler: sslmode=require is required");
+        console.log("📊 Note: pgbouncer=true is for Session Pooler, not Transaction Pooler");
+      } else {
+        console.log("📊 Using Session Pooler");
+        if (!params.has("pgbouncer")) {
+          params.set("pgbouncer", "true");
+          url.search = params.toString();
+          databaseUrl = url.toString();
+        }
+        console.log("📊 Session Pooler: pgbouncer=true and sslmode=require required");
+      }
       
       // Verify critical parameters are present
-      if (!params.has("pgbouncer") || params.get("pgbouncer") !== "true") {
-        console.error("⚠️ WARNING: pgbouncer parameter is missing or incorrect!");
-      }
       if (!params.has("sslmode") || params.get("sslmode") !== "require") {
-        console.error("⚠️ WARNING: sslmode parameter is missing or incorrect!");
+        console.error("⚠️ WARNING: sslmode=require parameter is missing or incorrect!");
       }
     } catch (e) {
       // Fallback: manual string manipulation if URL parsing fails
@@ -64,14 +74,25 @@ if (databaseUrl && databaseUrl.includes("supabase")) {
         existing.forEach((value, key) => params.set(key, value));
       }
       
-      // CRITICAL: These parameters ensure the server sends its signature
+      // CRITICAL: sslmode=require is always needed
       params.set("sslmode", "require");
-      params.set("pgbouncer", "true");
+      
+      // For Transaction Pooler (port 6543), don't add pgbouncer=true
+      // For Session Pooler, add pgbouncer=true
+      const portMatch = databaseUrl.match(/:(\d+)\//);
+      const port = portMatch ? portMatch[1] : "6543";
+      if (port !== "6543") {
+        params.set("pgbouncer", "true");
+      }
       
       const baseUrl = databaseUrl.split("?")[0];
       databaseUrl = `${baseUrl}?${params.toString()}`;
-      console.log("📊 Using pooler connection with pgbouncer=true and sslmode=require (fallback)");
-      console.log("📊 These parameters ensure SCRAM authentication completes with server signature");
+      console.log("📊 Using pooler connection with sslmode=require (fallback)");
+      if (params.has("pgbouncer")) {
+        console.log("📊 Session Pooler: pgbouncer=true added");
+      } else {
+        console.log("📊 Transaction Pooler: pgbouncer not needed");
+      }
     }
   } else {
     // For direct connections, just ensure sslmode=require

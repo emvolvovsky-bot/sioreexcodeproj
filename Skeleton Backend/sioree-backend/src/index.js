@@ -28,6 +28,12 @@ const io = new Server(server, { cors: { origin: "*" } });
 // Make io available to routes
 app.set("io", io);
 
+// Log startup
+console.log("🚀 Starting Sioree Backend Server...");
+console.log("📦 Environment:", process.env.NODE_ENV || "development");
+console.log("🔗 Database:", process.env.DATABASE_URL ? "Configured" : "Not configured");
+console.log("💳 Stripe:", process.env.STRIPE_SECRET_KEY ? "Configured" : "Not configured");
+
 app.use("/api/auth", authRoutes);
 app.use("/api/events", eventRoutes);
 app.use("/api/messages", messageRoutes);
@@ -79,6 +85,12 @@ io.on("connection", socket => {
 const PORT = process.env.PORT || 4000;
 // Listen on all interfaces (0.0.0.0) so phone can connect via IP address
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`✅ Server running on port ${PORT}`);
-  console.log(`🌐 Accessible at: http://localhost:${PORT} or http://192.168.1.200:${PORT}`);
+  console.log("═══════════════════════════════════════════════════════════");
+  console.log(`✅ Sioree Backend Server is RUNNING`);
+  console.log(`📡 Port: ${PORT}`);
+  console.log(`🌐 Health Check: http://localhost:${PORT}/health`);
+  console.log(`🔗 API Base: http://localhost:${PORT}/api`);
+  console.log(`📊 Database: ${process.env.DATABASE_URL ? "Connected" : "Not connected"}`);
+  console.log(`💳 Stripe: ${process.env.STRIPE_SECRET_KEY ? "Configured" : "Not configured"}`);
+  console.log("═══════════════════════════════════════════════════════════");
 });

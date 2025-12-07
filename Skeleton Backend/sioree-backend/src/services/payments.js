@@ -7,12 +7,15 @@ export async function createPaymentIntent(amount, hostStripeAccountId) {
     // Convert amount to cents (Stripe uses smallest currency unit)
     const amountInCents = Math.round(amount * 100);
     
+    // IMPORTANT: Cannot use both payment_method_types and automatic_payment_methods together
+    // Using only automatic_payment_methods which enables all available payment methods
     const paymentIntentParams = {
       amount: amountInCents,
       currency: "usd",
       automatic_payment_methods: {
         enabled: true
       }
+      // NOTE: payment_method_types is NOT included here to avoid Stripe error
     };
     
     // Only add transfer_data if hostStripeAccountId is provided and not empty (for bookings)

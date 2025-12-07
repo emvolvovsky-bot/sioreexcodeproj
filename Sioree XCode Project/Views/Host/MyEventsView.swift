@@ -27,8 +27,13 @@ struct MyEventsView: View {
             return localEvents
         }
         // Combine nearby and featured events, then filter by host
-        let allEvents = homeViewModel.nearbyEvents + homeViewModel.featuredEvents
-        return allEvents.filter { $0.hostId == authViewModel.currentUser?.id }
+        let nearby = homeViewModel.nearbyEvents
+        let featured = homeViewModel.featuredEvents
+        let allEvents = nearby + featured
+        let currentUserId = authViewModel.currentUser?.id
+        return allEvents.filter { event in
+            event.hostId == currentUserId
+        }
     }
     
     var body: some View {

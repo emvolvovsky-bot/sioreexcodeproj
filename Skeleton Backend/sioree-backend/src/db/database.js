@@ -84,19 +84,19 @@ const poolConfig = {
 // before the SCRAM authentication handshake can complete and receive the server signature
 const isSupabase = process.env.DATABASE_URL?.includes("supabase") || databaseUrl?.includes("supabase");
 if (isSupabase || !isLocalDB) {
-  // For pooler connections, SSL is handled via connection string parameters
-  // But we still need to configure the SSL object for the pg library
-  // The SSL configuration ensures the TLS handshake completes, allowing SCRAM to proceed
+  // For pooler connections, SSL is handled via connection string parameters (sslmode=require)
+  // We should NOT set poolConfig.ssl for pooler connections as it conflicts with connection string SSL settings
+  // The pg library will use the sslmode parameter from the connection string
   if (databaseUrl?.includes("pooler")) {
-    // Pooler connections handle SSL via connection string, but we still need this for pg library
-    // This ensures the full SSL/TLS handshake completes so SCRAM can receive server signature
+    // For pooler, SSL is configured via connection string, but we still need to allow self-signed certs
+    // However, we should let the connection string handle SSL mode and only set rejectUnauthorized
     poolConfig.ssl = {
-      rejectUnauthorized: false, // Accept self-signed certificates
-      // Ensure SSL connection is established before SCRAM authentication
-      require: true
+      rejectUnauthorized: false // Accept self-signed certificates
+      // Do NOT set require: true here - let connection string sslmode=require handle it
     };
-    console.log("🔒 SSL configured for pooler connection - ensures SCRAM authentication can complete");
+    console.log("🔒 SSL configured for pooler connection (rejectUnauthorized: false, SSL mode from connection string)");
   } else {
+    // For direct connections, configure SSL explicitly
     poolConfig.ssl = {
       rejectUnauthorized: false, // CRITICAL: Accept self-signed certificates for Supabase
       require: true // Ensure SSL is required

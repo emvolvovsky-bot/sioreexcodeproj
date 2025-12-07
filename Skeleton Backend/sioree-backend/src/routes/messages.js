@@ -293,4 +293,40 @@ router.post("/:conversationId/read", async (req, res) => {
   }
 });
 
+// DELETE a message (soft delete - only for the user who deletes it)
+router.delete("/:messageId", async (req, res) => {
+  try {
+    const userId = getUserIdFromToken(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const messageId = req.params.messageId;
+
+    // Verify user is the sender of the message
+    const messageCheck = await db.query(
+      `SELECT sender_id FROM messages WHERE id = $1`,
+      [messageId]
+    );
+
+    if (messageCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Message not found" });
+    }
+
+    if (messageCheck.rows[0].sender_id !== userId) {
+      return res.status(403).json({ error: "You can only delete your own messages" });
+    }
+
+    // Soft delete: Add deleted_by column if it doesn't exist, or use a deleted_messages table
+    // For now, we'll use a simple approach: mark as deleted
+    await db.query(
+      `UPDATE messages SET text = '[Message deleted]', message_type = 'deleted' WHERE id = $1`,
+      [messageId]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Delete message error:", err);
+    res.status(500).json({ error: "Failed to delete message" });
+  }
+});
+
 export default router;

@@ -55,9 +55,14 @@ struct RealMessageView: View {
                                     .padding(.top, Theme.Spacing.xl)
                                 } else {
                                     ForEach(messages) { message in
-                                        RealMessageBubble(message: message)
-                                            .id(message.id)
-                                            .padding(.horizontal, Theme.Spacing.m)
+                                        SwipeableMessageBubble(
+                                            message: message,
+                                            onDelete: {
+                                                deleteMessage(message)
+                                            }
+                                        )
+                                        .id(message.id)
+                                        .padding(.horizontal, Theme.Spacing.m)
                                     }
                                 }
                             }
@@ -170,6 +175,25 @@ struct RealMessageView: View {
             .sink(
                 receiveCompletion: { _ in },
                 receiveValue: { _ in }
+            )
+            .store(in: &cancellables)
+    }
+    
+    private func deleteMessage(_ message: Message) {
+        messagingService.deleteMessage(messageId: message.id)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    if case .failure(let error) = completion {
+                        errorMessage = error.localizedDescription
+                    }
+                },
+                receiveValue: { success in
+                    if success {
+                        // Remove message from local array
+                        messages.removeAll { $0.id == message.id }
+                    }
+                }
             )
             .store(in: &cancellables)
     }

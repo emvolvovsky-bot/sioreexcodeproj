@@ -177,5 +177,26 @@ class MessagingService: ObservableObject {
         
         return networkService.request("/api/messages/conversation", method: "POST", body: jsonData)
     }
+    
+    // MARK: - Delete Message
+    func deleteMessage(messageId: String) -> AnyPublisher<Bool, Error> {
+        let useMockMessaging = false  // ✅ Using real backend
+        
+        if useMockMessaging {
+            return Future { promise in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    promise(.success(true))
+                }
+            }
+            .eraseToAnyPublisher()
+        }
+        
+        struct Response: Codable {
+            let success: Bool
+        }
+        return networkService.request("/api/messages/\(messageId)", method: "DELETE")
+            .map { (response: Response) in response.success }
+            .eraseToAnyPublisher()
+    }
 }
 

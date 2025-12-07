@@ -12,7 +12,6 @@ import Combine
 class HomeViewModel: ObservableObject {
     @Published var featuredEvents: [Event] = []
     @Published var nearbyEvents: [Event] = []
-    @Published var events: [Event] = [] // All events (for MyEventsView)
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var hasLoaded = false

@@ -26,7 +26,9 @@ struct MyEventsView: View {
         if !localEvents.isEmpty {
             return localEvents
         }
-        return homeViewModel.events.filter { $0.hostId == authViewModel.currentUser?.id }
+        // Combine nearby and featured events, then filter by host
+        let allEvents = homeViewModel.nearbyEvents + homeViewModel.featuredEvents
+        return allEvents.filter { $0.hostId == authViewModel.currentUser?.id }
     }
     
     var body: some View {
@@ -180,7 +182,9 @@ struct MyEventsView: View {
     }
     
     private func updateLocalEvents() {
-        localEvents = homeViewModel.events.filter { $0.hostId == authViewModel.currentUser?.id }
+        // Combine nearby and featured events, then filter by host
+        let allEvents = homeViewModel.nearbyEvents + homeViewModel.featuredEvents
+        localEvents = allEvents.filter { $0.hostId == authViewModel.currentUser?.id }
     }
     
     private func deleteEvent(eventId: String) {

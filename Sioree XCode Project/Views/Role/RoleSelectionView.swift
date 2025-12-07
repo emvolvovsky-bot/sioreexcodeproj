@@ -23,13 +23,16 @@ struct RoleSelectionView: View {
             .ignoresSafeArea()
             
             VStack(spacing: Theme.Spacing.xxl) {
+                // Logo at the top
+                VStack(spacing: Theme.Spacing.m) {
+                    LogoView(size: .large)
+                        .padding(.top, Theme.Spacing.xl)
+                }
+                
                 Spacer()
                 
-                // Logo and title
+                // Title
                 VStack(spacing: Theme.Spacing.m) {
-                    // Always show logo
-                    LogoView(size: .large)
-                    
                     Text(isChangingRole ? "Feeling different?" : "Choose how you use Sioree")
                         .font(.sioreeH2)
                         .foregroundColor(Color.sioreeWhite)

@@ -23,13 +23,17 @@ struct RoleSelectionView: View {
             .ignoresSafeArea()
             
             VStack(spacing: Theme.Spacing.xxl) {
-                // Logo at the top
+                Spacer()
+                    .frame(height: 40)
+                
+                // Logo - bigger and lower
                 VStack(spacing: Theme.Spacing.m) {
                     LogoView(size: .large)
-                        .padding(.top, Theme.Spacing.xl)
+                        .frame(width: 200, height: 200)
                 }
                 
                 Spacer()
+                    .frame(height: 20)
                 
                 // Title
                 VStack(spacing: Theme.Spacing.m) {

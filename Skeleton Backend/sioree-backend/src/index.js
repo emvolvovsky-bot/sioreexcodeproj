@@ -82,8 +82,42 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json({ limit: "10mb" })); // Limit request body size
 
+// Request logging middleware (sanitized - no IPs or sensitive data)
+// Place BEFORE routes to log all requests
+app.use((req, res, next) => {
+  // Log requests without exposing sensitive information
+  // Sanitize URLs to hide IDs and sensitive paths
+  let sanitizedUrl = req.url;
+  // Hide user IDs, event IDs, etc. in URLs
+  sanitizedUrl = sanitizedUrl.replace(/\/api\/[^\/]+\/([^\/\?]+)/g, "/api/*/***");
+  // Don't log query parameters as they may contain sensitive data
+  if (sanitizedUrl.includes("?")) {
+    sanitizedUrl = sanitizedUrl.split("?")[0] + "?***";
+  }
+  console.log(`📥 ${req.method} ${sanitizedUrl}`);
+  next();
+});
+
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
+
+// Socket.io CORS configuration - match Express CORS
+const io = new Server(server, { 
+  cors: {
+    origin: function(origin, callback) {
+      // Allow requests with no origin (mobile apps)
+      if (!origin) {
+        return callback(null, true);
+      }
+      if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    methods: ["GET", "POST"],
+    credentials: true
+  }
+});
 
 // Make io available to routes
 app.set("io", io);
@@ -116,18 +150,18 @@ app.get("/api/health", (req, res) => {
 });
 
 io.on("connection", socket => {
-  console.log("Client connected:", socket.id);
+  // Don't log socket IDs as they could be used to track users
+  console.log("🔌 Client connected");
   
   // Join conversation room
   socket.on("join_conversation", (conversationId) => {
     socket.join(`conversation:${conversationId}`);
-    console.log(`Client ${socket.id} joined conversation ${conversationId}`);
+    // Don't log conversation IDs
   });
   
   // Leave conversation room
   socket.on("leave_conversation", (conversationId) => {
     socket.leave(`conversation:${conversationId}`);
-    console.log(`Client ${socket.id} left conversation ${conversationId}`);
   });
   
   // Handle incoming messages (for real-time sync)
@@ -139,15 +173,7 @@ io.on("connection", socket => {
     }
   });
   
-  socket.on("disconnect", () => console.log("Client disconnected:", socket.id));
-});
-
-// Request logging middleware (sanitized - no IPs or sensitive data)
-app.use((req, res, next) => {
-  // Log requests without exposing sensitive information
-  const sanitizedUrl = req.url.replace(/\/api\/[^\/]+\/[^\/]+/g, "/api/*/***"); // Hide IDs
-  console.log(`📥 ${req.method} ${sanitizedUrl}`);
-  next();
+  socket.on("disconnect", () => console.log("🔌 Client disconnected"));
 });
 
 const PORT = process.env.PORT || 4000;

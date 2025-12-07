@@ -39,10 +39,12 @@ if (databaseUrl && databaseUrl.includes("supabase")) {
       url.search = params.toString();
       databaseUrl = url.toString();
       
-      console.log(`📊 Database host: ${url.hostname}`);
+      // Log database info without exposing sensitive details
+      const hostname = url.hostname.includes("supabase") ? "supabase.co" : url.hostname.split(".").slice(-2).join(".");
+      console.log(`📊 Database host: ${hostname}`);
       console.log(`📊 Database port: ${url.port || '5432'}`);
-      console.log(`📊 Database user: ${url.username}`);
-      console.log(`📊 Connection parameters: ${params.toString()}`);
+      console.log(`📊 Database user: ${url.username ? "***" : "Not set"}`);
+      // Don't log connection parameters as they may contain sensitive info
       
       // Transaction Pooler vs Session Pooler
       if (url.port === "6543" || url.port === 6543) {

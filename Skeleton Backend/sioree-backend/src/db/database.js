@@ -24,16 +24,15 @@ if (databaseUrl && databaseUrl.includes("supabase")) {
       
       // Set required parameters for pooler (critical for SCRAM authentication)
       // sslmode=require ensures SSL/TLS handshake completes first
-      // For Transaction Pooler, pgbouncer=true is required
-      // However, Transaction Pooler has known SCRAM issues - try without pgbouncer first
-      // If that fails, the password might be the issue
+      // Transaction Pooler (port 6543) does NOT need pgbouncer=true
+      // pgbouncer=true is only for Session Pooler
       params.set("sslmode", "require");
       
-      // For Transaction Pooler, pgbouncer=true can sometimes cause SCRAM issues
-      // Try with it first, but if it fails, the password is likely incorrect
-      // Transaction Pooler should work with just sslmode=require
-      if (!params.has("pgbouncer")) {
-        params.set("pgbouncer", "true");
+      // Remove pgbouncer if present - Transaction Pooler doesn't use it
+      // This was causing SCRAM authentication failures
+      if (params.has("pgbouncer")) {
+        params.delete("pgbouncer");
+        console.log("📊 Removed pgbouncer parameter (not needed for Transaction Pooler)");
       }
       
       // Reconstruct URL with parameters

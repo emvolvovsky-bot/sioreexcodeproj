@@ -27,9 +27,8 @@ struct RoleSelectionView: View {
                 
                 // Logo and title
                 VStack(spacing: Theme.Spacing.m) {
-                    if !isChangingRole {
-                        LogoView(size: .large)
-                    }
+                    // Always show logo
+                    LogoView(size: .large)
                     
                     Text(isChangingRole ? "Feeling different?" : "Choose how you use Sioree")
                         .font(.sioreeH2)

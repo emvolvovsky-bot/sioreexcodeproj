@@ -24,6 +24,7 @@ router.post("/", async (req, res) => {
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
     const { caption, mediaUrls, location, eventId } = req.body;
+    console.log("[POST CREATE] Received mediaUrls:", JSON.stringify(mediaUrls));
 
     // Check if event_id column exists before using it
     let hasEventIdColumn = false;
@@ -38,22 +39,27 @@ router.post("/", async (req, res) => {
       hasEventIdColumn = false;
     }
 
+    // Ensure mediaUrls is properly formatted for PostgreSQL array
+    const mediaUrlsArray = Array.isArray(mediaUrls) ? mediaUrls : [];
+    console.log("[POST CREATE] Saving mediaUrls as:", JSON.stringify(mediaUrlsArray));
+
     let result;
     if (hasEventIdColumn && eventId) {
       result = await db.query(
         `INSERT INTO posts (user_id, caption, media_urls, location, event_id)
          VALUES ($1, $2, $3, $4, $5)
          RETURNING *`,
-        [userId, caption || null, mediaUrls || [], location || null, eventId]
+        [userId, caption || null, mediaUrlsArray, location || null, eventId]
       );
     } else {
       result = await db.query(
         `INSERT INTO posts (user_id, caption, media_urls, location)
          VALUES ($1, $2, $3, $4)
          RETURNING *`,
-        [userId, caption || null, mediaUrls || [], location || null]
+        [userId, caption || null, mediaUrlsArray, location || null]
       );
     }
+    console.log("[POST CREATE] Saved post media_urls:", result.rows[0]?.media_urls);
 
     const postRow = result.rows[0];
     const userResult = await db.query(`SELECT username, name, avatar FROM users WHERE id = $1`, [userId]);
@@ -120,20 +126,23 @@ router.get("/user/:userId", async (req, res) => {
       [userId, currentUserId]
     );
 
-    const posts = result.rows.map(row => ({
-      id: row.id.toString(),
-      userId: row.user_id.toString(),
-      username: row.username || "",
-      name: row.name || row.username || "",
-      avatar: row.avatar || null,
-      caption: row.caption || "",
-      images: row.media_urls || [],
-      location: row.location || null,
-      likes: parseInt(row.likes_count) || 0,
-      comments: parseInt(row.comments_count) || 0,
-      isLiked: row.is_liked || false,
-      createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
-    }));
+    const posts = result.rows.map(row => {
+      console.log("[GET POSTS] Row media_urls:", row.media_urls, "type:", typeof row.media_urls);
+      return {
+        id: row.id.toString(),
+        userId: row.user_id.toString(),
+        username: row.username || "",
+        name: row.name || row.username || "",
+        avatar: row.avatar || null,
+        caption: row.caption || "",
+        images: Array.isArray(row.media_urls) ? row.media_urls : (row.media_urls ? JSON.parse(row.media_urls) : []),
+        location: row.location || null,
+        likes: parseInt(row.likes_count) || 0,
+        comments: parseInt(row.comments_count) || 0,
+        isLiked: row.is_liked || false,
+        createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
+      };
+    });
 
     res.json({ posts });
   } catch (err) {

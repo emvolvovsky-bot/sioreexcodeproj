@@ -61,19 +61,14 @@ struct EventPhotosViewer: View {
         let currentUserId = authViewModel.currentUser?.id
         let isHost = authViewModel.currentUser?.userType == .host
 
-        print("🔍 Filtering posts - Current user ID: \(currentUserId ?? "nil"), Is host: \(isHost), Total posts: \(posts.count)")
-
         if isHost {
             // Hosts see all posts for events they hosted
-            print("🏠 Host user - showing all \(posts.count) posts")
             return posts
         } else {
             // Partiers only see their own posts
-            let filtered = posts.filter { post in
+            return posts.filter { post in
                 post.userId == currentUserId
             }
-            print("👤 Partier user - showing \(filtered.count) of \(posts.count) posts (only own posts)")
-            return filtered
         }
     }
 
@@ -129,39 +124,6 @@ struct EventPhotosViewer: View {
                         }
                     }
 
-                    // Debug: Add test photo button
-                    Button(action: {
-                        let currentUserId = authViewModel.currentUser?.id ?? "current-user"
-                        let currentUserName = authViewModel.currentUser?.name ?? "Current User"
-                        let currentUserAvatar = authViewModel.currentUser?.avatar ?? ""
-
-                        let testPhoto: [String: Any] = [
-                            "id": "debug-test-\(Int(Date().timeIntervalSince1970))",
-                            "eventId": event.id,
-                            "userId": currentUserId,
-                            "userName": currentUserName,
-                            "userAvatar": currentUserAvatar,
-                            "images": ["https://picsum.photos/400/400?random=\(Int.random(in: 100...999))"],
-                            "caption": "Debug test photo",
-                            "uploadedAt": Date().timeIntervalSince1970
-                        ]
-
-                        let storageKey = "event_photos_\(event.id)"
-                        var storedPhotos = UserDefaults.standard.array(forKey: storageKey) as? [[String: Any]] ?? []
-                        storedPhotos.append(testPhoto)
-                        UserDefaults.standard.set(storedPhotos, forKey: storageKey)
-
-                        print("🐛 Added debug test photo with current user ID: \(currentUserId), refreshing...")
-                        loadPosts()
-                    }) {
-                        Text("🐛 Test Photo")
-                            .font(.sioreeCaption)
-                            .foregroundColor(.orange)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.orange.opacity(0.2))
-                            .cornerRadius(6)
-                    }
                 }
                 .padding(.vertical, Theme.Spacing.s)
                 .padding(.horizontal, Theme.Spacing.m)
@@ -445,26 +407,9 @@ struct EventPhotosViewer: View {
         let storageKey = "event_photos_\(event.id)"
         print("📱 Loading photos from storage key: \(storageKey)")
 
-        // DEBUG: Add test data if no photos exist
-        var storedPhotos = UserDefaults.standard.array(forKey: storageKey) as? [[String: Any]] ?? []
-        if storedPhotos.isEmpty {
-            print("📱 No photos found, adding test data for debugging")
-            let testPhoto: [String: Any] = [
-                "id": "test-photo-1",
-                "eventId": event.id,
-                "userId": "6",
-                "userName": "Test User",
-                "userAvatar": "",
-                "images": ["https://picsum.photos/400/400?random=1"],
-                "caption": "Test photo",
-                "uploadedAt": Date().timeIntervalSince1970
-            ]
-            storedPhotos.append(testPhoto)
-            UserDefaults.standard.set(storedPhotos, forKey: storageKey)
-        }
+        let storedPhotos = UserDefaults.standard.array(forKey: storageKey) as? [[String: Any]] ?? []
 
         print("📱 Found \(storedPhotos.count) raw photo records in storage")
-        print("👤 Current user: \(authViewModel.currentUser?.name ?? "nil") (ID: \(authViewModel.currentUser?.id ?? "nil"), Type: \(authViewModel.currentUser?.userType.rawValue ?? "nil"))")
 
         let localPosts = storedPhotos.compactMap { photoData -> Post? in
             print("📱 Processing photo record: \(photoData)")

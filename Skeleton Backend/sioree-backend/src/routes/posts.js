@@ -191,5 +191,38 @@ router.post("/:id/like", async (req, res) => {
   }
 });
 
+// FIX: Migrate old URLs from us-east-1 to us-east-2
+router.post("/fix-urls", async (req, res) => {
+  try {
+    // Get all posts with old URLs
+    const result = await db.query(
+      `SELECT id, media_urls FROM posts WHERE media_urls::text LIKE '%us-east-1%'`
+    );
+    
+    let fixedCount = 0;
+    for (const row of result.rows) {
+      let urls = row.media_urls;
+      if (typeof urls === 'string') {
+        urls = JSON.parse(urls);
+      }
+      
+      // Replace us-east-1 with us-east-2
+      const fixedUrls = urls.map(url => url.replace('us-east-1', 'us-east-2'));
+      
+      await db.query(
+        `UPDATE posts SET media_urls = $1 WHERE id = $2`,
+        [fixedUrls, row.id]
+      );
+      fixedCount++;
+    }
+    
+    console.log(`[FIX URLS] Fixed ${fixedCount} posts`);
+    res.json({ success: true, fixedCount });
+  } catch (err) {
+    console.error("Fix URLs error:", err);
+    res.status(500).json({ error: "Failed to fix URLs" });
+  }
+});
+
 export default router;
 

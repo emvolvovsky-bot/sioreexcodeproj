@@ -20,16 +20,24 @@ function getUserIdFromToken(req) {
 // CREATE POST
 router.post("/", async (req, res) => {
   try {
+    console.log("📝 CREATE POST - Received body:", JSON.stringify(req.body, null, 2));
     const userId = getUserIdFromToken(req);
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { caption, mediaUrls, location } = req.body;
+    const { caption, mediaUrls, location, eventId } = req.body;
+    console.log("📝 CREATE POST - Extracted values:", { caption, mediaUrlsCount: mediaUrls?.length, location, eventId });
+
+    // Convert eventId to integer if provided
+    const eventIdInt = eventId ? parseInt(eventId, 10) : null;
+    if (eventId && isNaN(eventIdInt)) {
+      return res.status(400).json({ error: "Invalid eventId" });
+    }
 
     const result = await db.query(
-      `INSERT INTO posts (user_id, caption, media_urls, location)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO posts (user_id, caption, images, location, event_id)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [userId, caption || null, mediaUrls || [], location || null]
+      [userId, caption || null, mediaUrls || [], location || null, eventIdInt]
     );
 
     const postRow = result.rows[0];
@@ -43,8 +51,9 @@ router.post("/", async (req, res) => {
       name: user.name || user.username || "",
       avatar: user.avatar || null,
       caption: postRow.caption || "",
-      images: postRow.media_urls || [],
+      images: postRow.images || [],
       location: postRow.location || null,
+      eventId: postRow.event_id?.toString() || null,
       likes: 0,
       comments: 0,
       isLiked: false,
@@ -55,6 +64,55 @@ router.post("/", async (req, res) => {
   } catch (err) {
     console.error("Create post error:", err);
     res.status(500).json({ error: "Failed to create post" });
+  }
+});
+
+// GET POSTS FOR EVENT
+router.get("/event/:eventId", async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    console.log("🔍 Fetching posts for eventId:", eventId, "type:", typeof eventId);
+
+    const eventIdInt = parseInt(eventId, 10);
+    if (isNaN(eventIdInt)) {
+      return res.status(400).json({ error: "Invalid eventId" });
+    }
+    console.log("🔍 Parsed eventId:", eventIdInt, "from:", eventId);
+
+    const result = await db.query(
+      `SELECT
+        p.*,
+        u.username,
+        u.name,
+        u.avatar
+       FROM posts p
+       JOIN users u ON p.user_id = u.id
+       WHERE p.event_id = $1
+       ORDER BY p.created_at DESC`,
+      [eventIdInt]
+    );
+
+    const posts = result.rows.map(row => ({
+      id: row.id.toString(),
+      userId: row.user_id.toString(),
+      username: row.username || "",
+      name: row.name || row.username || "",
+      avatar: row.avatar || null,
+      caption: row.caption || "",
+      images: row.images || [],
+      location: row.location || null,
+      eventId: row.event_id?.toString() || null,
+      likes: row.likes || 0,
+      comments: row.comments || 0,
+      isLiked: false,
+      isSaved: false,
+      createdAt: row.created_at
+    }));
+
+    res.json({ posts });
+  } catch (error) {
+    console.error("Get event posts error:", error);
+    res.status(500).json({ error: "Failed to fetch event posts" });
   }
 });
 

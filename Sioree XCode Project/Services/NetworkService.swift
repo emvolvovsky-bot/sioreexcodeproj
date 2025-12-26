@@ -471,21 +471,12 @@ class NetworkService {
     }
     
     func fetchUserPosts(userId: String) -> AnyPublisher<[Post], Error> {
-        return request("/api/users/\(userId)/posts")
-    }
-    
-    func createPost(caption: String?, mediaUrls: [String] = [], location: String? = nil, eventId: String? = nil) -> AnyPublisher<Post, Error> {
-        var body: [String: Any] = [:]
-        if let caption = caption { body["caption"] = caption }
-        if !mediaUrls.isEmpty { body["mediaUrls"] = mediaUrls }
-        if let location = location { body["location"] = location }
-        if let eventId = eventId { body["eventId"] = eventId }
-        
-        guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else {
-            return Fail(error: NetworkError.unknown).eraseToAnyPublisher()
+        struct PostsResponse: Codable {
+            let posts: [Post]
         }
-        
-        return request("/api/posts", method: "POST", body: jsonData)
+        return request("/api/users/\(userId)/posts")
+            .map { (response: PostsResponse) in response.posts }
+            .eraseToAnyPublisher()
     }
     
     // MARK: - Group Chats
@@ -921,7 +912,89 @@ class NetworkService {
             .map { (response: PromotedEventsResponse) in response.events }
             .eraseToAnyPublisher()
     }
-    
+
+    // MARK: - Posts
+
+    func createPost(caption: String?, mediaUrls: [String] = [], location: String? = nil, eventId: String? = nil) -> AnyPublisher<Post, Error> {
+        var body: [String: Any] = [
+            "images": mediaUrls
+        ]
+
+        if let caption = caption {
+            body["caption"] = caption
+        }
+        if let location = location {
+            body["location"] = location
+        }
+        if let eventId = eventId {
+            body["eventId"] = eventId
+        }
+
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else {
+            return Fail(error: NetworkError.unknown).eraseToAnyPublisher()
+        }
+
+        return request("/api/posts", method: "POST", body: jsonData)
+    }
+
+    func createPost(caption: String?, mediaUrls: [String] = [], location: String? = nil, eventId: String? = nil) -> AnyPublisher<Post, Error> {
+        var body: [String: Any] = [
+            "images": mediaUrls
+        ]
+
+        if let caption = caption {
+            body["caption"] = caption
+        }
+        if let location = location {
+            body["location"] = location
+        }
+        if let eventId = eventId {
+            body["eventId"] = eventId
+        }
+
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else {
+            return Fail(error: NetworkError.unknown).eraseToAnyPublisher()
+        }
+
+        return request("/api/posts", method: "POST", body: jsonData)
+    }
+
+    func fetchPostsForEvent(eventId: String) -> AnyPublisher<[Post], Error> {
+        struct Response: Codable {
+            let posts: [Post]
+        }
+        return request("/api/posts/event/\(eventId)")
+            .map { (response: Response) in response.posts }
+            .eraseToAnyPublisher()
+    }
+
+    func fetchFeedPosts(page: Int = 1) -> AnyPublisher<[Post], Error> {
+        struct Response: Codable {
+            let posts: [Post]
+        }
+        return request("/api/posts?page=\(page)")
+            .map { (response: Response) in response.posts }
+            .eraseToAnyPublisher()
+    }
+
+    func deletePost(postId: String) -> AnyPublisher<Bool, Error> {
+        struct Response: Codable {
+            let success: Bool
+        }
+        return request("/api/posts/\(postId)", method: "DELETE")
+            .map { (response: Response) in response.success }
+            .eraseToAnyPublisher()
+    }
+
+    func togglePostLike(postId: String) -> AnyPublisher<Bool, Error> {
+        struct Response: Codable {
+            let liked: Bool
+        }
+        return request("/api/posts/\(postId)/like", method: "POST")
+            .map { (response: Response) in response.liked }
+            .eraseToAnyPublisher()
+    }
+
     // MARK: - Earnings
     func fetchEarnings() -> AnyPublisher<EarningsResponse, Error> {
         return request("/api/earnings")

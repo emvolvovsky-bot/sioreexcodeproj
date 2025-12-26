@@ -15,6 +15,7 @@ const socialRoutes = require('./routes/social');
 const mediaRoutes = require('./routes/media');
 const eventRoutes = require('./routes/events');
 const paymentRoutes = require('./routes/payments');
+const postRoutes = require('./routes/posts');
 
 const { authenticateSocket } = require('./middleware/socketAuth');
 const { initializeSocketHandlers } = require('./socket/handlers');
@@ -59,6 +60,7 @@ app.use('/api/social', socialRoutes);
 app.use('/api/media', mediaRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/posts', postRoutes);
 
 // Socket.io authentication
 io.use(authenticateSocket);

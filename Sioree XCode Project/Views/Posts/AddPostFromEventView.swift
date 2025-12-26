@@ -1,5 +1,5 @@
 //
-//  AddPostFromEventView.swift
+//  AddPhotosToEventView.swift
 //  Sioree
 //
 //  Created by Sioree Team
@@ -12,74 +12,84 @@ struct AddPostFromEventView: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var authViewModel: AuthViewModel
     let event: Event?
-    
+
     init(event: Event? = nil) {
         self.event = event
     }
-    @State private var caption: String = ""
+
     @State private var selectedImages: [UIImage] = []
     @State private var showImagePicker = false
-    @State private var isCreating = false
+    @State private var isUploading = false
     @State private var showError = false
     @State private var errorMessage = ""
     @State private var cancellables = Set<AnyCancellable>()
     private let photoService = PhotoService()
     private let networkService = NetworkService()
-    
+
     var body: some View {
         NavigationView {
             ZStack {
-                // Subtle gradient on black background
+                // Clean gradient background
                 LinearGradient(
                     colors: [Color.sioreeBlack, Color.sioreeBlack.opacity(0.95), Color.sioreeCharcoal.opacity(0.1)],
                     startPoint: .top,
                     endPoint: .bottom
                 )
                 .ignoresSafeArea()
-                
-                ScrollView {
-                    VStack(spacing: Theme.Spacing.l) {
-                        // Event context
-                        if let event {
-                            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                                Text("Event")
-                                    .font(.sioreeCaption)
-                                    .foregroundColor(.sioreeLightGrey)
-                                Text(event.title)
-                                    .font(.sioreeH4)
-                                    .foregroundColor(.sioreeWhite)
-                                Text(event.date.formatted(date: .abbreviated, time: .shortened))
-                                    .font(.sioreeBodySmall)
-                                    .foregroundColor(.sioreeLightGrey)
-                            }
-                            .padding(.horizontal, Theme.Spacing.m)
-                        }
-                        
-                        // Images Section
-                        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                            Text("Add Photos")
+
+                VStack(spacing: Theme.Spacing.l) {
+                    // Header with event info
+                    if let event = event {
+                        VStack(alignment: .center, spacing: Theme.Spacing.xs) {
+                            Text(event.title)
                                 .font(.sioreeH4)
                                 .foregroundColor(.sioreeWhite)
-                            
-                            Button(action: {
-                                showImagePicker = true
-                            }) {
-                                HStack {
-                                    Image(systemName: "photo.on.rectangle")
-                                        .font(.system(size: 24))
-                                        .foregroundColor(.sioreeIcyBlue)
-                                    Text("Select Photos")
-                                        .font(.sioreeBody)
-                                        .foregroundColor(.sioreeWhite)
-                                    Spacer()
+                                .multilineTextAlignment(.center)
+                            Text(event.date.formatted(date: .abbreviated, time: .shortened))
+                                .font(.sioreeBodySmall)
+                                .foregroundColor(.sioreeLightGrey.opacity(0.8))
+                        }
+                        .padding(.horizontal, Theme.Spacing.m)
+                    }
+
+                    Spacer()
+
+                    // Photo selection area
+                    VStack(spacing: Theme.Spacing.l) {
+                        if selectedImages.isEmpty {
+                            // Empty state - show photo picker button
+                            VStack(spacing: Theme.Spacing.m) {
+                                Image(systemName: "photo.on.rectangle.angled")
+                                    .font(.system(size: 60))
+                                    .foregroundColor(.sioreeLightGrey.opacity(0.5))
+
+                                Text("Add photos from this event")
+                                    .font(.sioreeH3)
+                                    .foregroundColor(.sioreeWhite)
+
+                                Button(action: {
+                                    showImagePicker = true
+                                }) {
+                                    HStack(spacing: Theme.Spacing.s) {
+                                        Image(systemName: "camera.fill")
+                                            .font(.system(size: 20))
+                                        Text("Select Photos")
+                                            .font(.sioreeBody)
+                                    }
+                                    .foregroundColor(.sioreeIcyBlue)
+                                    .padding(.horizontal, Theme.Spacing.l)
+                                    .padding(.vertical, Theme.Spacing.m)
+                                    .background(Color.sioreeIcyBlue.opacity(0.1))
+                                    .cornerRadius(Theme.CornerRadius.large)
                                 }
-                                .padding(Theme.Spacing.m)
-                                .background(Color.sioreeLightGrey.opacity(0.1))
-                                .cornerRadius(Theme.CornerRadius.medium)
                             }
-                            
-                            // Display selected images
-                            if !selectedImages.isEmpty {
+                        } else {
+                            // Show selected photos
+                            VStack(spacing: Theme.Spacing.m) {
+                                Text("\(selectedImages.count) photo\(selectedImages.count == 1 ? "" : "s") selected")
+                                    .font(.sioreeBody)
+                                    .foregroundColor(.sioreeLightGrey)
+
                                 ScrollView(.horizontal, showsIndicators: false) {
                                     HStack(spacing: Theme.Spacing.s) {
                                         ForEach(selectedImages.indices, id: \.self) { index in
@@ -87,81 +97,87 @@ struct AddPostFromEventView: View {
                                                 Image(uiImage: selectedImages[index])
                                                     .resizable()
                                                     .aspectRatio(contentMode: .fill)
-                                                    .frame(width: 100, height: 100)
-                                                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                                                
+                                                    .frame(width: 120, height: 120)
+                                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                                                // Remove button
                                                 Button(action: {
                                                     selectedImages.remove(at: index)
                                                 }) {
                                                     Image(systemName: "xmark.circle.fill")
                                                         .foregroundColor(.white)
-                                                        .background(Color.black.opacity(0.5))
+                                                        .background(Color.black.opacity(0.7))
                                                         .clipShape(Circle())
+                                                        .font(.system(size: 20))
                                                 }
-                                                .padding(4)
+                                                .padding(6)
                                             }
                                         }
                                     }
                                     .padding(.horizontal, Theme.Spacing.m)
                                 }
+
+                                // Upload button
+                                Button(action: uploadPhotos) {
+                                    HStack(spacing: Theme.Spacing.s) {
+                                        Image(systemName: "arrow.up.circle.fill")
+                                            .font(.system(size: 20))
+                                        Text("Upload Photos")
+                                            .font(.sioreeBody)
+                                    }
+                                    .foregroundColor(.sioreeWhite)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, Theme.Spacing.m)
+                                    .background(Color.sioreeIcyBlue)
+                                    .cornerRadius(Theme.CornerRadius.large)
+                                }
+                                .padding(.horizontal, Theme.Spacing.l)
+                                .disabled(isUploading)
+                                .opacity(isUploading ? 0.6 : 1.0)
+
+                                // Add more photos button
+                                Button(action: {
+                                    showImagePicker = true
+                                }) {
+                                    Text("Add More Photos")
+                                        .font(.sioreeBodySmall)
+                                        .foregroundColor(.sioreeIcyBlue)
+                                }
+                                .padding(.top, Theme.Spacing.s)
                             }
                         }
-                        .padding(.horizontal, Theme.Spacing.m)
-                        
-                        // Caption Section
-                        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                            Text("Caption")
-                                .font(.sioreeH4)
-                                .foregroundColor(.sioreeWhite)
-                            
-                            TextEditor(text: $caption)
-                                .frame(height: 120)
-                                .padding(Theme.Spacing.s)
-                                .background(Color.sioreeLightGrey.opacity(0.1))
-                                .cornerRadius(Theme.CornerRadius.medium)
-                                .foregroundColor(.sioreeWhite)
-                            
-                            // Mention tip removed per request
-                        }
-                        .padding(.horizontal, Theme.Spacing.m)
-                        
-                        // Create Post Button
-                        Button(action: {
-                            createPost()
-                        }) {
-                            Text("Create Post")
-                                .font(.sioreeBody)
-                                .foregroundColor(.sioreeWhite)
-                                .frame(maxWidth: .infinity)
-                                .padding(Theme.Spacing.m)
-                                .background(Color.sioreeIcyBlue)
-                                .cornerRadius(Theme.CornerRadius.medium)
-                        }
-                        .padding(.horizontal, Theme.Spacing.m)
-                        .disabled(isCreating)
-                        .opacity(isCreating ? 0.6 : 1.0)
                     }
-                    .padding(.vertical, Theme.Spacing.m)
+
+                    Spacer()
                 }
+                .padding(.vertical, Theme.Spacing.xl)
             }
-            .navigationTitle(event != nil ? "Event Photos" : "Add Post")
+            .navigationTitle("Add Photos")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") {
                         dismiss()
                     }
+                    .disabled(isUploading)
                 }
             }
             .sheet(isPresented: $showImagePicker) {
                 MultiplePhotoPicker(selectedImages: $selectedImages, limit: 10)
             }
             .overlay {
-                if isCreating {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .sioreeIcyBlue))
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(Color.black.opacity(0.3))
+                if isUploading {
+                    ZStack {
+                        Color.black.opacity(0.5).ignoresSafeArea()
+                        VStack(spacing: Theme.Spacing.m) {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .sioreeIcyBlue))
+                                .scaleEffect(1.5)
+                            Text("Uploading photos...")
+                                .font(.sioreeBody)
+                                .foregroundColor(.sioreeWhite)
+                        }
+                    }
                 }
             }
             .alert("Error", isPresented: $showError) {
@@ -172,58 +188,62 @@ struct AddPostFromEventView: View {
         }
     }
     
-    private func createPost() {
-        isCreating = true
+    private func uploadPhotos() {
+        guard !selectedImages.isEmpty else { return }
+
+        isUploading = true
         errorMessage = ""
-        
-        func finishCreate(with mediaUrls: [String]) {
-            networkService.createPost(
-                caption: caption.isEmpty ? nil : caption,
-                mediaUrls: mediaUrls,
-                location: nil,
-                eventId: event?.id
-            )
+
+        // First upload the actual image files
+        photoService.uploadImages(selectedImages)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { [self] completion in
-                    isCreating = false
                     if case .failure(let error) = completion {
-                        errorMessage = "Failed to create post: \(error.localizedDescription)"
+                        isUploading = false
+                        errorMessage = "Failed to upload photos: \(error.localizedDescription)"
                         showError = true
                     }
                 },
-                receiveValue: { [self] _ in
-                    NotificationCenter.default.post(
-                        name: NSNotification.Name("PostCreated"),
-                        object: nil,
-                        userInfo: ["userId": authViewModel.currentUser?.id ?? ""]
+                receiveValue: { [self] uploadedUrls in
+                    // Now create a post on the server with the uploaded image URLs
+                    print("📤 Creating post with \(uploadedUrls.count) image URLs: \(uploadedUrls)")
+                    networkService.createPost(
+                        caption: nil, // Simple photo upload - no caption needed
+                        mediaUrls: uploadedUrls,
+                        location: nil,
+                        eventId: event?.id
                     )
-                    dismiss()
+                    .receive(on: DispatchQueue.main)
+                    .sink(
+                        receiveCompletion: { [self] completion in
+                            isUploading = false
+                            if case .failure(let error) = completion {
+                                errorMessage = "Failed to save photos: \(error.localizedDescription)"
+                                showError = true
+                            }
+                        },
+                        receiveValue: { [self] post in
+                            // Success! Post created on server
+                            print("✅ Post created successfully on server: \(post.id)")
+
+                            // Notify other views that a new post was created
+                            NotificationCenter.default.post(
+                                name: NSNotification.Name("PostCreated"),
+                                object: nil,
+                                userInfo: [
+                                    "userId": authViewModel.currentUser?.id ?? "",
+                                    "eventId": event?.id
+                                ]
+                            )
+
+                            dismiss()
+                        }
+                    )
+                    .store(in: &cancellables)
                 }
             )
             .store(in: &cancellables)
-        }
-        
-        // Upload images if any, then create post
-        if selectedImages.isEmpty {
-            finishCreate(with: [])
-        } else {
-            photoService.uploadImages(selectedImages)
-                .receive(on: DispatchQueue.main)
-                .sink(
-                    receiveCompletion: { [self] completion in
-                        if case .failure(let error) = completion {
-                            isCreating = false
-                            errorMessage = "Failed to upload photos: \(error.localizedDescription)"
-                            showError = true
-                        }
-                    },
-                    receiveValue: { urls in
-                        finishCreate(with: urls)
-                    }
-                )
-                .store(in: &cancellables)
-        }
     }
 }
 
@@ -237,7 +257,21 @@ struct AddPostFromEventView: View {
         date: Date(),
         time: Date(),
         location: "NYC",
-        isFeatured: false
+        images: [],
+        ticketPrice: nil,
+        capacity: 100,
+        attendeeCount: 50,
+        talentIds: [],
+        lookingForRoles: [],
+        lookingForNotes: nil,
+        status: .published,
+        likes: 10,
+        isLiked: false,
+        isSaved: false,
+        isFeatured: false,
+        isRSVPed: false,
+        qrCode: "test-qr",
+        lookingForTalentType: nil
     ))
         .environmentObject(AuthViewModel())
 }

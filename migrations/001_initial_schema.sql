@@ -100,3 +100,21 @@ CREATE TABLE media_uploads (
     thumbnail_url TEXT,
     created_at TIMESTAMP DEFAULT NOW()
 );
+
+-- Posts table (for event photos and social content)
+CREATE TABLE IF NOT EXISTS posts (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    images TEXT[] DEFAULT '{}'::text[],
+    caption TEXT,
+    location TEXT,
+    event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
+    likes INTEGER DEFAULT 0,
+    comments INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_posts_user ON posts(user_id);
+CREATE INDEX IF NOT EXISTS idx_posts_event ON posts(event_id);
+CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at DESC);

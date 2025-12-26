@@ -123,6 +123,36 @@ struct EventPhotosViewer: View {
                             .cornerRadius(Theme.CornerRadius.medium)
                         }
                     }
+
+                    // Debug: Add test photo button
+                    Button(action: {
+                        let testPhoto: [String: Any] = [
+                            "id": "debug-test-\(Int(Date().timeIntervalSince1970))",
+                            "eventId": event.id,
+                            "userId": "999",
+                            "userName": "Debug Test",
+                            "userAvatar": "",
+                            "images": ["https://picsum.photos/400/400?random=\(Int.random(in: 100...999))"],
+                            "caption": "Debug test photo",
+                            "uploadedAt": Date().timeIntervalSince1970
+                        ]
+
+                        let storageKey = "event_photos_\(event.id)"
+                        var storedPhotos = UserDefaults.standard.array(forKey: storageKey) as? [[String: Any]] ?? []
+                        storedPhotos.append(testPhoto)
+                        UserDefaults.standard.set(storedPhotos, forKey: storageKey)
+
+                        print("🐛 Added debug test photo, refreshing...")
+                        loadPosts()
+                    }) {
+                        Text("🐛 Test Photo")
+                            .font(.sioreeCaption)
+                            .foregroundColor(.orange)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.orange.opacity(0.2))
+                            .cornerRadius(6)
+                    }
                 }
                 .padding(.vertical, Theme.Spacing.s)
                 .padding(.horizontal, Theme.Spacing.m)

@@ -20,7 +20,7 @@ struct EventPhotosViewer: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @State private var currentPhotoIndex = 0
     @State private var showDeleteConfirmation = false
-    @State private var photoToDelete: String? = nil
+    @State private var postToDelete: String? = nil
     @State private var posts: [Post] = []
     @State private var isLoading = true
     @State private var error: String? = nil
@@ -261,7 +261,7 @@ struct EventPhotosViewer: View {
                                             HStack {
                                                 Spacer()
                                                 Button(action: {
-                                                    photoToDelete = photo.url
+                                                    postToDelete = photo.post.id
                                                     showDeleteConfirmation = true
                                                 }) {
                                                     Image(systemName: "trash")
@@ -341,8 +341,8 @@ struct EventPhotosViewer: View {
         .alert("Delete Photo", isPresented: $showDeleteConfirmation) {
             Button("Cancel", role: .cancel) { }
             Button("Delete", role: .destructive) {
-                if let photoToDelete = photoToDelete {
-                    deletePhoto(photoToDelete)
+                if let postToDelete = postToDelete {
+                    deletePost(postToDelete)
                 }
             }
         } message: {
@@ -445,6 +445,29 @@ struct EventPhotosViewer: View {
 
         self.posts = localPosts
         print("📱 Final result: \(localPosts.count) posts loaded for event \(event.id)")
+    }
+
+    private func deletePost(_ postId: String) {
+        print("🗑️ Deleting post: \(postId)")
+
+        let networkService = NetworkService()
+        networkService.deletePost(postId: postId)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    switch completion {
+                    case .finished:
+                        print("✅ Post deleted successfully")
+                        // Refresh posts after deletion
+                        self.loadPosts()
+                    case .failure(let error):
+                        print("❌ Failed to delete post: \(error.localizedDescription)")
+                        // Could show error alert here if needed
+                    }
+                },
+                receiveValue: { _ in }
+            )
+            .store(in: &cancellables)
     }
 }
 

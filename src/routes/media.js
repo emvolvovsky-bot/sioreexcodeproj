@@ -105,7 +105,8 @@ const singleUploadHandler = async (req, res) => {
     });
   } catch (err) {
     console.error("Upload error:", err);
-    return res.status(500).json({ error: "Failed to upload file" });
+    const errorMessage = err.message || "Failed to upload file";
+    return res.status(500).json({ error: `Upload failed: ${errorMessage}` });
   }
 };
 

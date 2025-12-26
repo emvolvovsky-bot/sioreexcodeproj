@@ -216,53 +216,50 @@ struct AddPostFromEventView: View {
     }
 
     private func savePhotosToServer(_ uploadedUrls: [String]) {
-                    networkService.createPost(
-                        caption: nil, // Simple photo upload - no caption
-                        mediaUrls: uploadedUrls,
-                        location: nil,
-                        eventId: event?.id
+        networkService.createPost(
+            caption: nil, // Simple photo upload - no caption
+            mediaUrls: uploadedUrls,
+            location: nil,
+            eventId: event?.id
+        )
+        .receive(on: DispatchQueue.main)
+        .sink(
+            receiveCompletion: { [self] completion in
+                switch completion {
+                case .finished:
+                    print("✅ Post created successfully on server")
+                    // Server save succeeded
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("PostCreated"),
+                        object: nil,
+                        userInfo: [
+                            "userId": authViewModel.currentUser?.id ?? "",
+                            "eventId": event?.id
+                        ]
                     )
-                    .receive(on: DispatchQueue.main)
-                    .sink(
-                        receiveCompletion: { [self] completion in
-                            switch completion {
-                            case .finished:
-                                print("✅ Post created successfully on server")
-                                // Server save succeeded
-                                NotificationCenter.default.post(
-                                    name: NSNotification.Name("PostCreated"),
-                                    object: nil,
-                                    userInfo: [
-                                        "userId": authViewModel.currentUser?.id ?? "",
-                                        "eventId": event?.id
-                                    ]
-                                )
-                                isUploading = false
-                                dismiss()
+                    isUploading = false
+                    dismiss()
 
-                            case .failure(let error):
-                                print("❌ Server save failed: \(error.localizedDescription), saving locally")
-                                // Server save failed, save locally instead
-                                self.savePhotosLocally(uploadedUrls)
-                                NotificationCenter.default.post(
-                                    name: NSNotification.Name("PostCreated"),
-                                    object: nil,
-                                    userInfo: [
-                                        "userId": authViewModel.currentUser?.id ?? "",
-                                        "eventId": event?.id,
-                                        "photoUrls": uploadedUrls
-                                    ]
-                                )
-                                isUploading = false
-                                dismiss()
-                            }
-                        },
-                        receiveValue: { _ in }
+                case .failure(let error):
+                    print("❌ Server save failed: \(error.localizedDescription), saving locally")
+                    // Server save failed, save locally instead
+                    self.savePhotosLocally(uploadedUrls)
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("PostCreated"),
+                        object: nil,
+                        userInfo: [
+                            "userId": authViewModel.currentUser?.id ?? "",
+                            "eventId": event?.id,
+                            "photoUrls": uploadedUrls
+                        ]
                     )
-                    .store(in: &cancellables)
+                    isUploading = false
+                    dismiss()
                 }
-            )
-                    .store(in: &cancellables)
+            },
+            receiveValue: { _ in }
+        )
+        .store(in: &cancellables)
     }
 
     private func savePhotosLocally(_ photoUrls: [String]) {

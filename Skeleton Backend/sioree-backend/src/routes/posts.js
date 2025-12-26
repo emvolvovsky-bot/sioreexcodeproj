@@ -89,6 +89,70 @@ router.post("/", async (req, res) => {
   }
 });
 
+// GET POSTS FOR EVENT
+router.get("/event/:eventId", async (req, res) => {
+  try {
+    const eventId = req.params.eventId;
+    console.log(`[GET POSTS FOR EVENT] Fetching posts for eventId: ${eventId}`);
+
+    const result = await db.query(
+      `SELECT DISTINCT
+        p.*,
+        u.username,
+        u.name,
+        u.avatar,
+        COALESCE(pl.likes_count, 0) as likes_count,
+        COALESCE(pc.comments_count, 0) as comments_count,
+        CASE WHEN pla.user_id IS NOT NULL THEN true ELSE false END as is_liked
+      FROM posts p
+      LEFT JOIN users u ON p.user_id = u.id
+      LEFT JOIN (
+        SELECT post_id, COUNT(*) as likes_count
+        FROM post_likes
+        GROUP BY post_id
+      ) pl ON pl.post_id = p.id
+      LEFT JOIN (
+        SELECT post_id, COUNT(*) as comments_count
+        FROM comments
+        GROUP BY post_id
+      ) pc ON pc.post_id = p.id
+      LEFT JOIN (
+        SELECT post_id, user_id
+        FROM post_likes
+        WHERE user_id = $2
+      ) pla ON pla.post_id = p.id
+      WHERE p.event_id = $1
+      ORDER BY p.created_at DESC`,
+      [eventId, getUserIdFromToken(req)]
+    );
+
+    const posts = result.rows.map(row => {
+      console.log("[GET POSTS FOR EVENT] Row media_urls:", row.media_urls, "type:", typeof row.media_urls);
+      return {
+        id: row.id.toString(),
+        userId: row.user_id.toString(),
+        username: row.username || "",
+        name: row.name || row.username || "",
+        avatar: row.avatar || null,
+        caption: row.caption || "",
+        images: Array.isArray(row.media_urls) ? row.media_urls : (row.media_urls ? JSON.parse(row.media_urls) : []),
+        location: row.location || null,
+        eventId: row.event_id ? row.event_id.toString() : null,
+        likes: parseInt(row.likes_count) || 0,
+        comments: parseInt(row.comments_count) || 0,
+        isLiked: row.is_liked || false,
+        createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
+      };
+    });
+
+    console.log(`[GET POSTS FOR EVENT] Returning ${posts.length} posts for event ${eventId}`);
+    res.json({ posts });
+  } catch (err) {
+    console.error("Get posts for event error:", err);
+    res.status(500).json({ error: "Failed to fetch posts for event" });
+  }
+});
+
 // GET USER POSTS
 router.get("/user/:userId", async (req, res) => {
   try {

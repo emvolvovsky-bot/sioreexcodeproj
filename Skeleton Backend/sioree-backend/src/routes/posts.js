@@ -255,6 +255,45 @@ router.post("/:id/like", async (req, res) => {
   }
 });
 
+// DELETE POST
+router.delete("/:id", async (req, res) => {
+  try {
+    const userId = getUserIdFromToken(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const postId = req.params.id;
+
+    // First check if the post exists and belongs to the user
+    const postResult = await db.query(
+      `SELECT user_id FROM posts WHERE id = $1`,
+      [postId]
+    );
+
+    if (postResult.rows.length === 0) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+
+    if (postResult.rows[0].user_id !== userId) {
+      return res.status(403).json({ error: "You can only delete your own posts" });
+    }
+
+    // Delete associated likes first
+    await db.query(`DELETE FROM post_likes WHERE post_id = $1`, [postId]);
+
+    // Delete associated comments
+    await db.query(`DELETE FROM comments WHERE post_id = $1`, [postId]);
+
+    // Delete the post
+    await db.query(`DELETE FROM posts WHERE id = $1`, [postId]);
+
+    console.log(`[DELETE POST] Post ${postId} deleted by user ${userId}`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Delete post error:", err);
+    res.status(500).json({ error: "Failed to delete post" });
+  }
+});
+
 // FIX: Migrate old URLs from us-east-1 to us-east-2
 router.post("/fix-urls", async (req, res) => {
   try {
@@ -262,24 +301,24 @@ router.post("/fix-urls", async (req, res) => {
     const result = await db.query(
       `SELECT id, media_urls FROM posts WHERE media_urls::text LIKE '%us-east-1%'`
     );
-    
+
     let fixedCount = 0;
     for (const row of result.rows) {
       let urls = row.media_urls;
       if (typeof urls === 'string') {
         urls = JSON.parse(urls);
       }
-      
+
       // Replace us-east-1 with us-east-2
       const fixedUrls = urls.map(url => url.replace('us-east-1', 'us-east-2'));
-      
+
       await db.query(
         `UPDATE posts SET media_urls = $1 WHERE id = $2`,
         [fixedUrls, row.id]
       );
       fixedCount++;
     }
-    
+
     console.log(`[FIX URLS] Fixed ${fixedCount} posts`);
     res.json({ success: true, fixedCount });
   } catch (err) {

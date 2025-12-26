@@ -61,14 +61,19 @@ struct EventPhotosViewer: View {
         let currentUserId = authViewModel.currentUser?.id
         let isHost = authViewModel.currentUser?.userType == .host
 
+        print("🔍 Filtering posts - Current user ID: \(currentUserId ?? "nil"), Is host: \(isHost), Total posts: \(posts.count)")
+
         if isHost {
             // Hosts see all posts for events they hosted
+            print("🏠 Host user - showing all \(posts.count) posts")
             return posts
         } else {
             // Partiers only see their own posts
-            return posts.filter { post in
+            let filtered = posts.filter { post in
                 post.userId == currentUserId
             }
+            print("👤 Partier user - showing \(filtered.count) of \(posts.count) posts (only own posts)")
+            return filtered
         }
     }
 
@@ -126,12 +131,16 @@ struct EventPhotosViewer: View {
 
                     // Debug: Add test photo button
                     Button(action: {
+                        let currentUserId = authViewModel.currentUser?.id ?? "current-user"
+                        let currentUserName = authViewModel.currentUser?.name ?? "Current User"
+                        let currentUserAvatar = authViewModel.currentUser?.avatar ?? ""
+
                         let testPhoto: [String: Any] = [
                             "id": "debug-test-\(Int(Date().timeIntervalSince1970))",
                             "eventId": event.id,
-                            "userId": "999",
-                            "userName": "Debug Test",
-                            "userAvatar": "",
+                            "userId": currentUserId,
+                            "userName": currentUserName,
+                            "userAvatar": currentUserAvatar,
                             "images": ["https://picsum.photos/400/400?random=\(Int.random(in: 100...999))"],
                             "caption": "Debug test photo",
                             "uploadedAt": Date().timeIntervalSince1970
@@ -142,7 +151,7 @@ struct EventPhotosViewer: View {
                         storedPhotos.append(testPhoto)
                         UserDefaults.standard.set(storedPhotos, forKey: storageKey)
 
-                        print("🐛 Added debug test photo, refreshing...")
+                        print("🐛 Added debug test photo with current user ID: \(currentUserId), refreshing...")
                         loadPosts()
                     }) {
                         Text("🐛 Test Photo")
@@ -455,6 +464,7 @@ struct EventPhotosViewer: View {
         }
 
         print("📱 Found \(storedPhotos.count) raw photo records in storage")
+        print("👤 Current user: \(authViewModel.currentUser?.name ?? "nil") (ID: \(authViewModel.currentUser?.id ?? "nil"), Type: \(authViewModel.currentUser?.userType.rawValue ?? "nil"))")
 
         let localPosts = storedPhotos.compactMap { photoData -> Post? in
             print("📱 Processing photo record: \(photoData)")

@@ -34,10 +34,16 @@ const uploadToS3 = async ({ key, body, contentType }) => {
     Key: key,
     Body: body,
     ContentType: contentType,
-    ACL: "public-read",
+    // ACL removed - bucket uses bucket policy for public access instead
   };
 
-  return s3.upload(params).promise();
+  const result = await s3.upload(params).promise();
+  
+  // Return the public URL
+  return {
+    ...result,
+    Location: `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`
+  };
 };
 
 const singleUploadHandler = async (req, res) => {

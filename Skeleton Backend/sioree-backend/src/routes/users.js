@@ -517,20 +517,35 @@ router.get("/:id/posts", async (req, res) => {
       [userId, currentUserId]
     );
 
-    const posts = result.rows.map(row => ({
-      id: row.id.toString(),
-      userId: row.user_id.toString(),
-      username: row.username || "",
-      name: row.name || row.username || "",
-      avatar: row.avatar || null,
-      caption: row.caption || "",
-      images: row.media_urls || [],
-      location: row.location || null,
-      likes: parseInt(row.likes_count) || 0,
-      comments: parseInt(row.comments_count) || 0,
-      isLiked: row.is_liked || false,
-      createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
-    }));
+    const posts = result.rows.map(row => {
+      // Parse media_urls - handle both array and JSON string formats
+      let images = [];
+      if (Array.isArray(row.media_urls)) {
+        images = row.media_urls;
+      } else if (typeof row.media_urls === 'string') {
+        try {
+          images = JSON.parse(row.media_urls);
+        } catch (e) {
+          images = [];
+        }
+      }
+      console.log("[GET USER POSTS] Post", row.id, "images:", images);
+      
+      return {
+        id: row.id.toString(),
+        userId: row.user_id.toString(),
+        username: row.username || "",
+        name: row.name || row.username || "",
+        avatar: row.avatar || null,
+        caption: row.caption || "",
+        images: images,
+        location: row.location || null,
+        likes: parseInt(row.likes_count) || 0,
+        comments: parseInt(row.comments_count) || 0,
+        isLiked: row.is_liked || false,
+        createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
+      };
+    });
 
     res.json({ posts });
   } catch (err) {

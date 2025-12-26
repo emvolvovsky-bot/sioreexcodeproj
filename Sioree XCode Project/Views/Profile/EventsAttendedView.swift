@@ -272,7 +272,7 @@ struct EventPhotosViewer: View {
                                                         .clipShape(Circle())
                                                         .shadow(radius: 4)
                                                 }
-                                                .padding(.top, 60)
+                                                .padding(.top, 120)
                                                 .padding(.trailing, Theme.Spacing.m)
                                             }
                                             Spacer()

@@ -163,7 +163,7 @@ struct AddPostFromEventView: View {
                 }
             }
             .sheet(isPresented: $showImagePicker) {
-                MultiplePhotoPicker(selectedImages: $selectedImages, limit: 10)
+                MultiplePhotoPicker(selectedImages: $selectedImages, limit: 5)
             }
             .overlay {
                 if isUploading {

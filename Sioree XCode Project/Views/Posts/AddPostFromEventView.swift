@@ -245,11 +245,14 @@ struct AddPostFromEventView: View {
         ]
 
         // Save to local storage
-        var eventPhotos = UserDefaults.standard.array(forKey: "event_photos_\(eventId)") as? [[String: Any]] ?? []
+        let storageKey = "event_photos_\(eventId)"
+        var eventPhotos = UserDefaults.standard.array(forKey: storageKey) as? [[String: Any]] ?? []
         eventPhotos.append(photoRecord)
-        UserDefaults.standard.set(eventPhotos, forKey: "event_photos_\(eventId)")
+        UserDefaults.standard.set(eventPhotos, forKey: storageKey)
 
         print("💾 Saved \(photoUrls.count) photos locally for event \(eventId)")
+        print("💾 Storage key: \(storageKey)")
+        print("💾 Total photos for event: \(eventPhotos.count)")
     }
 }
 

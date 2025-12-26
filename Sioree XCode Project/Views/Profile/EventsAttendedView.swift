@@ -27,6 +27,7 @@ struct EventPhotosViewer: View {
     @State private var showAddPhotos = false
 
     init(event: Event) {
+        print("🎬 EventPhotosViewer initialized for event: \(event.title) (ID: \(event.id))")
         self.event = event
     }
 
@@ -91,15 +92,15 @@ struct EventPhotosViewer: View {
                 // Header with event info and add photos button
                 HStack {
                     VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                        Text(event.title)
-                            .font(.sioreeH3)
-                            .foregroundColor(Color.sioreeWhite)
+                    Text(event.title)
+                        .font(.sioreeH3)
+                        .foregroundColor(Color.sioreeWhite)
                             .multilineTextAlignment(.leading)
-                            .lineLimit(2)
+                        .lineLimit(2)
 
-                        Text(event.date.formatted(date: .abbreviated, time: .shortened))
-                            .font(.sioreeBodySmall)
-                            .foregroundColor(Color.sioreeLightGrey.opacity(0.8))
+                    Text(event.date.formatted(date: .abbreviated, time: .shortened))
+                        .font(.sioreeBodySmall)
+                        .foregroundColor(Color.sioreeLightGrey.opacity(0.8))
                     }
 
                     Spacer()
@@ -312,34 +313,40 @@ struct EventPhotosViewer: View {
             }
         }
         .onReceive(postCreatedNotification) { notification in
+            print("📡 Received PostCreated notification: \(notification.userInfo ?? [:])")
             let notificationEventId = notification.userInfo?["eventId"]
 
             // Handle both String and Int event IDs
             var shouldRefresh = false
             if let stringEventId = notificationEventId as? String {
                 shouldRefresh = stringEventId == event.id
+                print("📡 String eventId comparison: \(stringEventId) == \(event.id) -> \(shouldRefresh)")
             } else if let intEventId = notificationEventId as? Int {
                 shouldRefresh = String(intEventId) == event.id
+                print("📡 Int eventId comparison: \(intEventId) == \(event.id) -> \(shouldRefresh)")
             }
 
             if shouldRefresh {
                 print("📡 Refreshing photos for event \(event.id)")
                 loadPosts()
+            } else {
+                print("📡 Not refreshing - event IDs don't match")
             }
         }
         .onAppear {
+            print("🎬 EventPhotosViewer appeared, loading posts...")
             loadPosts()
         }
-            .alert("Delete Photo", isPresented: $showDeleteConfirmation) {
-                Button("Cancel", role: .cancel) { }
-                Button("Delete", role: .destructive) {
-                    if let photoToDelete = photoToDelete {
-                        deletePhoto(photoToDelete)
-                    }
+        .alert("Delete Photo", isPresented: $showDeleteConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                if let photoToDelete = photoToDelete {
+                    deletePhoto(photoToDelete)
                 }
-            } message: {
-                Text("Are you sure you want to delete this photo? This action cannot be undone.")
             }
+        } message: {
+            Text("Are you sure you want to delete this photo? This action cannot be undone.")
+        }
             .sheet(isPresented: $showAddPhotos) {
                 AddPostFromEventView(event: event)
                     .environmentObject(authViewModel)
@@ -366,6 +373,7 @@ struct EventPhotosViewer: View {
     @State private var cancellables = Set<AnyCancellable>()
 
     private func loadPosts() {
+        print("🔄 loadPosts called for event \(event.id)")
         isLoading = true
         error = nil
 
@@ -375,13 +383,18 @@ struct EventPhotosViewer: View {
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
+                    print("🔄 API call completed for event \(self.event.id)")
                     self.isLoading = false
-                    if case .failure(_) = completion {
+                    if case .failure(let error) = completion {
+                        print("🔄 API failed: \(error.localizedDescription), loading from local storage")
                         // API failed, load from local storage instead
                         self.loadPostsFromLocalStorage()
+                    } else {
+                        print("🔄 API succeeded")
                     }
                 },
                 receiveValue: { posts in
+                    print("🔄 API returned \(posts.count) posts")
                     self.posts = posts
                 }
             )
@@ -390,18 +403,25 @@ struct EventPhotosViewer: View {
 
     private func loadPostsFromLocalStorage() {
         // Load photos from local storage (works immediately while backend deploys)
-        let storedPhotos = UserDefaults.standard.array(forKey: "event_photos_\(event.id)") as? [[String: Any]] ?? []
+        let storageKey = "event_photos_\(event.id)"
+        print("📱 Loading photos from storage key: \(storageKey)")
+
+        let storedPhotos = UserDefaults.standard.array(forKey: storageKey) as? [[String: Any]] ?? []
+        print("📱 Found \(storedPhotos.count) raw photo records in storage")
 
         let localPosts = storedPhotos.compactMap { photoData -> Post? in
+            print("📱 Processing photo record: \(photoData)")
+
             guard let id = photoData["id"] as? String,
                   let userId = photoData["userId"] as? String,
                   let userName = photoData["userName"] as? String,
                   let images = photoData["images"] as? [String],
                   let uploadedAtTimestamp = photoData["uploadedAt"] as? TimeInterval else {
+                print("📱 Failed to parse photo data: missing required fields")
                 return nil
             }
 
-            return Post(
+            let post = Post(
                 id: id,
                 userId: userId,
                 userName: userName,
@@ -416,10 +436,13 @@ struct EventPhotosViewer: View {
                 eventId: photoData["eventId"] as? String,
                 createdAt: Date(timeIntervalSince1970: uploadedAtTimestamp)
             )
+
+            print("📱 Created post with \(images.count) images")
+            return post
         }
 
         self.posts = localPosts
-        print("📱 Loaded \(localPosts.count) local photos for event \(event.id)")
+        print("📱 Final result: \(localPosts.count) posts loaded for event \(event.id)")
     }
 }
 

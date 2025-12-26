@@ -1,8 +1,15 @@
 import express from "express";
-import db from "../db/database.js";
+import { db } from "../db/database.js";
 import jwt from "jsonwebtoken";
 
 const router = express.Router();
+const FEATURED_FOLLOWER_THRESHOLD = 500;
+const isFeaturedByFollowers = (user) => {
+  if (!user) return false;
+  const followerCount = Number(user.follower_count || 0);
+  const userType = (user.user_type || user.userType || "").toLowerCase();
+  return (userType === "host" || userType === "talent") && followerCount >= FEATURED_FOLLOWER_THRESHOLD;
+};
 
 // Helper function to safely convert date to ISO8601 string
 const toISOString = (dateValue) => {
@@ -20,35 +27,82 @@ const toISOString = (dateValue) => {
   }
 };
 
-// GET FEATURED EVENTS (promoted by brands)
+const normalizeTalentIds = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.map(id => id?.toString()).filter(Boolean);
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map(id => id.trim())
+      .filter(id => id.length > 0);
+  }
+  return [value.toString()].filter(Boolean);
+};
+
+const normalizeRoles = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value
+      .map(role => (role ?? "").toString().trim())
+      .filter(role => role.length > 0);
+  }
+  if (typeof value === "string") {
+    return value
+      .split(/[,|]/)
+      .map(role => role.trim())
+      .filter(role => role.length > 0);
+  }
+  return [value.toString()].filter(Boolean);
+};
+
+const buildLookingForLabel = (roles = [], legacy = null, notes = null) => {
+  const cleanRoles = normalizeRoles(roles);
+  const parts = [];
+
+  if (cleanRoles.length > 0) {
+    parts.push(cleanRoles.join(", "));
+  } else if (legacy && legacy.trim()) {
+    parts.push(legacy.trim());
+  }
+
+  if (notes && notes.trim()) {
+    parts.push(notes.trim());
+  }
+
+  const label = parts.join(" — ").trim();
+  return label.length > 0 ? label : null;
+};
+
+// GET FEATURED EVENTS (hosts/talent with 500+ followers)
 router.get("/featured", async (req, res) => {
   try {
-    // Get events that are actively promoted by brands
     const result = await db.query(
       `SELECT DISTINCT
         e.*,
         u.username as host_username,
         u.name as host_name,
         u.avatar as host_avatar,
-        b.name as brand_name,
-        b.logo as brand_logo
+        u.follower_count,
+        u.user_type
       FROM events e
-      LEFT JOIN users u ON e.creator_id = u.id
-      INNER JOIN event_promotions ep ON e.id = ep.event_id
-      INNER JOIN users b ON ep.brand_id = b.id
+      INNER JOIN users u ON e.creator_id = u.id
       WHERE e.event_date > NOW()
-        AND ep.is_active = true
-        AND (ep.expires_at IS NULL OR ep.expires_at > NOW())
-        AND b.user_type = 'brand'
-      ORDER BY ep.promoted_at DESC, e.event_date ASC
-      LIMIT 20`
+        AND u.user_type IN ('host', 'talent')
+        AND COALESCE(u.follower_count, 0) >= $1
+        AND COALESCE(e.status, 'published') <> 'cancelled'
+      ORDER BY u.follower_count DESC, e.event_date ASC
+      LIMIT 20`,
+      [FEATURED_FOLLOWER_THRESHOLD]
     );
 
-    // Format events to match iOS expectations
     const crypto = require('crypto');
     const events = result.rows.map(row => {
       const eventId = row.id.toString();
       const qrCode = row.qr_code || `sioree:event:${eventId}:${crypto.randomUUID()}`;
+      const lookingForRoles = normalizeRoles(row.looking_for_roles);
+      const lookingForNotes = row.looking_for_notes || null;
+      const lookingForLabel = buildLookingForLabel(lookingForRoles, row.looking_for_talent_type, lookingForNotes);
+      const isFeatured = isFeaturedByFollowers(row);
       return {
         id: eventId,
         title: row.title,
@@ -65,8 +119,12 @@ router.get("/featured", async (req, res) => {
         isLiked: false,
         isSaved: false,
         likes: row.likes || 0,
-        isFeatured: true, // These are featured events (promoted by brands)
-        qrCode: qrCode
+        isFeatured,
+        qrCode: qrCode,
+        talentIds: normalizeTalentIds(row.talent_ids),
+        lookingForRoles,
+        lookingForNotes,
+        lookingForTalentType: lookingForLabel
       };
     });
 
@@ -91,15 +149,19 @@ router.get("/nearby", async (req, res) => {
         u.username as host_username,
         u.name as host_name,
         u.avatar as host_avatar,
-        CASE WHEN ep.id IS NOT NULL THEN true ELSE false END as is_featured
+        u.follower_count,
+        u.user_type,
+        CASE 
+          WHEN u.user_type IN ('host','talent') AND COALESCE(u.follower_count, 0) >= $1 THEN true 
+          ELSE false 
+        END as auto_featured
       FROM events e
       LEFT JOIN users u ON e.creator_id = u.id
-      LEFT JOIN event_promotions ep ON e.id = ep.event_id 
-        AND ep.is_active = true 
-        AND (ep.expires_at IS NULL OR ep.expires_at > NOW())
       WHERE e.event_date > NOW()
+        AND COALESCE(e.status, 'published') <> 'cancelled'
       ORDER BY e.event_date ASC
-      LIMIT 50`
+      LIMIT 50`,
+      [FEATURED_FOLLOWER_THRESHOLD]
     );
 
     // Format events to match iOS expectations
@@ -107,6 +169,9 @@ router.get("/nearby", async (req, res) => {
     const events = result.rows.map(row => {
       const eventId = row.id.toString();
       const qrCode = row.qr_code || `sioree:event:${eventId}:${crypto.randomUUID()}`;
+      const lookingForRoles = normalizeRoles(row.looking_for_roles);
+      const lookingForNotes = row.looking_for_notes || null;
+      const lookingForLabel = buildLookingForLabel(lookingForRoles, row.looking_for_talent_type, lookingForNotes);
       return {
         id: eventId,
         title: row.title,
@@ -123,8 +188,12 @@ router.get("/nearby", async (req, res) => {
         isLiked: false,
         isSaved: false,
         likes: row.likes || 0,
-        isFeatured: row.is_featured || false,
-        qrCode: qrCode
+        isFeatured: row.auto_featured || false,
+        qrCode: qrCode,
+        talentIds: normalizeTalentIds(row.talent_ids),
+        lookingForRoles,
+        lookingForNotes,
+        lookingForTalentType: lookingForLabel
       };
     });
 
@@ -132,6 +201,100 @@ router.get("/nearby", async (req, res) => {
   } catch (err) {
     console.error("Get nearby events error:", err);
     res.status(500).json({ error: "Failed to fetch events" });
+  }
+});
+
+// GET EVENTS LOOKING FOR TALENT (by role list or single role)
+router.get("/looking-for/:role?", async (req, res) => {
+  try {
+    const roleParam = req.params.role;
+    const roleQuery = req.query.roles;
+
+    const roleListFromQuery = roleQuery
+      ? roleQuery.split(",").map(r => r.trim()).filter(Boolean)
+      : [];
+    const normalizedRoles = normalizeRoles(roleParam ? [roleParam, ...roleListFromQuery] : roleListFromQuery);
+    const loweredRoles = normalizedRoles.map(r => r.toLowerCase());
+
+    let roleFilter = "";
+    const params = [FEATURED_FOLLOWER_THRESHOLD];
+
+    if (loweredRoles.length > 0) {
+      params.push(loweredRoles);
+      const roleParamIndex = params.length;
+      roleFilter = `
+        AND (
+          EXISTS (
+            SELECT 1 FROM unnest(e.looking_for_roles) AS role
+            WHERE LOWER(role) = ANY($${roleParamIndex}::text[])
+          )
+          OR LOWER(e.looking_for_talent_type) = ANY($${roleParamIndex}::text[])
+        )
+      `;
+    }
+
+    const result = await db.query(
+      `SELECT 
+        e.*,
+        u.username as host_username,
+        u.name as host_name,
+        u.avatar as host_avatar,
+        u.follower_count,
+        u.user_type,
+        CASE 
+          WHEN u.user_type IN ('host','talent') AND COALESCE(u.follower_count, 0) >= $1 THEN true 
+          ELSE false 
+        END as auto_featured
+      FROM events e
+      LEFT JOIN users u ON e.creator_id = u.id
+      WHERE e.event_date > NOW()
+        AND COALESCE(e.status, 'published') <> 'cancelled'
+        AND (
+          array_length(e.looking_for_roles, 1) > 0
+          OR (e.looking_for_talent_type IS NOT NULL AND e.looking_for_talent_type <> '')
+        )
+        ${roleFilter}
+      ORDER BY e.event_date ASC
+      LIMIT 50`,
+      params
+    );
+
+    const crypto = require('crypto');
+    const events = result.rows.map(row => {
+      const eventId = row.id.toString();
+      const qrCode = row.qr_code || `sioree:event:${eventId}:${crypto.randomUUID()}`;
+      const lookingForRoles = normalizeRoles(row.looking_for_roles);
+      const lookingForNotes = row.looking_for_notes || null;
+      const lookingForLabel = buildLookingForLabel(lookingForRoles, row.looking_for_talent_type, lookingForNotes);
+      return {
+        id: eventId,
+        title: row.title,
+        description: row.description || "",
+        hostId: row.creator_id?.toString() || "",
+        hostName: row.host_name || row.host_username || "Unknown Host",
+        hostAvatar: row.host_avatar || null,
+        date: toISOString(row.event_date),
+        location: row.location || "",
+        images: [],
+        ticketPrice: row.ticket_price && parseFloat(row.ticket_price) > 0 ? parseFloat(row.ticket_price) : null,
+        capacity: row.capacity || null,
+        attendees: row.attendee_count || 0,
+        isLiked: false,
+        isSaved: false,
+        likes: row.likes || 0,
+        isFeatured: row.auto_featured || row.is_featured || false,
+        qrCode: qrCode,
+        talentIds: normalizeTalentIds(row.talent_ids),
+        lookingForRoles,
+        lookingForNotes,
+        lookingForTalentType: lookingForLabel
+      };
+    });
+
+    res.json({ events });
+  } catch (err) {
+    console.error("Get events looking for talent error:", err);
+    res.status(500).json({ error: "Failed to fetch events looking for talent" });
   }
 });
 
@@ -146,8 +309,27 @@ router.post("/", async (req, res) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key-change-in-production");
 
     // Support both event_date and date fields
-    const eventDate = req.body.event_date || req.body.date || req.body.eventDate;
-    const { title, description, location, ticket_price, ticketPrice, capacity } = req.body;
+    const body = req.body || {};
+    const eventDate = body.event_date || body.date || body.eventDate;
+    const { title, description, location, ticket_price, ticketPrice, capacity } = body;
+    const lookingForTalentType =
+      body.lookingForTalentType ||
+      body.looking_for_talent_type ||
+      body.talentNeeded ||
+      null;
+    const lookingForRoles = normalizeRoles(
+      body.lookingForRoles ||
+      body.looking_for_roles ||
+      body.lookingForTalentRoles ||
+      body.looking_for_talent_roles
+    );
+    const lookingForNotes =
+      body.lookingForNotes ||
+      body.looking_for_notes ||
+      body.lookingForTalentNotes ||
+      null;
+    const lookingForLabel = buildLookingForLabel(lookingForRoles, lookingForTalentType, lookingForNotes);
+    const talentIds = normalizeTalentIds(body.talent_ids || body.talentIds || body.talentId);
 
     console.log("📥 Received event creation request:");
     console.log("   Title:", title);
@@ -156,6 +338,10 @@ router.post("/", async (req, res) => {
     console.log("   Event Date:", eventDate);
     console.log("   Ticket Price:", ticket_price || ticketPrice);
     console.log("   Capacity:", capacity);
+    console.log("   Looking For Talent Type:", lookingForTalentType);
+    console.log("   Looking For Roles:", lookingForRoles);
+    console.log("   Looking For Notes:", lookingForNotes);
+    console.log("   Talent IDs:", talentIds);
 
     if (!title || !title.trim()) {
       console.error("❌ Missing title");
@@ -200,26 +386,53 @@ router.post("/", async (req, res) => {
     console.log("💰 Ticket price received:", ticketPriceField, "→ parsed:", ticketPriceValue, "→ DB:", dbTicketPrice);
 
     const result = await db.query(
-      `INSERT INTO events (creator_id, title, description, location, event_date, ticket_price, capacity)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO events (creator_id, title, description, location, event_date, ticket_price, capacity, talent_ids, looking_for_talent_type, looking_for_roles, looking_for_notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
-      [decoded.userId, title, description || null, location || null, eventDate, dbTicketPrice, capacity || null]
+      [
+        decoded.userId,
+        title,
+        description || null,
+        location || null,
+        eventDate,
+        dbTicketPrice,
+        capacity || null,
+        talentIds,
+        lookingForTalentType || lookingForLabel || null,
+        lookingForRoles,
+        lookingForNotes || null
+      ]
     );
 
     const eventRow = result.rows[0];
     
     // Get host info
-    const hostResult = await db.query(`SELECT username, name, avatar FROM users WHERE id = $1`, [decoded.userId]);
+    const hostResult = await db.query(
+      `SELECT username, name, avatar, follower_count, user_type FROM users WHERE id = $1`, 
+      [decoded.userId]
+    );
     const host = hostResult.rows[0] || {};
+    const qualifiesFeatured = isFeaturedByFollowers(host);
 
     // Generate unique QR code for the event
     const crypto = require('crypto');
     const eventId = eventRow.id.toString();
     const qrCode = `sioree:event:${eventId}:${crypto.randomUUID()}`;
+    const eventLookingForRoles = normalizeRoles(eventRow?.looking_for_roles || lookingForRoles);
+    const eventLookingForNotes = eventRow?.looking_for_notes || lookingForNotes || null;
+    const eventLookingForTalentType = eventRow?.looking_for_talent_type || lookingForLabel || lookingForTalentType || null;
+    const eventLookingForLabel = buildLookingForLabel(
+      eventLookingForRoles,
+      eventLookingForTalentType,
+      eventLookingForNotes
+    );
     
     // Format event to match iOS Event model expectations
     // Required fields (using try container.decode): id, title, description, hostId, hostName, date, location
     // Optional fields (using decodeIfPresent): hostAvatar, locationDetails, images, ticketPrice, capacity, attendeeCount, talentIds, status, createdAt, likes, isLiked, isSaved, isFeatured, qrCode
+    // Persist the computed featured flag so subsequent reads stay consistent
+    await db.query(`UPDATE events SET is_featured = $1 WHERE id = $2`, [qualifiesFeatured, eventId]);
+
     const event = {
       id: eventId,
       title: eventRow.title || "",
@@ -233,14 +446,17 @@ router.post("/", async (req, res) => {
       ticketPrice: eventRow.ticket_price && parseFloat(eventRow.ticket_price) > 0 ? parseFloat(eventRow.ticket_price) : null,
       capacity: eventRow.capacity || null,
       attendees: 0,  // Maps to attendeeCount via CodingKeys
-      talentIds: [],
+      talentIds: normalizeTalentIds(eventRow.talent_ids),
       status: "published",
       created_at: toISOString(eventRow.created_at),  // Maps to createdAt via CodingKeys
       likes: 0,
       isLiked: false,
       isSaved: false,
-      isFeatured: eventRow.is_featured || false,
-      qrCode: qrCode  // Unique QR code for the event
+      isFeatured: qualifiesFeatured,
+      qrCode: qrCode,  // Unique QR code for the event
+      lookingForTalentType: eventLookingForLabel,
+      lookingForRoles: eventLookingForRoles,
+      lookingForNotes: eventLookingForNotes
     };
     
     // Validate all required fields are present
@@ -268,17 +484,28 @@ router.get("/", async (req, res) => {
         e.*,
         u.username as host_username,
         u.name as host_name,
-        u.avatar as host_avatar
+        u.avatar as host_avatar,
+        u.follower_count,
+        u.user_type,
+        CASE 
+          WHEN u.user_type IN ('host','talent') AND COALESCE(u.follower_count, 0) >= $1 THEN true 
+          ELSE false 
+        END as auto_featured
       FROM events e
       LEFT JOIN users u ON e.creator_id = u.id
+      WHERE COALESCE(e.status, 'published') <> 'cancelled'
       ORDER BY e.event_date ASC
-      LIMIT 100`
+      LIMIT 100`,
+      [FEATURED_FOLLOWER_THRESHOLD]
     );
 
     const crypto = require('crypto');
     const events = result.rows.map(row => {
       const eventId = row.id.toString();
       const qrCode = row.qr_code || `sioree:event:${eventId}:${crypto.randomUUID()}`;
+      const lookingForRoles = normalizeRoles(row.looking_for_roles);
+      const lookingForNotes = row.looking_for_notes || null;
+      const lookingForLabel = buildLookingForLabel(lookingForRoles, row.looking_for_talent_type, lookingForNotes);
       return {
         id: eventId,
         title: row.title,
@@ -295,8 +522,12 @@ router.get("/", async (req, res) => {
         isLiked: false,
         isSaved: false,
         likes: row.likes || 0,
-        isFeatured: row.is_featured || false,
-        qrCode: qrCode
+        isFeatured: row.auto_featured || false,
+        qrCode: qrCode,
+        talentIds: normalizeTalentIds(row.talent_ids),
+        lookingForRoles,
+        lookingForNotes,
+        lookingForTalentType: lookingForLabel
       };
     });
 
@@ -331,6 +562,12 @@ router.get("/:id", async (req, res) => {
         u.username as host_username,
         u.name as host_name,
         u.avatar as host_avatar,
+        u.follower_count,
+        u.user_type,
+        CASE 
+          WHEN u.user_type IN ('host','talent') AND COALESCE(u.follower_count, 0) >= $3 THEN true 
+          ELSE false 
+        END as auto_featured,
         COALESCE(el.likes_count, 0) as likes,
         CASE WHEN ela.user_id IS NOT NULL THEN true ELSE false END as is_liked,
         CASE WHEN esa.user_id IS NOT NULL THEN true ELSE false END as is_saved
@@ -352,7 +589,7 @@ router.get("/:id", async (req, res) => {
         WHERE user_id = $2
       ) esa ON esa.event_id = e.id
       WHERE e.id = $1`,
-      [req.params.id, userId]
+      [req.params.id, userId, FEATURED_FOLLOWER_THRESHOLD]
     );
 
     if (result.rows.length === 0)
@@ -363,6 +600,9 @@ router.get("/:id", async (req, res) => {
     const eventId = row.id.toString();
     // Generate QR code if not stored in DB (for backward compatibility)
     const qrCode = row.qr_code || `sioree:event:${eventId}:${crypto.randomUUID()}`;
+    const lookingForRoles = normalizeRoles(row.looking_for_roles);
+    const lookingForNotes = row.looking_for_notes || null;
+    const lookingForLabel = buildLookingForLabel(lookingForRoles, row.looking_for_talent_type, lookingForNotes);
     
     const event = {
       id: eventId,
@@ -380,11 +620,14 @@ router.get("/:id", async (req, res) => {
       isLiked: row.is_liked || false,
       isSaved: row.is_saved || false,
       likes: parseInt(row.likes) || 0,
-      isFeatured: row.is_featured || false,
+      isFeatured: row.auto_featured || row.is_featured || false,
       status: "published",
       createdAt: toISOString(row.created_at),
-      talentIds: [],
-      qrCode: qrCode
+      talentIds: normalizeTalentIds(row.talent_ids),
+      qrCode: qrCode,
+      lookingForTalentType: lookingForLabel,
+      lookingForRoles,
+      lookingForNotes
     };
 
     res.json(event);
@@ -572,103 +815,66 @@ router.post("/:id/save", async (req, res) => {
   }
 });
 
-// POST promote event (for brands)
-router.post("/:id/promote", async (req, res) => {
+// CANCEL EVENT (notify + mark refunds)
+router.post("/:id/cancel", async (req, res) => {
+  const client = await db.connect();
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      client.release();
       return res.status(401).json({ error: "Unauthorized" });
     }
-    
+
     const token = authHeader.substring(7);
     const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key-change-in-production");
-    
-    // Check if user is a brand
-    const userResult = await db.query(`SELECT user_type FROM users WHERE id = $1`, [decoded.userId]);
-    if (userResult.rows.length === 0 || userResult.rows[0].user_type !== 'brand') {
-      return res.status(403).json({ error: "Only brands can promote events" });
-    }
-    
     const eventId = req.params.id;
-    const { expiresAt, promotionBudget } = req.body;
-    
-    // Check if event exists
-    const eventResult = await db.query(`SELECT id FROM events WHERE id = $1`, [eventId]);
+    const { reason } = req.body || {};
+
+    const eventResult = await client.query(`SELECT creator_id FROM events WHERE id = $1`, [eventId]);
     if (eventResult.rows.length === 0) {
+      client.release();
       return res.status(404).json({ error: "Event not found" });
     }
-    
-    // Create or update promotion
-    const promotionResult = await db.query(
-      `INSERT INTO event_promotions (event_id, brand_id, expires_at, promotion_budget, is_active)
-       VALUES ($1, $2, $3, $4, true)
-       ON CONFLICT (event_id, brand_id) 
-       DO UPDATE SET 
-         expires_at = $3,
-         promotion_budget = $4,
-         is_active = true,
-         promoted_at = NOW()
-       RETURNING *`,
-      [eventId, decoded.userId, expiresAt || null, promotionBudget || 0]
-    );
-    
-    // Update event's is_featured flag
-    await db.query(`UPDATE events SET is_featured = true WHERE id = $1`, [eventId]);
-    
-    res.json({ 
-      success: true, 
-      promotion: promotionResult.rows[0],
-      message: "Event promoted successfully"
-    });
-  } catch (err) {
-    console.error("Promote event error:", err);
-    if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
-      return res.status(401).json({ error: "Invalid or expired token" });
+    if (eventResult.rows[0].creator_id?.toString() !== decoded.userId.toString()) {
+      client.release();
+      return res.status(403).json({ error: "Only the host can cancel this event" });
     }
-    res.status(500).json({ error: "Failed to promote event" });
-  }
-});
 
-// DELETE unpromote event (for brands)
-router.delete("/:id/promote", async (req, res) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-    
-    const token = authHeader.substring(7);
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key-change-in-production");
-    
-    const eventId = req.params.id;
-    
-    // Deactivate promotion
-    await db.query(
-      `UPDATE event_promotions 
-       SET is_active = false 
-       WHERE event_id = $1 AND brand_id = $2`,
-      [eventId, decoded.userId]
+    await client.query("BEGIN");
+
+    await client.query(
+      `UPDATE events 
+       SET status = 'cancelled', cancelled_at = NOW(), cancellation_reason = $1 
+       WHERE id = $2`,
+      [reason || null, eventId]
     );
-    
-    // Check if any other brands are promoting this event
-    const activePromotions = await db.query(
-      `SELECT COUNT(*) as count FROM event_promotions 
-       WHERE event_id = $1 AND is_active = true`,
+
+    await client.query(
+      `UPDATE bookings 
+       SET status = 'cancelled',
+           payment_status = CASE WHEN payment_status = 'paid' THEN 'refund_pending' ELSE payment_status END,
+           refund_status = CASE WHEN payment_status = 'paid' THEN 'pending_refund' ELSE refund_status END,
+           updated_at = NOW()
+       WHERE event_id = $1`,
       [eventId]
     );
-    
-    // If no active promotions, unfeature the event
-    if (parseInt(activePromotions.rows[0].count) === 0) {
-      await db.query(`UPDATE events SET is_featured = false WHERE id = $1`, [eventId]);
-    }
-    
-    res.json({ success: true, message: "Event promotion removed" });
+
+    await client.query(
+      `UPDATE talent_earnings 
+       SET status = 'refunded' 
+       WHERE booking_id IN (SELECT id FROM bookings WHERE event_id = $1)`,
+      [eventId]
+    );
+
+    await client.query("COMMIT");
+    client.release();
+
+    res.json({ success: true, status: "cancelled" });
   } catch (err) {
-    console.error("Unpromote event error:", err);
-    if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
-      return res.status(401).json({ error: "Invalid or expired token" });
-    }
-    res.status(500).json({ error: "Failed to remove promotion" });
+    await client.query("ROLLBACK");
+    client.release();
+    console.error("Cancel event error:", err);
+    res.status(500).json({ error: "Failed to cancel event" });
   }
 });
 

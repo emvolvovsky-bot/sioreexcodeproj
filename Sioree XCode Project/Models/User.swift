@@ -11,7 +11,6 @@ enum UserType: String, Codable {
     case host
     case partier
     case talent
-    case brand
 }
 
 struct User: Identifiable, Codable, Equatable {
@@ -28,6 +27,8 @@ struct User: Identifiable, Codable, Equatable {
     var followerCount: Int
     var followingCount: Int
     var eventCount: Int
+    var averageRating: Double?
+    var reviewCount: Int
     var badges: [Badge]
     
     enum CodingKeys: String, CodingKey {
@@ -44,6 +45,8 @@ struct User: Identifiable, Codable, Equatable {
         case followerCount
         case followingCount
         case eventCount
+        case averageRating
+        case reviewCount
         case badges
     }
     
@@ -90,6 +93,8 @@ struct User: Identifiable, Codable, Equatable {
         followerCount = try container.decodeIfPresent(Int.self, forKey: .followerCount) ?? 0
         followingCount = try container.decodeIfPresent(Int.self, forKey: .followingCount) ?? 0
         eventCount = try container.decodeIfPresent(Int.self, forKey: .eventCount) ?? 0
+        averageRating = try container.decodeIfPresent(Double.self, forKey: .averageRating)
+        reviewCount = try container.decodeIfPresent(Int.self, forKey: .reviewCount) ?? 0
         badges = try container.decodeIfPresent([Badge].self, forKey: .badges) ?? []
     }
     
@@ -106,6 +111,8 @@ struct User: Identifiable, Codable, Equatable {
          followerCount: Int = 0,
          followingCount: Int = 0,
          eventCount: Int = 0,
+         averageRating: Double? = nil,
+         reviewCount: Int = 0,
          badges: [Badge] = []) {
         self.id = id
         self.email = email
@@ -120,6 +127,8 @@ struct User: Identifiable, Codable, Equatable {
         self.followerCount = followerCount
         self.followingCount = followingCount
         self.eventCount = eventCount
+        self.averageRating = averageRating
+        self.reviewCount = reviewCount
         self.badges = badges
     }
     
@@ -138,6 +147,8 @@ struct User: Identifiable, Codable, Equatable {
                lhs.followerCount == rhs.followerCount &&
                lhs.followingCount == rhs.followingCount &&
                lhs.eventCount == rhs.eventCount &&
+               lhs.averageRating == rhs.averageRating &&
+               lhs.reviewCount == rhs.reviewCount &&
                lhs.badges == rhs.badges
     }
 }

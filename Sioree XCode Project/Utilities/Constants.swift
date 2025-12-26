@@ -22,7 +22,8 @@ struct Constants {
                 if let devURL = ProcessInfo.processInfo.environment["DEV_API_URL"] {
                     return devURL
                 }
-                return "http://localhost:4000"  // Local development only
+                // Default to Render API so simulators/dev builds point at hosted backend
+                return "https://sioree-api.onrender.com"
             case .production:
                 return "https://sioree-api.onrender.com"  // Render deployment
             }
@@ -46,6 +47,7 @@ struct Constants {
         static let authToken = "authToken"
         static let userId = "userId"
         static let userType = "userType"
+        static let followingIdsCache = "followingIdsCache"
     }
     
     // MARK: - App Info

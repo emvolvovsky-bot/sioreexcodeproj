@@ -1,5 +1,5 @@
 import express from "express";
-import db from "../db/database.js";
+import { db } from "../db/database.js";
 import { getUserIdFromToken } from "../middleware/auth.js";
 
 const router = express.Router();
@@ -114,6 +114,44 @@ router.post("/", async (req, res) => {
       updatedAt: toISOString(reviewRow.updated_at)
     };
 
+    // Persist aggregated ratings so they stay in sync and are fast to read
+    // 1) Always refresh the reviewed user's average rating + review count
+    await db.query(
+      `UPDATE users
+       SET 
+         average_rating = sub.avg_rating,
+         review_count = sub.review_count
+       FROM (
+         SELECT 
+           COALESCE(AVG(rating)::DECIMAL(3,2), NULL) AS avg_rating,
+           COUNT(*) AS review_count
+         FROM reviews
+         WHERE reviewed_user_id = $1
+       ) AS sub
+       WHERE id = $1`,
+      [reviewedUserId]
+    );
+
+    // 2) If the reviewed user is talent, also refresh the talent table stats
+    if (userType === "talent") {
+      await db.query(
+        `UPDATE talent
+         SET 
+           rating = sub.avg_rating,
+           review_count = sub.review_count,
+           updated_at = NOW()
+         FROM (
+           SELECT 
+             COALESCE(AVG(r.rating)::DECIMAL(3,2), 0) AS avg_rating,
+             COUNT(*) AS review_count
+           FROM reviews r
+           WHERE r.reviewed_user_id = $1
+         ) AS sub
+         WHERE talent.user_id = $1`,
+        [reviewedUserId]
+      );
+    }
+
     res.status(existingReview.rows.length > 0 ? 200 : 201).json(review);
   } catch (err) {
     console.error("Create review error:", err);
@@ -134,7 +172,7 @@ router.get("/:userId", async (req, res) => {
         u.avatar as reviewer_avatar
       FROM reviews r
       LEFT JOIN users u ON r.reviewer_id = u.id
-      WHERE r.reviewed_user_id = $1
+      WHERE r.reviewed_user_id = $1::uuid
       ORDER BY r.created_at DESC`,
       [userId]
     );

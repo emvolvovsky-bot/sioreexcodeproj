@@ -91,6 +91,32 @@ class StripePaymentService: ObservableObject {
             let transactionId: String?
             let description: String?
             let createdAt: String
+            
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                
+                func decodeString(_ key: CodingKeys) throws -> String {
+                    if let stringVal = try? container.decode(String.self, forKey: key) {
+                        return stringVal
+                    }
+                    if let intVal = try? container.decode(Int.self, forKey: key) {
+                        return String(intVal)
+                    }
+                    if let doubleVal = try? container.decode(Double.self, forKey: key) {
+                        return String(doubleVal)
+                    }
+                    return ""
+                }
+                
+                id = try decodeString(.id)
+                userId = try decodeString(.userId)
+                amount = (try? container.decode(Double.self, forKey: .amount)) ?? 0
+                method = (try? container.decode(String.self, forKey: .method)) ?? "credit_card"
+                status = (try? container.decode(String.self, forKey: .status)) ?? "pending"
+                transactionId = try? container.decodeIfPresent(String.self, forKey: .transactionId)
+                description = try? container.decodeIfPresent(String.self, forKey: .description)
+                createdAt = (try? container.decode(String.self, forKey: .createdAt)) ?? ISO8601DateFormatter().string(from: Date())
+            }
         }
         
         return networkService.request("/api/payments/confirm", method: "POST", body: jsonData)

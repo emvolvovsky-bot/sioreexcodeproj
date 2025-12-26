@@ -1,5 +1,5 @@
 import express from "express";
-import db from "../db/database.js";
+import { db } from "../db/database.js";
 import jwt from "jsonwebtoken";
 
 const router = express.Router();
@@ -33,7 +33,8 @@ router.get("/search", async (req, res) => {
       if (currentUserId) {
         result = await db.query(
           `SELECT id, username, email, name, bio, avatar, user_type, location, verified, 
-                  follower_count, following_count, event_count, created_at
+                  follower_count, following_count, event_count, created_at,
+                  average_rating, review_count
            FROM users 
            WHERE id != $1
            ORDER BY username
@@ -43,7 +44,8 @@ router.get("/search", async (req, res) => {
       } else {
         result = await db.query(
           `SELECT id, username, email, name, bio, avatar, user_type, location, verified, 
-                  follower_count, following_count, event_count, created_at
+                  follower_count, following_count, event_count, created_at,
+                  average_rating, review_count
            FROM users 
            ORDER BY username
            LIMIT 100`
@@ -58,7 +60,8 @@ router.get("/search", async (req, res) => {
       if (currentUserId) {
         result = await db.query(
           `SELECT id, username, email, name, bio, avatar, user_type, location, verified, 
-                  follower_count, following_count, event_count, created_at
+                  follower_count, following_count, event_count, created_at,
+                  average_rating, review_count
            FROM users 
            WHERE (LOWER(username) LIKE LOWER($1) OR LOWER(name) LIKE LOWER($1))
              AND id != $2
@@ -76,7 +79,8 @@ router.get("/search", async (req, res) => {
       } else {
         result = await db.query(
           `SELECT id, username, email, name, bio, avatar, user_type, location, verified, 
-                  follower_count, following_count, event_count, created_at
+                  follower_count, following_count, event_count, created_at,
+                  average_rating, review_count
            FROM users 
            WHERE (LOWER(username) LIKE LOWER($1) OR LOWER(name) LIKE LOWER($1))
            ORDER BY 
@@ -107,6 +111,8 @@ router.get("/search", async (req, res) => {
       followerCount: row.follower_count || 0,
       followingCount: row.following_count || 0,
       eventCount: row.event_count || 0,
+      averageRating: row.average_rating !== null ? parseFloat(row.average_rating) : null,
+      reviewCount: row.review_count || 0,
       badges: []
     }));
     
@@ -123,7 +129,8 @@ router.get("/:id", async (req, res) => {
     const userId = req.params.id;
     const result = await db.query(
       `SELECT id, username, email, name, bio, avatar, user_type, location, verified, 
-              follower_count, following_count, event_count, created_at
+              follower_count, following_count, event_count, created_at,
+              average_rating, review_count
        FROM users WHERE id = $1`,
       [userId]
     );
@@ -147,6 +154,8 @@ router.get("/:id", async (req, res) => {
       followerCount: userRow.follower_count || 0,
       followingCount: userRow.following_count || 0,
       eventCount: userRow.event_count || 0,
+      averageRating: userRow.average_rating !== null ? parseFloat(userRow.average_rating) : null,
+      reviewCount: userRow.review_count || 0,
       badges: []
     };
 
@@ -168,17 +177,29 @@ router.post("/:id/follow", async (req, res) => {
       return res.status(400).json({ error: "Cannot follow yourself" });
     }
 
-    // Check if already following
+    // Get follower's current user type
+    const followerUserResult = await db.query(`SELECT user_type FROM users WHERE id = $1`, [followerId]);
+    const followerUserType = followerUserResult.rows[0]?.user_type || null;
+    
+    // Get following user's current user type
+    const followingUserResult = await db.query(`SELECT user_type FROM users WHERE id = $1`, [followingId]);
+    const followingUserType = followingUserResult.rows[0]?.user_type || null;
+
+    // Check if already following (with same user types)
     const checkResult = await db.query(
-      `SELECT * FROM follows WHERE follower_id = $1 AND following_id = $2`,
-      [followerId, followingId]
+      `SELECT * FROM follows 
+       WHERE follower_id = $1 AND following_id = $2 
+       AND follower_user_type = $3 AND following_user_type = $4`,
+      [followerId, followingId, followerUserType, followingUserType]
     );
 
     if (checkResult.rows.length > 0) {
       // Unfollow
       await db.query(
-        `DELETE FROM follows WHERE follower_id = $1 AND following_id = $2`,
-        [followerId, followingId]
+        `DELETE FROM follows 
+         WHERE follower_id = $1 AND following_id = $2 
+         AND follower_user_type = $3 AND following_user_type = $4`,
+        [followerId, followingId, followerUserType, followingUserType]
       );
       
       // Recalculate counts from follows table to avoid double counting
@@ -197,10 +218,11 @@ router.post("/:id/follow", async (req, res) => {
 
       res.json({ following: false });
     } else {
-      // Follow
+      // Follow - include user types
       await db.query(
-        `INSERT INTO follows (follower_id, following_id) VALUES ($1, $2)`,
-        [followerId, followingId]
+        `INSERT INTO follows (follower_id, following_id, follower_user_type, following_user_type) 
+         VALUES ($1, $2, $3, $4)`,
+        [followerId, followingId, followerUserType, followingUserType]
       );
       
       // Recalculate counts from follows table to avoid double counting
@@ -229,10 +251,11 @@ router.post("/:id/follow", async (req, res) => {
 router.get("/:id/followers", async (req, res) => {
   try {
     const userId = req.params.id;
+    const userType = req.query.userType; // Filter by user type (partier, host, talent, brand)
     
     // Get all users who follow this user (follower_id in follows table where following_id = userId)
-    const result = await db.query(
-      `SELECT DISTINCT
+    // Filter by user type if provided
+    let query = `SELECT DISTINCT
         u.id, u.email, u.username, u.name, u.bio, u.avatar, u.user_type, u.verified,
         u.location, u.created_at,
         (SELECT COUNT(*) FROM follows WHERE following_id = u.id) as follower_count,
@@ -240,10 +263,21 @@ router.get("/:id/followers", async (req, res) => {
         (SELECT COUNT(*) FROM events WHERE creator_id = u.id) as event_count
       FROM follows f
       INNER JOIN users u ON f.follower_id = u.id
-      WHERE f.following_id = $1
-      ORDER BY u.username`,
-      [userId]
-    );
+      WHERE f.following_id = $1`;
+    
+    const params = [userId];
+    let paramCount = 2;
+    
+    // Filter by follower_user_type if userType is provided
+    if (userType) {
+      query += ` AND f.follower_user_type = $${paramCount}`;
+      params.push(userType);
+      paramCount++;
+    }
+    
+    query += ` ORDER BY u.username`;
+    
+    const result = await db.query(query, params);
 
     const users = result.rows.map(row => ({
       id: row.id.toString(),
@@ -273,10 +307,11 @@ router.get("/:id/followers", async (req, res) => {
 router.get("/:id/following-list", async (req, res) => {
   try {
     const userId = req.params.id;
+    const userType = req.query.userType; // Filter by user type (partier, host, talent, brand)
     
     // Get all users this user is following (following_id in follows table where follower_id = userId)
-    const result = await db.query(
-      `SELECT DISTINCT
+    // Filter by user type if provided
+    let query = `SELECT DISTINCT
         u.id, u.email, u.username, u.name, u.bio, u.avatar, u.user_type, u.verified,
         u.location, u.created_at,
         (SELECT COUNT(*) FROM follows WHERE following_id = u.id) as follower_count,
@@ -284,10 +319,21 @@ router.get("/:id/following-list", async (req, res) => {
         (SELECT COUNT(*) FROM events WHERE creator_id = u.id) as event_count
       FROM follows f
       INNER JOIN users u ON f.following_id = u.id
-      WHERE f.follower_id = $1
-      ORDER BY u.username`,
-      [userId]
-    );
+      WHERE f.follower_id = $1`;
+    
+    const params = [userId];
+    let paramCount = 2;
+    
+    // Filter by follower_user_type if userType is provided
+    if (userType) {
+      query += ` AND f.follower_user_type = $${paramCount}`;
+      params.push(userType);
+      paramCount++;
+    }
+    
+    query += ` ORDER BY u.username`;
+    
+    const result = await db.query(query, params);
 
     const users = result.rows.map(row => ({
       id: row.id.toString(),
@@ -516,7 +562,8 @@ router.post("/profile/avatar", async (req, res) => {
     // Return updated user
     const result = await db.query(
       `SELECT id, username, email, name, bio, avatar, user_type, location, verified, 
-              follower_count, following_count, event_count, created_at
+              follower_count, following_count, event_count, created_at,
+              average_rating, review_count
        FROM users WHERE id = $1`,
       [userId]
     );
@@ -540,6 +587,8 @@ router.post("/profile/avatar", async (req, res) => {
       followerCount: userRow.follower_count || 0,
       followingCount: userRow.following_count || 0,
       eventCount: userRow.event_count || 0,
+      averageRating: userRow.average_rating !== null ? parseFloat(userRow.average_rating) : null,
+      reviewCount: userRow.review_count || 0,
       badges: []
     };
 
@@ -600,6 +649,8 @@ router.patch("/profile", async (req, res) => {
       followerCount: userRow.follower_count || 0,
       followingCount: userRow.following_count || 0,
       eventCount: userRow.event_count || 0,
+      averageRating: userRow.average_rating !== null ? parseFloat(userRow.average_rating) : null,
+      reviewCount: userRow.review_count || 0,
       badges: []
     };
 
@@ -607,6 +658,25 @@ router.patch("/profile", async (req, res) => {
   } catch (err) {
     console.error("Update profile error:", err);
     res.status(500).json({ error: "Failed to update profile" });
+  }
+});
+
+// PATCH notification preferences
+router.patch("/notification-preferences", async (req, res) => {
+  try {
+    const userId = getUserIdFromToken(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const { notificationsEnabled, emailNotifications, pushNotifications } = req.body;
+    
+    // Store notification preferences in user preferences table or user metadata
+    // For now, we'll just acknowledge the request
+    // In production, you'd store these in a user_preferences table
+    
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Update notification preferences error:", err);
+    res.status(500).json({ error: "Failed to update notification preferences" });
   }
 });
 

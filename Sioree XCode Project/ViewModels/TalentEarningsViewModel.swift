@@ -41,9 +41,9 @@ class TalentEarningsViewModel: ObservableObject {
         let earning = Earning(
             id: UUID().uuidString,
             amount: amount,
-            eventId: eventId,
-            eventTitle: eventTitle,
-            date: Date()
+            source: eventTitle,
+            date: Date(),
+            eventId: eventId
         )
         
         earningsHistory.append(earning)
@@ -59,13 +59,5 @@ class TalentEarningsViewModel: ObservableObject {
         
         totalEarnings = Int(earningsHistory.reduce(0) { $0 + $1.amount })
     }
-}
-
-struct Earning: Identifiable {
-    let id: String
-    let amount: Double
-    let eventId: String
-    let eventTitle: String
-    let date: Date
 }
 

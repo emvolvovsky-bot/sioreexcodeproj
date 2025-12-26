@@ -30,62 +30,105 @@ struct OAuthResponse: Codable {
 class SocialMediaService: ObservableObject {
     static let shared = SocialMediaService()
     private let networkService = NetworkService()
+    private var cancellables = Set<AnyCancellable>()
     
     // MARK: - Instagram OAuth
     func connectInstagram() -> AnyPublisher<ConnectedSocialAccount, Error> {
-        return Future { promise in
-            // Step 1: Get OAuth URL from backend
-            // In production: networkService.request("/api/social/instagram/auth-url", method: "POST")
-            
-            // For demo, we'll simulate the OAuth flow
-            // In production, you would:
-            // 1. Get auth URL from your backend
-            // 2. Use ASWebAuthenticationSession to open the URL
-            // 3. User signs in on Instagram
-            // 4. Instagram redirects back with code
-            // 5. Exchange code for access token
-            // 6. Save connection to backend
-            
-            let authURL = URL(string: "https://api.instagram.com/oauth/authorize?client_id=YOUR_CLIENT_ID&redirect_uri=YOUR_REDIRECT_URI&scope=user_profile,user_media&response_type=code")!
-            
-            let session = ASWebAuthenticationSession(
-                url: authURL,
-                callbackURLScheme: "sioree"
-            ) { callbackURL, error in
-                if let error = error {
-                    promise(.failure(error))
-                    return
-                }
-                
-                guard let callbackURL = callbackURL,
-                      let code = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false)?
-                        .queryItems?
-                        .first(where: { $0.name == "code" })?
-                        .value else {
-                    promise(.failure(NSError(domain: "OAuthError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to get authorization code"])))
-                    return
-                }
-                
-                // Exchange code for token (via backend)
-                // In production: networkService.request("/api/social/instagram/exchange", method: "POST", body: code)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                    let account = ConnectedSocialAccount(
-                        id: UUID().uuidString,
-                        platform: "instagram",
-                        username: "@user_instagram",
-                        profileUrl: "https://instagram.com/user_instagram",
-                        isConnected: true,
-                        connectedAt: Date()
-                    )
-                    promise(.success(account))
-                }
-            }
-            
-            session.presentationContextProvider = OAuthWebAuthSession.shared
-            session.prefersEphemeralWebBrowserSession = false
-            session.start()
+        // Step 1: Get OAuth URL from backend
+        struct AuthURLResponse: Codable {
+            let authUrl: String
         }
-        .eraseToAnyPublisher()
+        
+        let authURLPublisher: AnyPublisher<AuthURLResponse, Error> = networkService.request("/api/social/instagram/auth-url", method: "GET")
+        
+        return authURLPublisher
+            .flatMap { [weak self] response -> AnyPublisher<ConnectedSocialAccount, Error> in
+                guard let self = self else {
+                    return Fail(error: NSError(domain: "OAuthError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Service deallocated"]))
+                        .eraseToAnyPublisher()
+                }
+                
+                guard let authURL = URL(string: response.authUrl) else {
+                    return Fail(error: NSError(domain: "OAuthError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid Instagram auth URL"]))
+                        .eraseToAnyPublisher()
+                }
+                
+                return Future { promise in
+                    let session = ASWebAuthenticationSession(
+                        url: authURL,
+                        callbackURLScheme: "sioree"
+                    ) { callbackURL, error in
+                        if let error = error {
+                            // Check if user cancelled
+                            if let authError = error as? ASWebAuthenticationSessionError,
+                               authError.code == .canceledLogin {
+                                promise(.failure(NSError(domain: "OAuthError", code: -2, userInfo: [NSLocalizedDescriptionKey: "Instagram login was cancelled"])))
+                            } else {
+                                promise(.failure(error))
+                            }
+                            return
+                        }
+                        
+                        guard let callbackURL = callbackURL else {
+                            promise(.failure(NSError(domain: "OAuthError", code: -1, userInfo: [NSLocalizedDescriptionKey: "No callback URL received"])))
+                            return
+                        }
+                        
+                        // Extract code and state from callback URL
+                        guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false) else {
+                            promise(.failure(NSError(domain: "OAuthError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid callback URL"])))
+                            return
+                        }
+                        
+                        // Check for error in callback
+                        if let errorItem = components.queryItems?.first(where: { $0.name == "error" })?.value {
+                            let errorDescription = components.queryItems?.first(where: { $0.name == "error_description" })?.value ?? errorItem
+                            promise(.failure(NSError(domain: "OAuthError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Instagram error: \(errorDescription)"])))
+                            return
+                        }
+                        
+                        guard let code = components.queryItems?.first(where: { $0.name == "code" })?.value,
+                              let state = components.queryItems?.first(where: { $0.name == "state" })?.value else {
+                            promise(.failure(NSError(domain: "OAuthError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to get authorization code from Instagram"])))
+                            return
+                        }
+                        
+                        // Step 2: Exchange code for token via backend
+                        struct ExchangeRequest: Codable {
+                            let code: String
+                            let state: String
+                        }
+                        
+                        let exchangeBody = ExchangeRequest(code: code, state: state)
+                        guard let jsonData = try? JSONEncoder().encode(exchangeBody) else {
+                            promise(.failure(NSError(domain: "OAuthError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to encode exchange request"])))
+                            return
+                        }
+                        
+                        let exchangePublisher: AnyPublisher<ConnectedSocialAccount, Error> = self.networkService.request("/api/social/instagram/exchange", method: "POST", body: jsonData)
+                        
+                        exchangePublisher
+                            .receive(on: DispatchQueue.main)
+                            .sink(
+                                receiveCompletion: { completion in
+                                    if case .failure(let error) = completion {
+                                        promise(.failure(error))
+                                    }
+                                },
+                                receiveValue: { account in
+                                    promise(.success(account))
+                                }
+                            )
+                            .store(in: &self.cancellables)
+                    }
+                    
+                    session.presentationContextProvider = OAuthWebAuthSession.shared
+                    session.prefersEphemeralWebBrowserSession = false
+                    session.start()
+                }
+                .eraseToAnyPublisher()
+            }
+            .eraseToAnyPublisher()
     }
     
     // MARK: - TikTok OAuth
@@ -270,13 +313,8 @@ class SocialMediaService: ObservableObject {
     
     // MARK: - Get Connected Accounts
     func getConnectedAccounts() -> AnyPublisher<[ConnectedSocialAccount], Error> {
-        // In production: networkService.request("/api/social/accounts")
-        return Future { promise in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                promise(.success([]))
-            }
-        }
-        .eraseToAnyPublisher()
+        let accountsPublisher: AnyPublisher<[ConnectedSocialAccount], Error> = networkService.request("/api/social/accounts")
+        return accountsPublisher
     }
     
     // MARK: - Disconnect Account

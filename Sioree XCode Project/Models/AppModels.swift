@@ -13,7 +13,6 @@ enum UserRole: String, CaseIterable, Identifiable {
     case host
     case partier
     case talent
-    case brand
     
     var id: String { rawValue }
     
@@ -22,7 +21,6 @@ enum UserRole: String, CaseIterable, Identifiable {
         case .host: return "Host"
         case .partier: return "Partier"
         case .talent: return "Talent"
-        case .brand: return "Brand"
         }
     }
     
@@ -31,7 +29,6 @@ enum UserRole: String, CaseIterable, Identifiable {
         case .host: return "house.fill"
         case .partier: return "person.2.fill"
         case .talent: return "music.note"
-        case .brand: return "tag.fill"
         }
     }
 }

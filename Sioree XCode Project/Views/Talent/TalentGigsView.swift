@@ -177,46 +177,10 @@ struct TalentGigsView: View {
                                     ProgressView()
                                         .progressViewStyle(CircularProgressViewStyle(tint: .sioreeIcyBlue))
                                         .padding(.vertical, Theme.Spacing.xl)
-                                } else if !eventsLookingForTalent.isEmpty {
-                                    // Show events that need this talent type
-                                    VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                                        Text("Events Looking For \(selectedTalentType)")
-                                            .font(.sioreeH4)
-                                            .foregroundColor(.sioreeWhite)
-                                            .padding(.horizontal, Theme.Spacing.m)
-                                        
-                                        ForEach(eventsLookingForTalent) { event in
-                                            NavigationLink(destination: EventDetailView(eventId: event.id)) {
-                                                EventCard(
-                                                    event: event,
-                                                    onTap: {},
-                                                    onLike: {},
-                                                    onSave: {}
-                                                )
-                                            }
-                                            .buttonStyle(PlainButtonStyle())
-                                            .padding(.horizontal, Theme.Spacing.m)
-                                        }
-                                    }
+                                } else if eventsLookingForTalent.isEmpty {
+                                    emptyState
                                 } else {
-                                    // Show message when no events found
-                                    VStack(spacing: Theme.Spacing.m) {
-                                        Image(systemName: "magnifyingglass")
-                                            .font(.system(size: 50))
-                                            .foregroundColor(.sioreeLightGrey.opacity(0.5))
-                                        
-                                        Text("No one needs \(selectedTalentType.lowercased()) yet")
-                                            .font(.sioreeH4)
-                                            .foregroundColor(.sioreeWhite)
-                                        
-                                        Text("Check back later for events that need \(selectedTalentType.lowercased())")
-                                            .font(.sioreeBody)
-                                            .foregroundColor(.sioreeLightGrey)
-                                            .multilineTextAlignment(.center)
-                                    }
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, Theme.Spacing.xl)
-                                    .padding(.horizontal, Theme.Spacing.m)
+                                    eventsList
                                 }
                             }
                             .padding(.bottom, Theme.Spacing.m)
@@ -274,6 +238,60 @@ struct TalentGigsView: View {
     }
     
     @State private var cancellables = Set<AnyCancellable>()
+    
+    // MARK: - Subviews
+    private var eventsList: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+            Text("Events Looking For \(selectedTalentType)")
+                .font(.sioreeH4)
+                .foregroundColor(.sioreeWhite)
+                .padding(.horizontal, Theme.Spacing.m)
+            
+            ForEach(eventsLookingForTalent) { event in
+                NavigationLink(destination: EventDetailView(eventId: event.id)) {
+                    EventCard(
+                        event: event,
+                        onTap: {},
+                        onLike: {},
+                        onSave: {}
+                    )
+                    .overlay(alignment: .topLeading) {
+                        if let need = event.lookingForSummary ?? event.lookingForTalentType, !need.isEmpty {
+                            Label("Looking for \(need)", systemImage: "person.3.sequence.fill")
+                                .font(.sioreeCaption)
+                                .foregroundColor(.sioreeWhite)
+                                .padding(8)
+                                .background(Color.sioreeIcyBlue.opacity(0.8))
+                                .cornerRadius(8)
+                                .padding(8)
+                        }
+                    }
+                }
+                .buttonStyle(PlainButtonStyle())
+                .padding(.horizontal, Theme.Spacing.m)
+            }
+        }
+    }
+    
+    private var emptyState: some View {
+        VStack(spacing: Theme.Spacing.m) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 50))
+                .foregroundColor(.sioreeLightGrey.opacity(0.5))
+            
+            Text("No one needs \(selectedTalentType.lowercased()) yet")
+                .font(.sioreeH4)
+                .foregroundColor(.sioreeWhite)
+            
+            Text("Check back later for events that need \(selectedTalentType.lowercased())")
+                .font(.sioreeBody)
+                .foregroundColor(.sioreeLightGrey)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, Theme.Spacing.xl)
+        .padding(.horizontal, Theme.Spacing.m)
+    }
 }
 
 struct GigRow: View {

@@ -1,9 +1,38 @@
 import express from "express";
-import db from "../db/database.js";
+import { db } from "../db/database.js";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 
 const router = express.Router();
+
+// Ensure promo schema exists if migrations lag in production
+let promoSchemaEnsured = false;
+async function ensureEventPromoSchema() {
+  if (promoSchemaEnsured) return;
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS event_promotions (
+        id SERIAL PRIMARY KEY,
+        event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+        brand_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        promoted_at TIMESTAMP DEFAULT NOW(),
+        expires_at TIMESTAMP,
+        is_active BOOLEAN DEFAULT true,
+        promotion_budget DECIMAL(10, 2) DEFAULT 0.00,
+        created_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(event_id, brand_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_event_promotions_event_id ON event_promotions(event_id);
+      CREATE INDEX IF NOT EXISTS idx_event_promotions_brand_id ON event_promotions(brand_id);
+      CREATE INDEX IF NOT EXISTS idx_event_promotions_active ON event_promotions(is_active, expires_at);
+      ALTER TABLE events ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT false;
+    `);
+    promoSchemaEnsured = true;
+  } catch (err) {
+    console.error("ensureEventPromoSchema error:", err);
+    // continue without blocking request
+  }
+}
 
 // Helper function to safely convert date to ISO8601 string
 const toISOString = (dateValue) => {
@@ -24,6 +53,8 @@ const toISOString = (dateValue) => {
 // GET FEATURED EVENTS (promoted by brands)
 router.get("/featured", async (req, res) => {
   try {
+    await ensureEventPromoSchema();
+
     // Get events that are actively promoted by brands
     // Use window function to get most recent promotion per event, then join for full details
     const result = await db.query(
@@ -34,22 +65,23 @@ router.get("/featured", async (req, res) => {
         u.avatar as host_avatar,
         b.name as brand_name,
         b.avatar as brand_avatar,
-        latest_promo.promoted_at
+        promo.promoted_at
       FROM events e
       LEFT JOIN users u ON e.creator_id = u.id
       INNER JOIN (
-        SELECT 
+        SELECT DISTINCT ON (event_id)
           event_id,
           brand_id,
           promoted_at
         FROM event_promotions
         WHERE is_active = true
           AND (expires_at IS NULL OR expires_at > NOW())
-      ) latest_promo ON e.id = latest_promo.event_id AND latest_promo.rn = 1
-      INNER JOIN users b ON latest_promo.brand_id = b.id
+        ORDER BY event_id, promoted_at DESC
+      ) promo ON e.id = promo.event_id
+      INNER JOIN users b ON promo.brand_id = b.id
       WHERE e.event_date > NOW()
         AND b.user_type = 'brand'
-      ORDER BY latest_promo.promoted_at DESC, e.event_date ASC
+      ORDER BY promo.promoted_at DESC, e.event_date ASC
       LIMIT 20`
     );
 
@@ -95,6 +127,8 @@ router.get("/featured", async (req, res) => {
 // GET NEARBY EVENTS (requires authentication)
 router.get("/nearby", async (req, res) => {
   try {
+    await ensureEventPromoSchema();
+
     // Get user location from query params or headers (in production, get from user's profile)
     const { latitude, longitude, radius = 50 } = req.query; // radius in km, default 50km
 
@@ -188,10 +222,22 @@ router.post("/", async (req, res) => {
     const token = authHeader.substring(7);
     const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key-change-in-production");
 
+    const body = req.body || {};
+    // Normalize optional looking-for field so it is always defined (string) to avoid ReferenceError
+    const lookingForTalentType = (
+      body.lookingForTalentType ||
+      body.looking_for_talent_type ||
+      body.talentNeeded ||
+      ""
+    ).toString().trim() || "General talent";
     // Support both event_date and date fields
-    const eventDate = req.body.event_date || req.body.date || req.body.eventDate;
-    const { title, description, location, ticket_price, ticketPrice, capacity } = req.body;
-
+    const eventDate = body.event_date || body.date || body.eventDate;
+    const talentIds = Array.isArray(body.talentIds)
+      ? body.talentIds
+      : Array.isArray(body.talent_ids)
+        ? body.talent_ids
+        : [];
+    const { title, description, location, ticket_price, ticketPrice, capacity } = body;
     console.log("📥 Received event creation request:");
     console.log("   Title:", title);
     console.log("   Description:", description);
@@ -199,6 +245,8 @@ router.post("/", async (req, res) => {
     console.log("   Event Date:", eventDate);
     console.log("   Ticket Price:", ticket_price || ticketPrice);
     console.log("   Capacity:", capacity);
+    console.log("   Talent IDs:", talentIds);
+    console.log("   Looking For Talent Type:", lookingForTalentType);
 
     if (!title || !title.trim()) {
       console.error("❌ Missing title");
@@ -279,18 +327,74 @@ router.post("/", async (req, res) => {
     
     // Handle talent IDs if provided (specific talent selected)
     if (talentIds && Array.isArray(talentIds) && talentIds.length > 0) {
-      // TODO: Create event_talent relationships if needed
-      // For now, we'll store them in the event response
-      console.log("📋 Event created with \(talentIds.length) selected talent");
+      // Check if event_talent table exists
+      try {
+        const tableExists = await db.query(
+          `SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_name = 'event_talent'
+          )`
+        );
+        
+        if (tableExists.rows[0]?.exists) {
+          // Insert talent relationships
+          for (const talentId of talentIds) {
+            try {
+              const numericTalentId = parseInt(talentId, 10);
+              if (Number.isNaN(numericTalentId)) {
+                console.warn(`Skipping invalid talentId: ${talentId}`);
+                continue;
+              }
+              await db.query(
+                `INSERT INTO event_talent (event_id, talent_id) 
+                 VALUES ($1, $2)
+                 ON CONFLICT (event_id, talent_id) DO NOTHING`,
+                [eventRow.id, numericTalentId]
+              );
+            } catch (talentErr) {
+              console.error(`Failed to link talent ${talentId}:`, talentErr);
+            }
+          }
+          console.log(`✅ Linked ${talentIds.length} talent(s) to event`);
+        } else {
+          console.log("⚠️ event_talent table doesn't exist, skipping talent linking");
+        }
+      } catch (err) {
+        console.error("Error checking/creating talent relationships:", err);
+      }
     }
     
     // Get host info
     const hostResult = await db.query(`SELECT username, name, avatar FROM users WHERE id = $1`, [decoded.userId]);
     const host = hostResult.rows[0] || {};
 
-    // Generate unique QR code for the event
+    // Generate unique QR code for the event (only for future events)
     const eventId = eventRow.id.toString();
-    const qrCode = `sioree:event:${eventId}:${crypto.randomUUID()}`;
+    let qrCode = null;
+    
+    // Only generate QR code if event is in the future
+    if (eventDate > new Date()) {
+      qrCode = `sioree:event:${eventId}:${crypto.randomUUID()}`;
+      
+      // Save QR code to database if column exists
+      try {
+        const qrCodeColumnExists = await db.query(
+          `SELECT column_name 
+           FROM information_schema.columns 
+           WHERE table_name = 'events' 
+           AND column_name = 'qr_code'`
+        );
+        if (qrCodeColumnExists.rows.length > 0) {
+          await db.query(
+            `UPDATE events SET qr_code = $1 WHERE id = $2`,
+            [qrCode, eventRow.id]
+          );
+        }
+      } catch (qrErr) {
+        // Column doesn't exist, that's okay - QR code is still in response
+        console.log("⚠️ QR code column doesn't exist, skipping database update");
+      }
+    }
     
     // Format event to match iOS Event model expectations
     // Required fields (using try container.decode): id, title, description, hostId, hostName, date, location
@@ -315,8 +419,8 @@ router.post("/", async (req, res) => {
       isLiked: false,
       isSaved: false,
       isFeatured: eventRow.is_featured || false,
-      qrCode: qrCode,  // Unique QR code for the event
-      lookingForTalentType: eventRow.looking_for_talent_type || null
+      qrCode: qrCode || null,  // Unique QR code for the event (only for future events)
+      lookingForTalentType: eventRow.looking_for_talent_type || lookingForTalentType || null
     };
     
     // Validate all required fields are present
@@ -596,6 +700,28 @@ router.post("/:id/rsvp", async (req, res) => {
       [eventId, userId]
     );
 
+    // Generate unique QR code for this ticket
+    const ticketQRCode = `sioree:ticket:${eventId}:${userId}:${crypto.randomUUID()}`;
+    
+    // Update attendee record with QR code if column exists
+    try {
+      const qrColumnExists = await db.query(
+        `SELECT column_name 
+         FROM information_schema.columns 
+         WHERE table_name = 'event_attendees' 
+         AND column_name = 'qr_code'`
+      );
+      if (qrColumnExists.rows.length > 0) {
+        await db.query(
+          `UPDATE event_attendees SET qr_code = $1 WHERE event_id = $2 AND user_id = $3`,
+          [ticketQRCode, eventId, userId]
+        );
+      }
+    } catch (qrErr) {
+      // Column doesn't exist, that's okay
+      console.log("⚠️ QR code column doesn't exist in event_attendees, skipping");
+    }
+
     // Recalculate attendee count from actual table to ensure accuracy
     const countResult = await db.query(
       `SELECT COUNT(DISTINCT user_id) as count FROM event_attendees WHERE event_id = $1`,
@@ -609,7 +735,7 @@ router.post("/:id/rsvp", async (req, res) => {
       [actualCount, eventId]
     );
 
-    res.json({ success: true });
+    res.json({ success: true, qrCode: ticketQRCode });
   } catch (err) {
     console.error("RSVP error:", err);
     res.status(500).json({ error: "Failed to RSVP" });
@@ -735,6 +861,8 @@ router.post("/:id/save", async (req, res) => {
 // POST promote event (for brands)
 router.post("/:id/promote", async (req, res) => {
   try {
+    await ensureEventPromoSchema();
+
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return res.status(401).json({ error: "Unauthorized" });
@@ -752,11 +880,16 @@ router.post("/:id/promote", async (req, res) => {
     const eventId = req.params.id;
     const { expiresAt, promotionBudget } = req.body;
     
-    // Check if event exists
-    const eventResult = await db.query(`SELECT id FROM events WHERE id = $1`, [eventId]);
+    // Check if event exists and get location
+    const eventResult = await db.query(`SELECT id, location FROM events WHERE id = $1`, [eventId]);
     if (eventResult.rows.length === 0) {
       return res.status(404).json({ error: "Event not found" });
     }
+    
+    const eventLocation = eventResult.rows[0].location || "";
+    const isNYC = eventLocation.toLowerCase().includes("new york") || 
+                  eventLocation.toLowerCase().includes("nyc") || 
+                  eventLocation.toLowerCase().includes("new york city");
     
     // Create or update promotion
     const promotionResult = await db.query(
@@ -774,6 +907,16 @@ router.post("/:id/promote", async (req, res) => {
     
     // Update event's is_featured flag
     await db.query(`UPDATE events SET is_featured = true WHERE id = $1`, [eventId]);
+    
+    // Track city activation if event is in NYC
+    if (isNYC) {
+      await db.query(
+        `INSERT INTO brand_cities (brand_id, city, activated_at)
+         VALUES ($1, 'New York City', NOW())
+         ON CONFLICT (brand_id, city) DO NOTHING`,
+        [decoded.userId]
+      );
+    }
     
     res.json({ 
       success: true, 
@@ -926,6 +1069,98 @@ router.get("/attending/upcoming", async (req, res) => {
   }
 });
 
+// GET UPCOMING EVENTS ASSIGNED TO TALENT USER
+router.get("/talent/upcoming", async (req, res) => {
+  try {
+    await ensureEventPromoSchema();
+
+    const userId = getUserIdFromToken(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    // Ensure event_talent table exists
+    const tableCheck = await db.query(
+      `SELECT EXISTS (
+         SELECT FROM information_schema.tables 
+         WHERE table_name = 'event_talent'
+       )`
+    );
+
+    if (!tableCheck.rows[0]?.exists) {
+      console.warn("event_talent table missing. Run migration 011_add_event_talent_table.sql");
+      return res.json({ events: [] });
+    }
+
+    // Find the talent id for this user
+    const talentResult = await db.query(
+      `SELECT id FROM talent WHERE user_id = $1 LIMIT 1`,
+      [userId]
+    );
+
+    if (talentResult.rows.length === 0) {
+      // User hasn't created a talent profile yet
+      return res.json({ events: [] });
+    }
+
+    const talentId = talentResult.rows[0].id;
+
+    const result = await db.query(
+      `SELECT 
+         e.*,
+         u.username as host_username,
+         u.name as host_name,
+         u.avatar as host_avatar,
+         CASE WHEN ep.id IS NOT NULL THEN true ELSE false END as is_featured,
+         COALESCE(COUNT(DISTINCT ea.user_id), 0) as attendee_count,
+         ARRAY_REMOVE(ARRAY_AGG(DISTINCT et_all.talent_id), NULL) as talent_ids
+       FROM event_talent et
+       INNER JOIN events e ON et.event_id = e.id
+       LEFT JOIN users u ON e.creator_id = u.id
+       LEFT JOIN event_promotions ep ON e.id = ep.event_id 
+         AND ep.is_active = true 
+         AND (ep.expires_at IS NULL OR ep.expires_at > NOW())
+       LEFT JOIN event_attendees ea ON e.id = ea.event_id
+       LEFT JOIN event_talent et_all ON et_all.event_id = e.id
+       WHERE et.talent_id = $1
+         AND e.event_date > NOW()
+       GROUP BY e.id, u.username, u.name, u.avatar, ep.id
+       ORDER BY e.event_date ASC`,
+      [talentId]
+    );
+
+    const events = result.rows.map(row => {
+      const eventId = row.id.toString();
+      const qrCode = row.qr_code || `sioree:event:${eventId}:${crypto.randomUUID()}`;
+      return {
+        id: eventId,
+        title: row.title || "",
+        description: row.description || "",
+        hostId: row.creator_id?.toString() || "",
+        hostName: row.host_name || row.host_username || "Unknown Host",
+        hostAvatar: row.host_avatar || null,
+        date: toISOString(row.event_date),
+        location: row.location || "",
+        images: [],
+        ticketPrice: row.ticket_price && parseFloat(row.ticket_price) > 0 ? parseFloat(row.ticket_price) : null,
+        capacity: row.capacity || null,
+        attendees: parseInt(row.attendee_count) || 0,
+        isLiked: false,
+        isSaved: false,
+        likes: row.likes || 0,
+        isFeatured: row.is_featured || false,
+        isRSVPed: false,
+        qrCode: qrCode,
+        talentIds: Array.isArray(row.talent_ids) ? row.talent_ids.map(id => id.toString()) : [],
+        lookingForTalentType: row.looking_for_talent_type || null
+      };
+    });
+
+    res.json({ events });
+  } catch (err) {
+    console.error("Get upcoming events for talent error:", err);
+    res.status(500).json({ error: "Failed to fetch talent events" });
+  }
+});
+
 // DELETE EVENT (host only)
 router.delete("/:id", async (req, res) => {
   try {
@@ -973,6 +1208,8 @@ router.delete("/:id", async (req, res) => {
 // DELETE unpromote event (for brands)
 router.delete("/:id/promote", async (req, res) => {
   try {
+    await ensureEventPromoSchema();
+
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return res.status(401).json({ error: "Unauthorized" });

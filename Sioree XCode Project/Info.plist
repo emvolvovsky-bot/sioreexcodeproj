@@ -75,6 +75,17 @@
 	<true/>
 	<key>UIBackgroundModes</key>
 	<array/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>sioree</string>
+			</array>
+			<key>CFBundleURLName</key>
+			<string>com.sioree.app</string>
+		</dict>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UIRequiredDeviceCapabilities</key>

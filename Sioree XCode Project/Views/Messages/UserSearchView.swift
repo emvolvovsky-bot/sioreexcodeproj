@@ -14,6 +14,7 @@ struct UserSearchView: View {
     @State private var users: [User] = []
     @State private var isLoading = false
     @State private var cancellables = Set<AnyCancellable>()
+    @State private var followingIds: Set<String> = []
     private let networkService = NetworkService()
     
     var body: some View {
@@ -79,8 +80,20 @@ struct UserSearchView: View {
                         ScrollView {
                             LazyVStack(spacing: Theme.Spacing.s) {
                                 ForEach(users) { user in
-                                    UserSearchRow(user: user)
-                                        .padding(.horizontal, Theme.Spacing.m)
+                                    NavigationLink(destination: UserProfileView(userId: user.id)) {
+                                        UserSearchRow(
+                                            user: user,
+                                            isInitiallyFollowing: followingIds.contains(user.id)
+                                        ) { isNowFollowing in
+                                            if isNowFollowing {
+                                                followingIds.insert(user.id)
+                                            } else {
+                                                followingIds.remove(user.id)
+                                            }
+                                        }
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                    .padding(.horizontal, Theme.Spacing.m)
                                 }
                             }
                             .padding(.vertical, Theme.Spacing.m)
@@ -100,6 +113,7 @@ struct UserSearchView: View {
             }
             .onAppear {
                 loadAllUsers()
+                loadFollowingIds()
             }
         }
     }
@@ -121,6 +135,22 @@ struct UserSearchView: View {
                     isLoading = false
                     users = fetchedUsers
                     print("✅ Loaded \(users.count) users")
+                }
+            )
+            .store(in: &cancellables)
+    }
+    
+    private func loadFollowingIds() {
+        // Apply cached follow state immediately so the UI reflects prior actions
+        followingIds = Set(StorageService.shared.getFollowingIds())
+        
+        networkService.fetchMyFollowingIds()
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { _ in },
+                receiveValue: { ids in
+                    followingIds = Set(ids)
+                    StorageService.shared.saveFollowingIds(ids)
                 }
             )
             .store(in: &cancellables)
@@ -161,8 +191,35 @@ struct UserSearchView: View {
 
 struct UserSearchRow: View {
     let user: User
-    @State private var isFollowing = false
+    let isInitiallyFollowing: Bool
+    let onFollowChange: (Bool) -> Void
+    
+    @State private var isFollowing: Bool
+    @State private var isRequesting = false
     @State private var showMessageView = false
+    @State private var cancellables = Set<AnyCancellable>()
+    private let networkService = NetworkService()
+    private let storageService = StorageService.shared
+    
+    private var nameParts: [String] {
+        user.name.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+    }
+    
+    private var firstName: String {
+        nameParts.first ?? user.name
+    }
+    
+    private var lastName: String {
+        let tail = nameParts.dropFirst()
+        return tail.isEmpty ? "" : tail.joined(separator: " ")
+    }
+    
+    init(user: User, isInitiallyFollowing: Bool, onFollowChange: @escaping (Bool) -> Void) {
+        self.user = user
+        self.isInitiallyFollowing = isInitiallyFollowing
+        self.onFollowChange = onFollowChange
+        _isFollowing = State(initialValue: isInitiallyFollowing)
+    }
     
     var body: some View {
         HStack(spacing: Theme.Spacing.m) {
@@ -188,10 +245,12 @@ struct UserSearchRow: View {
             }
             
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                HStack {
-                    Text(user.name ?? user.username)
+                HStack(spacing: Theme.Spacing.xs) {
+                    Text(firstName)
                         .font(.sioreeBody)
                         .foregroundColor(.sioreeWhite)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                     
                     if user.verified {
                         Image(systemName: "checkmark.seal.fill")
@@ -200,9 +259,18 @@ struct UserSearchRow: View {
                     }
                 }
                 
+                if !lastName.isEmpty {
+                    Text(lastName)
+                        .font(.sioreeBody)
+                        .foregroundColor(.sioreeWhite)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                
                 Text("@\(user.username)")
                     .font(.sioreeBodySmall)
                     .foregroundColor(.sioreeLightGrey)
+                    .lineLimit(1)
                 
                 if let bio = user.bio, !bio.isEmpty {
                     Text(bio)
@@ -232,14 +300,18 @@ struct UserSearchRow: View {
                     toggleFollow()
                 }) {
                     Text(isFollowing ? "Following" : "Follow")
-                        .font(.sioreeBodySmall)
+                        .font(.sioreeBody)
                         .fontWeight(.semibold)
                         .foregroundColor(isFollowing ? .sioreeWhite : .sioreeIcyBlue)
-                        .padding(.horizontal, Theme.Spacing.m)
-                        .padding(.vertical, Theme.Spacing.s)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                        .frame(minWidth: 108, minHeight: 38)
+                        .padding(.horizontal, Theme.Spacing.s)
+                        .padding(.vertical, Theme.Spacing.xs)
                         .background(isFollowing ? Color.sioreeIcyBlue : Color.sioreeIcyBlue.opacity(0.1))
-                        .cornerRadius(Theme.CornerRadius.small)
+                        .cornerRadius(Theme.CornerRadius.medium)
                 }
+                .disabled(isRequesting)
             }
         }
         .padding(Theme.Spacing.m)
@@ -252,11 +324,43 @@ struct UserSearchRow: View {
         .sheet(isPresented: $showMessageView) {
             CreateConversationView(userId: user.id, userName: user.name ?? user.username)
         }
+        .onAppear {
+            isFollowing = isInitiallyFollowing
+        }
+        .onChange(of: isInitiallyFollowing) { _, newValue in
+            isFollowing = newValue
+        }
     }
     
     private func toggleFollow() {
-        // TODO: Implement follow/unfollow API call
-        isFollowing.toggle()
+        guard !isRequesting else { return }
+        isRequesting = true
+        
+        let action = isFollowing ? networkService.unfollow(userId: user.id) : networkService.follow(userId: user.id)
+        
+        action
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    isRequesting = false
+                    if case .failure(let error) = completion {
+                        print("❌ Follow toggle failed: \(error)")
+                    }
+                },
+                receiveValue: { response in
+                    isFollowing = response.following
+                    
+                    // Persist locally until the user explicitly unfollows
+                    if response.following {
+                        storageService.addFollowingId(user.id)
+                    } else {
+                        storageService.removeFollowingId(user.id)
+                    }
+                    
+                    onFollowChange(response.following)
+                }
+            )
+            .store(in: &cancellables)
     }
 }
 

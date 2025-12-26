@@ -8,32 +8,25 @@
 import SwiftUI
 
 struct ProfileStatsView: View {
-    let eventsHosted: Int
-    let eventsAttended: Int
     let followers: Int
     let following: Int
     let username: String?
-    let userType: UserType?
     let userId: String?
     
     @State private var showFollowersList = false
     @State private var showFollowingList = false
-    @State private var showEventsList = false
     
-    init(eventsHosted: Int, eventsAttended: Int, followers: Int, following: Int, username: String? = nil, userType: UserType? = nil, userId: String? = nil) {
-        self.eventsHosted = eventsHosted
-        self.eventsAttended = eventsAttended
+    init(followers: Int, following: Int, username: String? = nil, userId: String? = nil) {
         self.followers = followers
         self.following = following
         self.username = username
-        self.userType = userType
         self.userId = userId
     }
     
     var body: some View {
         VStack(spacing: Theme.Spacing.m) {
             HStack(spacing: 0) {
-                // Always show Followers first
+                // Followers
                 StatItem(
                     value: Helpers.formatNumber(followers),
                     label: "Followers",
@@ -45,7 +38,7 @@ struct ProfileStatsView: View {
                 Divider()
                     .frame(height: 40)
                 
-                // Always show Following second
+                // Following
                 StatItem(
                     value: Helpers.formatNumber(following),
                     label: "Following",
@@ -54,39 +47,6 @@ struct ProfileStatsView: View {
                         showFollowingList = true
                     }
                 )
-                
-                // Show Events Attended for partiers, Events Hosted for others
-                if userType == .partier {
-                    Divider()
-                        .frame(height: 40)
-                    StatItem(
-                        value: Helpers.formatNumber(eventsAttended),
-                        label: "Events Attended",
-                        isClickable: true,
-                        action: {
-                            showEventsList = true
-                        }
-                    )
-                } else {
-                    // For non-partiers, show Events Hosted (even if 0)
-                    Divider()
-                        .frame(height: 40)
-                    StatItem(
-                        value: Helpers.formatNumber(eventsHosted),
-                        label: "Events Hosted",
-                        isClickable: true,
-                        action: {
-                            showEventsList = true
-                        }
-                    )
-                }
-                
-                // Show username as a stat item
-                if let username = username {
-                    Divider()
-                        .frame(height: 40)
-                    StatItem(value: "@\(username)", label: "Username", isClickable: false)
-                }
             }
         }
         .padding(.vertical, Theme.Spacing.m)
@@ -101,11 +61,6 @@ struct ProfileStatsView: View {
         .sheet(isPresented: $showFollowingList) {
             if let userId = userId {
                 UserListListView(userId: userId, listType: .following)
-            }
-        }
-        .sheet(isPresented: $showEventsList) {
-            if let userId = userId {
-                UserEventsListView(userId: userId, userType: userType)
             }
         }
     }
@@ -147,12 +102,9 @@ struct StatItem: View {
 
 #Preview {
     ProfileStatsView(
-        eventsHosted: 12,
-        eventsAttended: 45,
         followers: 1234,
         following: 567,
-        username: "testuser",
-        userType: .host
+        username: "testuser"
     )
 }
 

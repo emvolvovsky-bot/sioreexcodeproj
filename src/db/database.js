@@ -5,13 +5,13 @@ dotenv.config();
 // Parse connection string to determine SSL requirements
 const isLocalDB = process.env.DATABASE_URL?.includes("localhost") || 
                   process.env.DATABASE_URL?.includes("127.0.0.1") ||
-                  !process.env.DATABASE_URL?.includes("supabase") && 
-                  !process.env.DATABASE_URL?.includes("amazonaws");
+                  (!process.env.DATABASE_URL?.includes("supabase") && 
+                   !process.env.DATABASE_URL?.includes("amazonaws"));
 
 // Use connection pool for better performance and error handling
 const poolConfig = {
   connectionString: process.env.DATABASE_URL,
-  max: 20, // Maximum number of clients in the pool
+  max: 20,                  // Maximum number of clients in the pool
   idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
   connectionTimeoutMillis: 10000, // Return an error after 10 seconds if connection could not be established
 };
@@ -19,7 +19,7 @@ const poolConfig = {
 // Only add SSL config for remote databases
 if (!isLocalDB && process.env.DATABASE_URL) {
   poolConfig.ssl = {
-    rejectUnauthorized: false // Accept self-signed certificates for Supabase
+    rejectUnauthorized: false // Accept self-signed certificates for Supabase / managed Postgres
   };
 }
 
@@ -41,6 +41,7 @@ const db = {
   pool: pool
 };
 
-export default db;
+// IMPORTANT: named export 'db' so that `import { db } from "../db/database.js"` works
+export { db };
 
 

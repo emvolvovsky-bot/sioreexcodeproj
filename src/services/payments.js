@@ -2,7 +2,7 @@ import Stripe from "stripe";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
 
-export async function createPaymentIntent(amount, hostStripeAccountId) {
+export async function createPaymentIntent(amount, hostStripeAccountId, metadata = {}) {
   try {
     // Convert amount to cents (Stripe uses smallest currency unit)
     const amountInCents = Math.round(amount * 100);
@@ -13,6 +13,9 @@ export async function createPaymentIntent(amount, hostStripeAccountId) {
       payment_method_types: ["card"],
       automatic_payment_methods: {
         enabled: true
+      },
+      metadata: {
+        ...metadata
       }
     };
     

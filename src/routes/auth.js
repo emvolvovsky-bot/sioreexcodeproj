@@ -1,7 +1,7 @@
 import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import db from "../db/database.js";
+import { db } from "../db/database.js";
 import { sendWelcomeEmail, sendLoginEmail } from "../services/email.js";
 
 const router = express.Router();

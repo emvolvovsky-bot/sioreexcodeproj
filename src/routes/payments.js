@@ -1,7 +1,12 @@
 import express from "express";
 import { createPaymentIntent } from "../services/payments.js";
-import db from "../db/database.js";
+import { db } from "../db/database.js";
 import jwt from "jsonwebtoken";
+import Stripe from "stripe";
+
+const stripeSecret = process.env.STRIPE_SECRET_KEY || "";
+const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
+const stripe = stripeSecret ? new Stripe(stripeSecret) : null;
 
 const router = express.Router();
 
@@ -25,6 +30,13 @@ router.post("/create-intent", async (req, res) => {
     
     if (!amount) {
       return res.status(400).json({ error: "Amount is required" });
+    }
+
+    // If Stripe is not configured, return a mock client secret to allow flows in dev
+    if (!stripe) {
+      console.warn("⚠️ STRIPE_SECRET_KEY missing - returning mock client secret");
+      const mockId = `pi_mock_${Date.now()}`;
+      return res.json({ clientSecret: `mock_client_secret_${mockId}` });
     }
     
     // Normalize hostStripeAccountId - convert empty string, null, or undefined to null
@@ -161,3 +173,77 @@ router.post("/create-method", async (req, res) => {
 });
 
 export default router;
+
+// Stripe webhook handler (exported for mounting before body parser)
+export const paymentsWebhookHandler = async (req, res) => {
+  let event;
+
+  try {
+    if (stripe && stripeWebhookSecret) {
+      const sig = req.headers["stripe-signature"];
+      event = stripe.webhooks.constructEvent(req.body, sig, stripeWebhookSecret);
+    } else {
+      // Fallback: trust the payload when webhook secret is not set (dev only)
+      event = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+    }
+  } catch (err) {
+    console.error("❌ Webhook signature verification failed:", err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  const type = event.type;
+  const data = event.data?.object || {};
+  const paymentIntentId = data.id;
+  const bookingId = data.metadata?.bookingId;
+
+  const client = await db.connect();
+  try {
+    if (type === "payment_intent.succeeded") {
+      if (!paymentIntentId) {
+        console.warn("payment_intent.succeeded without id");
+      } else {
+        await client.query("BEGIN");
+        const updateResult = await client.query(
+          `UPDATE bookings 
+           SET payment_status = 'paid', status = 'confirmed', paid_at = NOW()
+           WHERE payment_intent_id = $1
+           RETURNING *`,
+          [paymentIntentId]
+        );
+
+        const updated = updateResult.rows[0];
+        if (updated) {
+          const earningsCheck = await client.query(
+            `SELECT id FROM talent_earnings WHERE booking_id = $1`,
+            [updated.id]
+          );
+          if (earningsCheck.rows.length === 0) {
+            await client.query(
+              `INSERT INTO talent_earnings (talent_id, booking_id, amount, status)
+               VALUES ($1, $2, $3, 'available')`,
+              [updated.talent_id, updated.id, updated.price]
+            );
+          }
+        }
+        await client.query("COMMIT");
+      }
+    } else if (type === "payment_intent.payment_failed") {
+      if (paymentIntentId) {
+        await client.query(
+          `UPDATE bookings 
+           SET payment_status = 'payment_failed', status = 'pending_payment'
+           WHERE payment_intent_id = $1`,
+          [paymentIntentId]
+        );
+      }
+    }
+
+    res.json({ received: true });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("❌ Webhook processing error:", err);
+    res.status(500).json({ error: "Webhook processing failed" });
+  } finally {
+    client.release();
+  }
+};

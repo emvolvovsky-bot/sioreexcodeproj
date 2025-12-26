@@ -129,9 +129,8 @@ struct RealMessageView: View {
     
     private func loadMessages() {
         isLoading = true
-        // Pass the current role to filter messages by role
-        let currentRole = selectedRoleRaw.isEmpty ? nil : selectedRoleRaw
-        messagingService.getMessages(conversationId: conversation.id, role: currentRole)
+        // Fetch without role filter to avoid backend filtering issues
+        messagingService.getMessages(conversationId: conversation.id, role: nil)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
@@ -141,7 +140,8 @@ struct RealMessageView: View {
                     }
                 },
                 receiveValue: { response in
-                    self.messages = response.messages.reversed() // Most recent at bottom
+                    // Always order chronologically so the newest renders at the bottom
+                    self.messages = response.messages.sorted { $0.timestamp < $1.timestamp }
                 }
             )
             .store(in: &cancellables)
@@ -153,13 +153,11 @@ struct RealMessageView: View {
         let text = messageText
         messageText = ""
         
-        // Pass the current role when sending message
-        let currentRole = selectedRoleRaw.isEmpty ? nil : selectedRoleRaw
         messagingService.sendMessage(
             conversationId: conversation.id,
             receiverId: conversation.participantId,
             text: text,
-            senderRole: currentRole
+            senderRole: nil
         )
         .receive(on: DispatchQueue.main)
         .sink(
@@ -170,7 +168,8 @@ struct RealMessageView: View {
                 }
             },
             receiveValue: { message in
-                messages.append(message)
+                    messages.append(message)
+                    messages.sort { $0.timestamp < $1.timestamp }
             }
         )
         .store(in: &cancellables)

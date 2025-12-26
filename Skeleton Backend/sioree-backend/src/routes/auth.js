@@ -1,7 +1,7 @@
 import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import db from "../db/database.js";
+import { db } from "../db/database.js";
 import { sendWelcomeEmail, sendLoginEmail } from "../services/email.js";
 
 const router = express.Router();
@@ -74,6 +74,8 @@ router.post("/signup", async (req, res) => {
       followerCount: userRow.follower_count || 0,
       followingCount: userRow.following_count || 0,
       eventCount: userRow.event_count || 0,
+      averageRating: userRow.average_rating !== null ? parseFloat(userRow.average_rating) : null,
+      reviewCount: userRow.review_count || 0,
       badges: []
     };
 
@@ -179,6 +181,8 @@ router.post("/login", async (req, res) => {
       followerCount: userRow.follower_count || 0,
       followingCount: userRow.following_count || 0,
       eventCount: userRow.event_count || 0,
+      averageRating: userRow.average_rating !== null ? parseFloat(userRow.average_rating) : null,
+      reviewCount: userRow.review_count || 0,
       badges: []
     };
 
@@ -256,6 +260,8 @@ router.get("/me", async (req, res) => {
       followerCount: userRow.follower_count || 0,
       followingCount: userRow.following_count || 0,
       eventCount: userRow.event_count || 0,
+      averageRating: userRow.average_rating !== null ? parseFloat(userRow.average_rating) : null,
+      reviewCount: userRow.review_count || 0,
       badges: []
     };
 

@@ -1,21 +1,54 @@
 import express from "express";
-import db from "../db/database.js";
-import jwt from "jsonwebtoken";
+import { db } from "../db/database.js";
+import { getUserIdFromToken, setFollowState } from "../utils/followHelpers.js";
 
 const router = express.Router();
 
-// Helper to get user ID from token
-function getUserIdFromToken(req) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
-  const token = authHeader.substring(7);
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key-change-in-production");
-    return decoded.userId;
-  } catch (err) {
-    return null;
+const normalizeTalentIds = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.map(id => id?.toString()).filter(Boolean);
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map(id => id.trim())
+      .filter(id => id.length > 0);
   }
-}
+  return [value.toString()].filter(Boolean);
+};
+
+const normalizeRoles = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value
+      .map(role => (role ?? "").toString().trim())
+      .filter(role => role.length > 0);
+  }
+  if (typeof value === "string") {
+    return value
+      .split(/[,|]/)
+      .map(role => role.trim())
+      .filter(role => role.length > 0);
+  }
+  return [value.toString()].filter(Boolean);
+};
+
+const buildLookingForLabel = (roles = [], legacy = null, notes = null) => {
+  const cleanRoles = normalizeRoles(roles);
+  const parts = [];
+
+  if (cleanRoles.length > 0) {
+    parts.push(cleanRoles.join(", "));
+  } else if (legacy && legacy.trim()) {
+    parts.push(legacy.trim());
+  }
+
+  if (notes && notes.trim()) {
+    parts.push(notes.trim());
+  }
+
+  const label = parts.join(" — ").trim();
+  return label.length > 0 ? label : null;
+};
 
 // GET search users - MUST be before /:id route to avoid route conflict
 router.get("/search", async (req, res) => {
@@ -157,63 +190,27 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-// POST follow/unfollow user
+// POST follow/unfollow user (legacy toggle endpoint, now uses shared helpers)
 router.post("/:id/follow", async (req, res) => {
   try {
     const followerId = getUserIdFromToken(req);
     if (!followerId) return res.status(401).json({ error: "Unauthorized" });
 
     const followingId = req.params.id;
-    if (followerId.toString() === followingId) {
-      return res.status(400).json({ error: "Cannot follow yourself" });
-    }
 
-    // Check if already following
-    const checkResult = await db.query(
-      `SELECT * FROM follows WHERE follower_id = $1 AND following_id = $2`,
+    const existing = await db.query(
+      `SELECT 1 FROM follows WHERE follower_id = $1 AND following_id = $2`,
       [followerId, followingId]
     );
+    const shouldFollow = existing.rows.length === 0;
 
-    if (checkResult.rows.length > 0) {
-      // Unfollow
-      await db.query(
-        `DELETE FROM follows WHERE follower_id = $1 AND following_id = $2`,
-        [followerId, followingId]
-      );
-      
-      // Update counts
-      await db.query(
-        `UPDATE users SET follower_count = GREATEST(0, follower_count - 1) WHERE id = $1`,
-        [followingId]
-      );
-      await db.query(
-        `UPDATE users SET following_count = GREATEST(0, following_count - 1) WHERE id = $1`,
-        [followerId]
-      );
-
-      res.json({ following: false });
-    } else {
-      // Follow
-      await db.query(
-        `INSERT INTO follows (follower_id, following_id) VALUES ($1, $2)`,
-        [followerId, followingId]
-      );
-      
-      // Update counts
-      await db.query(
-        `UPDATE users SET follower_count = follower_count + 1 WHERE id = $1`,
-        [followingId]
-      );
-      await db.query(
-        `UPDATE users SET following_count = following_count + 1 WHERE id = $1`,
-        [followerId]
-      );
-
-      res.json({ following: true });
-    }
+    const result = await setFollowState({ followerId, followingId, shouldFollow });
+    res.json(result);
   } catch (err) {
+    const message = err.message || "Failed to follow/unfollow user";
+    const status = message === "Cannot follow yourself" ? 400 : message === "Unauthorized" ? 401 : 500;
     console.error("Follow/unfollow error:", err);
-    res.status(500).json({ error: "Failed to follow/unfollow user" });
+    res.status(status).json({ error: message });
   }
 });
 
@@ -287,27 +284,36 @@ router.get("/:id/attended", async (req, res) => {
       }
     };
 
-    const events = result.rows.map(row => ({
-      id: row.id.toString(),
-      title: row.title,
-      description: row.description || "",
-      hostId: row.creator_id?.toString() || "",
-      hostName: row.host_name || row.host_username || "Unknown Host",
-      hostAvatar: row.host_avatar || null,
-      date: toISOString(row.event_date),
-      location: row.location || "",
-      images: [],
-      ticketPrice: row.ticket_price > 0 ? row.ticket_price : null,
-      capacity: row.capacity || null,
-      attendees: row.attendee_count || 0,
-      talentIds: [],
-      status: "completed",
-      createdAt: toISOString(row.created_at),
-      likes: parseInt(row.likes) || 0,
-      isLiked: row.is_liked || false,
-      isSaved: row.is_saved || false,
-      isFeatured: row.is_featured || false
-    }));
+    const events = result.rows.map(row => {
+      const lookingForRoles = normalizeRoles(row.looking_for_roles);
+      const lookingForNotes = row.looking_for_notes || null;
+      const lookingForLabel = buildLookingForLabel(lookingForRoles, row.looking_for_talent_type, lookingForNotes);
+
+      return {
+        id: row.id.toString(),
+        title: row.title,
+        description: row.description || "",
+        hostId: row.creator_id?.toString() || "",
+        hostName: row.host_name || row.host_username || "Unknown Host",
+        hostAvatar: row.host_avatar || null,
+        date: toISOString(row.event_date),
+        location: row.location || "",
+        images: [],
+        ticketPrice: row.ticket_price > 0 ? row.ticket_price : null,
+        capacity: row.capacity || null,
+        attendees: row.attendee_count || 0,
+        talentIds: normalizeTalentIds(row.talent_ids),
+        status: "completed",
+        createdAt: toISOString(row.created_at),
+        likes: parseInt(row.likes) || 0,
+        isLiked: row.is_liked || false,
+        isSaved: row.is_saved || false,
+        isFeatured: row.is_featured || false,
+        lookingForTalentType: lookingForLabel,
+        lookingForRoles,
+        lookingForNotes
+      };
+    });
 
     res.json({ events });
   } catch (err) {
@@ -329,27 +335,36 @@ router.get("/:id/events", async (req, res) => {
       [userId]
     );
 
-    const events = result.rows.map(row => ({
-      id: row.id.toString(),
-      title: row.title,
-      description: row.description || "",
-      hostId: row.creator_id.toString(),
-      hostName: row.host_name || row.host_username || "Unknown Host",
-      hostAvatar: row.host_avatar || null,
-      date: new Date(row.event_date).toISOString(),
-      location: row.location || "",
-      images: [],
-      ticketPrice: row.ticket_price || 0,
-      capacity: row.capacity || null,
-      attendees: row.attendee_count || 0,
-      talentIds: [],
-      status: "published",
-      created_at: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
-      likes: row.likes || 0,
-      isLiked: false,
-      isSaved: false,
-      isFeatured: row.is_featured || false
-    }));
+    const events = result.rows.map(row => {
+      const lookingForRoles = normalizeRoles(row.looking_for_roles);
+      const lookingForNotes = row.looking_for_notes || null;
+      const lookingForLabel = buildLookingForLabel(lookingForRoles, row.looking_for_talent_type, lookingForNotes);
+
+      return {
+        id: row.id.toString(),
+        title: row.title,
+        description: row.description || "",
+        hostId: row.creator_id.toString(),
+        hostName: row.host_name || row.host_username || "Unknown Host",
+        hostAvatar: row.host_avatar || null,
+        date: new Date(row.event_date).toISOString(),
+        location: row.location || "",
+        images: [],
+        ticketPrice: row.ticket_price || 0,
+        capacity: row.capacity || null,
+        attendees: row.attendee_count || 0,
+        talentIds: normalizeTalentIds(row.talent_ids),
+        status: "published",
+        created_at: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+        likes: row.likes || 0,
+        isLiked: false,
+        isSaved: false,
+        isFeatured: row.is_featured || false,
+        lookingForTalentType: lookingForLabel,
+        lookingForRoles,
+        lookingForNotes
+      };
+    });
 
     res.json({ events });
   } catch (err) {

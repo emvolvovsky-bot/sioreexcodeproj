@@ -18,6 +18,7 @@ struct MyEventsView: View {
     @State private var selectedEventId: String?
     @State private var eventToDelete: String?
     @State private var showDeleteConfirmation = false
+    @State private var selectedSegment: EventSegment = .upcoming
     
     @State private var localEvents: [Event] = []
     
@@ -35,6 +36,22 @@ struct MyEventsView: View {
             event.hostId == currentUserId
         }
     }
+
+    private var upcomingEvents: [Event] {
+        events
+            .filter { $0.date >= Date() }
+            .sorted { $0.date < $1.date }
+    }
+
+    private var pastEvents: [Event] {
+        events
+            .filter { $0.date < Date() }
+            .sorted { $0.date > $1.date }
+    }
+
+    private var visibleEvents: [Event] {
+        selectedSegment == .upcoming ? upcomingEvents : pastEvents
+    }
     
     private var backgroundGradient: some View {
         LinearGradient(
@@ -49,10 +66,10 @@ struct MyEventsView: View {
             Image(systemName: "calendar.badge.plus")
                 .font(.system(size: 64))
                 .foregroundColor(Color.sioreeLightGrey)
-            Text("No events yet")
+            Text(selectedSegment == .upcoming ? "No upcoming events" : "No past events")
                 .font(.sioreeH3)
                 .foregroundColor(Color.sioreeWhite)
-            Text("Create your first event to get started")
+            Text(selectedSegment == .upcoming ? "Create an event to get started" : "Completed events will appear here")
                 .font(.sioreeBody)
                 .foregroundColor(Color.sioreeLightGrey.opacity(0.7))
         }
@@ -61,7 +78,7 @@ struct MyEventsView: View {
     }
     
     private var eventsListView: some View {
-        ForEach(events) { event in
+        ForEach(visibleEvents) { event in
             eventRowView(for: event)
                 .transition(.asymmetric(
                     insertion: .opacity.combined(with: .scale(scale: 0.95)),
@@ -133,14 +150,27 @@ struct MyEventsView: View {
         }
     }
     
+    private var segmentPicker: some View {
+        Picker("Event Filter", selection: $selectedSegment) {
+            ForEach(EventSegment.allCases, id: \.self) { segment in
+                Text(segment.rawValue)
+                    .tag(segment)
+            }
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal, Theme.Spacing.m)
+    }
+
     private var contentView: some View {
         ScrollView {
             LazyVStack(spacing: Theme.Spacing.m) {
+                segmentPicker
+
                 if homeViewModel.isLoading && !homeViewModel.hasLoaded {
                     ProgressView()
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, Theme.Spacing.xxl)
-                } else if events.isEmpty && homeViewModel.hasLoaded {
+                } else if visibleEvents.isEmpty && homeViewModel.hasLoaded {
                     emptyStateView
                 } else {
                     eventsListView
@@ -187,11 +217,18 @@ struct MyEventsView: View {
                 }
                 .padding(Theme.Spacing.m)
             }
-            .sheet(isPresented: $showNewEvent) {
-                NewEventPlaceholderView(onEventCreated: {
-                    // Reload events after creation
-                    homeViewModel.loadNearbyEvents()
-                })
+            .sheet(isPresented: $showNewEvent, onDismiss: {
+                // Reload events after creation
+                homeViewModel.loadNearbyEvents()
+            }) {
+                EventCreateView { event in
+                    // Insert newly created event locally so it appears immediately
+                    withAnimation {
+                        localEvents.insert(event, at: 0)
+                        homeViewModel.nearbyEvents.insert(event, at: 0)
+                    }
+                }
+                .environmentObject(authViewModel)
             }
             .sheet(isPresented: $showQRScanner) {
                 if let eventId = selectedEventId {
@@ -217,10 +254,8 @@ struct MyEventsView: View {
     private func eventStatusString(for event: Event) -> String {
         if event.date < Date() {
             return "Ended"
-        } else if event.isFeatured {
-            return "On sale"
         } else {
-            return "Draft"
+            return "Upcoming"
         }
     }
     
@@ -258,6 +293,12 @@ struct MyEventsView: View {
                 receiveValue: { success in
                     print("✅ Delete response: \(success)")
                     if success {
+                        // Post notification so all views can update
+                        NotificationCenter.default.post(
+                            name: NSNotification.Name("EventDeleted"),
+                            object: nil,
+                            userInfo: ["eventId": eventId]
+                        )
                         // Event already removed optimistically, just reload to sync
                         withAnimation {
                             homeViewModel.loadNearbyEvents()
@@ -277,6 +318,11 @@ struct MyEventsView: View {
     @State private var cancellables = Set<AnyCancellable>()
 }
 
+private enum EventSegment: String, CaseIterable {
+    case upcoming = "Upcoming"
+    case past = "Past"
+}
+
 
 struct NewEventPlaceholderView: View {
     @Environment(\.dismiss) var dismiss
@@ -294,15 +340,10 @@ struct NewEventPlaceholderView: View {
     @State private var showMap = false
     @State private var selectedLocation: CLLocationCoordinate2D?
     @State private var selectedAddress: String?
-    @State private var selectedTags: Set<String> = []
-    @State private var isFeatured = false
-    @State private var showFeatureInfo = false
     @State private var isCreating = false
     @State private var showError = false
     @State private var errorMessage = ""
     @State private var isFreeEntry = true
-    
-    let availableTags = ["Techno", "House", "Rave", "Underground", "Chill", "Lounge", "Sunset", "Party", "Pop", "Dance", "Networking", "Business", "Professional", "Jazz", "Live Music", "Cocktails", "Beach", "DJ", "Outdoor"]
     
     private var isFormValid: Bool {
         !name.isEmpty &&
@@ -382,50 +423,6 @@ struct NewEventPlaceholderView: View {
                         
                         CustomTextField(placeholder: "Capacity (optional)", text: $capacity, keyboardType: .numberPad)
                     }
-                    
-                    Section("Tags") {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: Theme.Spacing.s) {
-                                ForEach(availableTags, id: \.self) { tag in
-                                    Button(action: {
-                                        if selectedTags.contains(tag) {
-                                            selectedTags.remove(tag)
-                                        } else {
-                                            selectedTags.insert(tag)
-                                        }
-                                    }) {
-                                        Text(tag)
-                                            .font(.sioreeBodySmall)
-                                            .foregroundColor(selectedTags.contains(tag) ? .sioreeWhite : .sioreeLightGrey)
-                                            .padding(.horizontal, Theme.Spacing.m)
-                                            .padding(.vertical, Theme.Spacing.s)
-                                            .background(selectedTags.contains(tag) ? Color.sioreeIcyBlue : Color.sioreeLightGrey.opacity(0.2))
-                                            .cornerRadius(Theme.CornerRadius.medium)
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                                                    .stroke(selectedTags.contains(tag) ? Color.sioreeIcyBlue : Color.sioreeLightGrey.opacity(0.3), lineWidth: 2)
-                                            )
-                                    }
-                                }
-                            }
-                            .padding(.horizontal, Theme.Spacing.s)
-                        }
-                    }
-                    
-                    Section {
-                        HStack {
-                            Toggle("Feature this event", isOn: $isFeatured)
-                                .foregroundColor(.sioreeWhite)
-                            
-                            Button(action: {
-                                showFeatureInfo = true
-                            }) {
-                                Image(systemName: "info.circle")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(.sioreeIcyBlue)
-                            }
-                        }
-                    }
                 }
                 .scrollContentBackground(.hidden)
             }
@@ -458,11 +455,6 @@ struct NewEventPlaceholderView: View {
                 Button("OK", role: .cancel) { }
             } message: {
                 Text(errorMessage)
-            }
-            .alert("Feature This Event", isPresented: $showFeatureInfo) {
-                Button("Got it", role: .cancel) { }
-            } message: {
-                Text("Featured events appear at the top of search results and in the main feed, giving your event more visibility to potential attendees.")
             }
         }
     }

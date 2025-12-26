@@ -41,37 +41,32 @@ struct HostHomeView: View {
                                 .progressViewStyle(CircularProgressViewStyle(tint: .sioreeIcyBlue))
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, Theme.Spacing.xl)
-                        } else if recentSignups.isEmpty {
-                            // Empty state
-                            VStack(spacing: Theme.Spacing.m) {
-                                Image(systemName: "person.2.fill")
-                                    .font(.system(size: 60))
-                                    .foregroundColor(Color.sioreeIcyBlue.opacity(0.5))
-                                
-                                Text("No recent signups")
-                                    .font(.sioreeH3)
-                                    .foregroundColor(Color.sioreeWhite)
-                                
-                                Text("People who sign up for your events will appear here")
-                                    .font(.sioreeBody)
-                                    .foregroundColor(Color.sioreeLightGrey)
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal, Theme.Spacing.xl)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, Theme.Spacing.xxl)
                         } else {
-                            // Signups list
-                            VStack(spacing: Theme.Spacing.s) {
-                                ForEach(recentSignups) { signup in
-                                    NavigationLink(destination: UserProfileView(userId: signup.userId)) {
-                                        RecentSignupRow(signup: signup)
+                            if recentSignups.isEmpty {
+                                // Show placeholder examples only (no conflicting "no signups" message)
+                                VStack(spacing: Theme.Spacing.s) {
+                                    ForEach(placeholderSignups) { signup in
+                                        NavigationLink(destination: UserProfileView(userId: signup.userId)) {
+                                            RecentSignupRow(signup: signup)
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                        .padding(.horizontal, Theme.Spacing.m)
                                     }
-                                    .buttonStyle(PlainButtonStyle())
-                                    .padding(.horizontal, Theme.Spacing.m)
                                 }
+                                .padding(.top, Theme.Spacing.s)
+                            } else {
+                                // Signups list
+                                VStack(spacing: Theme.Spacing.s) {
+                                    ForEach(recentSignups) { signup in
+                                        NavigationLink(destination: UserProfileView(userId: signup.userId)) {
+                                            RecentSignupRow(signup: signup)
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                        .padding(.horizontal, Theme.Spacing.m)
+                                    }
+                                }
+                                .padding(.top, Theme.Spacing.s)
                             }
-                            .padding(.top, Theme.Spacing.s)
                         }
                     }
                     .padding(.vertical, Theme.Spacing.m)
@@ -112,6 +107,44 @@ struct HostHomeView: View {
     }
     
     @State private var cancellables = Set<AnyCancellable>()
+    
+    private var placeholderSignups: [EventSignup] {
+        [
+            EventSignup(
+                id: "demo-1",
+                signedUpAt: Date().addingTimeInterval(-300),
+                eventId: "demo-event-1",
+                eventTitle: "Sunset Rooftop Social",
+                eventDate: Date().addingTimeInterval(86_400),
+                userId: "user-demo-1",
+                userName: "Alex Rivera",
+                userUsername: "@alex",
+                userAvatar: nil
+            ),
+            EventSignup(
+                id: "demo-2",
+                signedUpAt: Date().addingTimeInterval(-1800),
+                eventId: "demo-event-2",
+                eventTitle: "Downtown Afterparty",
+                eventDate: Date().addingTimeInterval(172_800),
+                userId: "user-demo-2",
+                userName: "Jamie Lee",
+                userUsername: "@jamie",
+                userAvatar: nil
+            ),
+            EventSignup(
+                id: "demo-3",
+                signedUpAt: Date().addingTimeInterval(-7_200),
+                eventId: "demo-event-3",
+                eventTitle: "Creators & Cocktails",
+                eventDate: Date().addingTimeInterval(259_200),
+                userId: "user-demo-3",
+                userName: "Taylor Morgan",
+                userUsername: "@taylor",
+                userAvatar: nil
+            )
+        ]
+    }
 }
 
 struct RecentSignupRow: View {

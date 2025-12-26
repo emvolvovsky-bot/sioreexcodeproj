@@ -8,6 +8,7 @@
 import Foundation
 import SwiftUI
 import Combine
+import CoreLocation
 
 class HomeViewModel: ObservableObject {
     @Published var featuredEvents: [Event] = []
@@ -15,14 +16,57 @@ class HomeViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var hasLoaded = false
+    @Published var selectedDate: Date? = nil
+    @Published var lastKnownCoordinate: CLLocationCoordinate2D?
+    
+    // Store all loaded events before filtering
+    private var allFeaturedEvents: [Event] = []
+    private var allNearbyEvents: [Event] = []
     
     private let networkService = NetworkService()
     private var cancellables = Set<AnyCancellable>()
     
-    func loadEvents() {
-        guard !isLoading else { return }
+    init() {
+        // Listen for RSVP notifications to remove events from lists
+        NotificationCenter.default.publisher(for: NSNotification.Name("EventRSVPed"))
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                if let eventId = notification.userInfo?["eventId"] as? String {
+                    self?.removeEventFromLists(eventId: eventId)
+                }
+            }
+            .store(in: &cancellables)
+        
+        // Listen for delete notifications to remove events from lists
+        NotificationCenter.default.publisher(for: NSNotification.Name("EventDeleted"))
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                if let eventId = notification.userInfo?["eventId"] as? String {
+                    self?.removeEventFromLists(eventId: eventId)
+                }
+            }
+            .store(in: &cancellables)
+    }
+    
+    private func removeEventFromLists(eventId: String) {
+        // Remove from featured events
+        featuredEvents.removeAll { $0.id == eventId }
+        
+        // Remove from nearby events
+        nearbyEvents.removeAll { $0.id == eventId }
+        
+        print("✅ Removed event \(eventId) from nearby/featured lists")
+    }
+    
+    func loadEvents(userLocation: CLLocationCoordinate2D? = nil) {
+        guard !isLoading || userLocation != nil else { return }
         isLoading = true
         errorMessage = nil
+        if let userLocation {
+            lastKnownCoordinate = userLocation
+        }
+        
+        let skipNearby = lastKnownCoordinate == nil && userLocation == nil
         
         // Load featured events (promoted by brands)
         networkService.fetchFeaturedEvents()
@@ -32,57 +76,79 @@ class HomeViewModel: ObservableObject {
                     if case .failure(let error) = completion {
                         print("❌ Failed to load featured events: \(error)")
                         // Use placeholder featured events if API fails
-                        self?.featuredEvents = self?.generatePlaceholderFeaturedEvents() ?? []
+                        self?.allFeaturedEvents = self?.generatePlaceholderFeaturedEvents() ?? []
+                        self?.applyDateFilter()
                     }
                 },
                 receiveValue: { [weak self] events in
                     // Always show placeholders for preview (can be removed later)
                     // Use real data if available, otherwise use placeholders
                     if events.isEmpty {
-                        self?.featuredEvents = self?.generatePlaceholderFeaturedEvents() ?? []
-                        print("📋 Using \(self?.featuredEvents.count ?? 0) placeholder featured events")
+                        self?.allFeaturedEvents = self?.generatePlaceholderFeaturedEvents() ?? []
+                        print("📋 Using \(self?.allFeaturedEvents.count ?? 0) placeholder featured events")
                     } else {
-                        self?.featuredEvents = events
+                        self?.allFeaturedEvents = events
                         print("✅ Loaded \(events.count) featured events")
                     }
+                    // Apply date filter if one is selected
+                    self?.applyDateFilter()
                     // Ensure nearby events also get placeholders if empty
                     if self?.nearbyEvents.isEmpty == true && self?.hasLoaded == false {
-                        self?.nearbyEvents = self?.generatePlaceholderNearbyEvents() ?? []
+                        self?.allNearbyEvents = self?.generatePlaceholderNearbyEvents() ?? []
+                        self?.applyDateFilter()
                     }
                 }
             )
             .store(in: &cancellables)
         
         // Load nearby events
-        networkService.fetchNearbyEvents()
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { [weak self] completion in
-                    self?.isLoading = false
-                    if case .failure(let error) = completion {
-                        self?.errorMessage = error.localizedDescription
-                        // Use placeholder nearby events if API fails
-                        self?.nearbyEvents = self?.generatePlaceholderNearbyEvents() ?? []
-                        self?.hasLoaded = true
-                    } else {
-                        self?.hasLoaded = true
-                    }
-                },
-                receiveValue: { [weak self] events in
-                    // Always show placeholders for preview (can be removed later)
-                    // Use real data if available, otherwise use placeholders
-                    if events.isEmpty {
-                        self?.nearbyEvents = self?.generatePlaceholderNearbyEvents() ?? []
-                        print("📋 Using \(self?.nearbyEvents.count ?? 0) placeholder nearby events")
-                    } else {
-                        self?.nearbyEvents = events
-                        print("✅ Loaded \(events.count) nearby events")
-                    }
-                    self?.isLoading = false
+        if skipNearby {
+            // No location available; clear nearby and finish loading featured only.
+            allNearbyEvents = []
+            nearbyEvents = []
+            DispatchQueue.main.async { [weak self] in
+                self?.isLoading = false
+                self?.hasLoaded = true
+            }
+            return
+        }
+        
+        networkService.fetchNearbyEvents(
+            latitude: lastKnownCoordinate?.latitude,
+            longitude: lastKnownCoordinate?.longitude,
+            radiusMiles: 30
+        )
+        .receive(on: DispatchQueue.main)
+        .sink(
+            receiveCompletion: { [weak self] completion in
+                self?.isLoading = false
+                if case .failure(let error) = completion {
+                    self?.errorMessage = error.localizedDescription
+                    // Use placeholder nearby events if API fails
+                    self?.allNearbyEvents = self?.generatePlaceholderNearbyEvents() ?? []
+                    self?.applyDateFilter()
+                    self?.hasLoaded = true
+                } else {
                     self?.hasLoaded = true
                 }
-            )
-            .store(in: &cancellables)
+            },
+            receiveValue: { [weak self] events in
+                // Always show placeholders for preview (can be removed later)
+                // Use real data if available, otherwise use placeholders
+                if events.isEmpty {
+                    self?.allNearbyEvents = self?.generatePlaceholderNearbyEvents() ?? []
+                    print("📋 Using \(self?.allNearbyEvents.count ?? 0) placeholder nearby events")
+                } else {
+                    self?.allNearbyEvents = events
+                    print("✅ Loaded \(events.count) nearby events")
+                }
+                // Apply date filter if one is selected
+                self?.applyDateFilter()
+                self?.isLoading = false
+                self?.hasLoaded = true
+            }
+        )
+        .store(in: &cancellables)
     }
     
     // Generate realistic placeholder featured events (promoted by brands)
@@ -248,6 +314,43 @@ class HomeViewModel: ObservableObject {
     var events: [Event] {
         nearbyEvents
     }
+    
+    // Filter events by selected date
+    func applyDateFilter() {
+        guard let selectedDate = selectedDate else {
+            // No filter - show all events
+            featuredEvents = allFeaturedEvents
+            nearbyEvents = allNearbyEvents
+            return
+        }
+        
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: selectedDate)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? startOfDay
+        
+        // Filter featured events
+        featuredEvents = allFeaturedEvents.filter { event in
+            let eventDate = calendar.startOfDay(for: event.date)
+            return eventDate >= startOfDay && eventDate < endOfDay
+        }
+        
+        // Filter nearby events
+        nearbyEvents = allNearbyEvents.filter { event in
+            let eventDate = calendar.startOfDay(for: event.date)
+            return eventDate >= startOfDay && eventDate < endOfDay
+        }
+        
+        print("📅 Filtered events for date: \(selectedDate.formatted(date: .abbreviated, time: .omitted))")
+        print("   Featured: \(featuredEvents.count) / \(allFeaturedEvents.count)")
+        print("   Nearby: \(nearbyEvents.count) / \(allNearbyEvents.count)")
+    }
+    
+    // Clear date filter
+    func clearDateFilter() {
+        selectedDate = nil
+        applyDateFilter()
+    }
+    
 }
 
 

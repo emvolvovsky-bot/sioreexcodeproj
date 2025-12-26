@@ -77,12 +77,9 @@ struct TalentMarketplaceProfileView: View {
                                     
                                     // Stats - Followers, Following, Events, and Username
                                     ProfileStatsView(
-                                        eventsHosted: user.eventCount,
-                                        eventsAttended: 0,
                                         followers: user.followerCount,
                                         following: user.followingCount,
                                         username: user.username,
-                                        userType: user.userType,
                                         userId: user.id
                                     )
                                 }
@@ -192,28 +189,6 @@ struct TalentMarketplaceProfileView: View {
                             }
                         }
                         
-                        // Role Switch Button
-                        Button(action: {
-                            showRoleSelection = true
-                        }) {
-                            HStack {
-                                Image(systemName: "arrow.triangle.2.circlepath")
-                                    .font(.system(size: 16))
-                                Text("Feeling different?")
-                                    .font(.sioreeBody)
-                            }
-                            .foregroundColor(Color.sioreeIcyBlue)
-                            .frame(maxWidth: .infinity)
-                            .padding(Theme.Spacing.m)
-                            .background(Color.sioreeIcyBlue.opacity(0.1))
-                            .cornerRadius(Theme.CornerRadius.medium)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                                    .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 2)
-                            )
-                        }
-                                .padding(.horizontal, Theme.Spacing.m)
-                                .padding(.bottom, Theme.Spacing.xl)
                             }
                             .padding(.vertical, Theme.Spacing.m)
                         }
@@ -223,6 +198,19 @@ struct TalentMarketplaceProfileView: View {
             .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    if let user = currentUser {
+                        Button(action: { showRoleSelection = true }) {
+                            HStack(spacing: 6) {
+                                Text(user.username)
+                                    .font(.system(size: 18, weight: .semibold))
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 14, weight: .semibold))
+                            }
+                            .foregroundColor(.sioreeWhite)
+                        }
+                    }
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: {
                         showSettings = true
@@ -272,7 +260,8 @@ struct TalentClip: Identifiable {
     let id: String
     let title: String
     let thumbnail: String
-    let duration: String
+    var videoURL: String?
+    var duration: String? // Optional now
 }
 
 struct PortfolioItem: Identifiable {
@@ -371,13 +360,15 @@ struct ClipCard: View {
                         .font(.system(size: 40))
                         .foregroundColor(Color.sioreeIcyBlue.opacity(0.7))
                     
-                    Text(clip.duration)
-                        .font(.sioreeCaption)
-                        .foregroundColor(Color.sioreeWhite)
-                        .padding(.horizontal, Theme.Spacing.xs)
-                        .padding(.vertical, 2)
-                        .background(Color.sioreeBlack.opacity(0.7))
-                        .cornerRadius(4)
+                    if let duration = clip.duration, !duration.isEmpty {
+                        Text(duration)
+                            .font(.sioreeCaption)
+                            .foregroundColor(Color.sioreeWhite)
+                            .padding(.horizontal, Theme.Spacing.xs)
+                            .padding(.vertical, 2)
+                            .background(Color.sioreeBlack.opacity(0.7))
+                            .cornerRadius(4)
+                    }
                 }
             }
             

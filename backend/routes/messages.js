@@ -34,10 +34,8 @@ router.get('/conversations', async (req, res) => {
         c.is_active
       FROM conversations c
       JOIN users u ON (
-        CASE 
-          WHEN c.participant1_id = $1 THEN u.id = c.participant2_id
-          ELSE u.id = c.participant1_id
-        END
+        (c.participant1_id = $1 AND u.id = c.participant2_id) OR
+        (c.participant2_id = $1 AND u.id = c.participant1_id)
       )
       WHERE (c.participant1_id = $1 OR c.participant2_id = $1)
         AND c.is_active = true
@@ -258,10 +256,8 @@ router.post('/conversation', [
         c.is_active
       FROM conversations c
       JOIN users u ON (
-        CASE 
-          WHEN c.participant1_id = $1 THEN u.id = c.participant2_id
-          ELSE u.id = c.participant1_id
-        END
+        (c.participant1_id = $1 AND u.id = c.participant2_id) OR
+        (c.participant2_id = $1 AND u.id = c.participant1_id)
       )
       WHERE c.id = $2`,
       [currentUserId, conversationId]

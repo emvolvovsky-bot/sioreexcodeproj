@@ -68,6 +68,27 @@ class StorageService {
         }
         return UserType(rawValue: rawValue)
     }
+
+    // MARK: - Following Cache
+    func saveFollowingIds(_ ids: [String]) {
+        userDefaults.set(ids, forKey: Constants.UserDefaultsKeys.followingIdsCache)
+    }
+    
+    func getFollowingIds() -> [String] {
+        return userDefaults.stringArray(forKey: Constants.UserDefaultsKeys.followingIdsCache) ?? []
+    }
+    
+    func addFollowingId(_ id: String) {
+        var ids = Set(getFollowingIds())
+        ids.insert(id)
+        saveFollowingIds(Array(ids))
+    }
+    
+    func removeFollowingId(_ id: String) {
+        var ids = Set(getFollowingIds())
+        ids.remove(id)
+        saveFollowingIds(Array(ids))
+    }
     
     // MARK: - Generic Data Storage
     func saveData(_ data: Data, forKey key: String) {

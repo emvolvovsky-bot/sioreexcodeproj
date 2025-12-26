@@ -38,6 +38,7 @@ struct HostInboxView: View {
     @State private var selectedConversation: Conversation?
     @State private var errorMessage: String?
     @State private var showSearch = false
+    @State private var showCreateGroup = false
     @AppStorage("selectedUserRole") private var selectedRoleRaw: String = ""
     
     var body: some View {
@@ -93,6 +94,15 @@ struct HostInboxView: View {
             .navigationTitle("Inbox")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: {
+                        showCreateGroup = true
+                    }) {
+                        Image(systemName: "person.2.fill")
+                            .foregroundColor(.sioreeIcyBlue)
+                    }
+                }
+                
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: {
                         showSearch = true
@@ -104,6 +114,9 @@ struct HostInboxView: View {
             }
             .sheet(isPresented: $showSearch) {
                 UserSearchView()
+            }
+            .sheet(isPresented: $showCreateGroup) {
+                CreateGroupChatView()
             }
             .onAppear {
                 loadConversations()
@@ -128,9 +141,8 @@ struct HostInboxView: View {
     
     private func loadConversations() {
         isLoading = true
-        // Pass the current role to filter messages by role
-        let currentRole = selectedRoleRaw.isEmpty ? "host" : selectedRoleRaw
-        messagingService.getConversations(role: currentRole)
+        // Fetch shared inbox across all roles
+        messagingService.getConversations()
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
@@ -140,7 +152,7 @@ struct HostInboxView: View {
                     }
                 },
                 receiveValue: { conversations in
-                    self.conversations = conversations
+                    self.conversations = conversations.sorted { $0.lastMessageTime > $1.lastMessageTime }
                 }
             )
             .store(in: &cancellables)

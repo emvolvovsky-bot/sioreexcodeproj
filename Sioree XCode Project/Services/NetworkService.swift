@@ -218,11 +218,24 @@ class NetworkService {
             .eraseToAnyPublisher()
     }
     
-    func fetchNearbyEvents() -> AnyPublisher<[Event], Error> {
+    func fetchNearbyEvents(latitude: Double? = nil, longitude: Double? = nil, radiusMiles: Int = 30) -> AnyPublisher<[Event], Error> {
         struct NearbyEventsResponse: Codable {
             let events: [Event]
         }
-        return request("/api/events/nearby")
+        var endpoint = "/api/events/nearby"
+        var params: [String] = []
+        if let latitude {
+            params.append("lat=\(latitude)")
+        }
+        if let longitude {
+            params.append("lng=\(longitude)")
+        }
+        params.append("radius=\(radiusMiles)")
+        if !params.isEmpty {
+            endpoint += "?" + params.joined(separator: "&")
+        }
+        
+        return request(endpoint)
             .map { (response: NearbyEventsResponse) in
                 response.events
             }
@@ -237,8 +250,24 @@ class NetworkService {
         struct Response: Codable {
             let events: [Event]
         }
-        let encodedType = talentType.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? talentType
-        return request("/api/events/looking-for/\(encodedType)")
+        let trimmed = talentType.trimmingCharacters(in: .whitespacesAndNewlines)
+        let encodedType = trimmed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? trimmed
+        let endpoint: String
+        if encodedType.isEmpty {
+            endpoint = "/api/events/looking-for"
+        } else {
+            endpoint = "/api/events/looking-for?roles=\(encodedType)"
+        }
+        return request(endpoint)
+            .map { (response: Response) in response.events }
+            .eraseToAnyPublisher()
+    }
+    
+    func fetchTalentUpcomingEvents() -> AnyPublisher<[Event], Error> {
+        struct Response: Codable {
+            let events: [Event]
+        }
+        return request("/api/events/talent/upcoming")
             .map { (response: Response) in response.events }
             .eraseToAnyPublisher()
     }
@@ -249,7 +278,18 @@ class NetworkService {
             .eraseToAnyPublisher()
     }
     
-    func createEvent(title: String, description: String, date: Date, time: Date, location: String, images: [String], ticketPrice: Double?, capacity: Int? = nil, talentIds: [String] = [], lookingForTalentType: String? = nil) -> AnyPublisher<Event, Error> {
+    func createEvent(title: String,
+                     description: String,
+                     date: Date,
+                     time: Date,
+                     location: String,
+                     images: [String],
+                     ticketPrice: Double?,
+                     capacity: Int? = nil,
+                     talentIds: [String] = [],
+                     lookingForRoles: [String] = [],
+                     lookingForNotes: String? = nil,
+                     lookingForTalentType: String? = nil) -> AnyPublisher<Event, Error> {
         // Combine date and time for event_date
         let calendar = Calendar.current
         let dateComponents = calendar.dateComponents([.year, .month, .day], from: date)
@@ -262,10 +302,15 @@ class NetworkService {
         combinedComponents.minute = timeComponents.minute
         let combinedDate = calendar.date(from: combinedComponents) ?? date
         
+        let isoDate = ISO8601DateFormatter().string(from: combinedDate)
+        
+        // Send both camelCase and snake_case keys for maximum backend compatibility
         var body: [String: Any] = [
             "title": title,
             "description": description,
-            "event_date": ISO8601DateFormatter().string(from: combinedDate),
+            "event_date": isoDate,
+            "eventDate": isoDate,
+            "date": isoDate,
             "location": location,
             "images": images
         ]
@@ -276,8 +321,10 @@ class NetworkService {
         // JSONSerialization will handle Double correctly as a number
         if let price = ticketPrice, price > 0 {
             body["ticket_price"] = Double(price)  // Explicitly cast to Double to ensure number type
+            body["ticketPrice"] = Double(price)
         } else {
             body["ticket_price"] = Double(0.0)  // Free event - send as Double 0.0
+            body["ticketPrice"] = Double(0.0)
         }
         
         // Add capacity if provided
@@ -286,14 +333,40 @@ class NetworkService {
         }
         
         // Add talent IDs if provided
-        if !talentIds.isEmpty {
-            body["talentIds"] = talentIds
+        body["talentIds"] = talentIds
+        body["talent_ids"] = talentIds
+        
+        // Add structured looking-for roles and notes
+        if !lookingForRoles.isEmpty {
+            body["lookingForRoles"] = lookingForRoles
+            body["looking_for_roles"] = lookingForRoles
+        }
+        if let notes = lookingForNotes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
+            body["lookingForNotes"] = notes
+            body["looking_for_notes"] = notes
+            body["lookingForTalentNotes"] = notes
         }
         
-        // Add looking for talent type if provided
-        if let talentType = lookingForTalentType {
-            body["lookingForTalentType"] = talentType
+        let trimmedRolesSummary = lookingForRoles
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: ", ")
+        var lookingForSummaryParts: [String] = []
+        if !trimmedRolesSummary.isEmpty { lookingForSummaryParts.append(trimmedRolesSummary) }
+        if let notes = lookingForNotes?.trimmingCharacters(in: .whitespacesAndNewlines), !notes.isEmpty {
+            lookingForSummaryParts.append(notes)
         }
+        let fallbackLookingFor = lookingForSummaryParts.joined(separator: " — ")
+        
+        // Add looking for talent type if provided
+        let talentType = (lookingForTalentType?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 }
+            ?? (fallbackLookingFor.isEmpty ? nil : fallbackLookingFor)
+            ?? "General talent"
+        
+        // Always include keys so backend validators see the field defined, and ensure it's non-empty
+        body["lookingForTalentType"] = talentType
+        body["looking_for_talent_type"] = talentType
+        body["talentNeeded"] = talentType
         
         print("📤 Creating event with body: \(body)")
         
@@ -312,13 +385,21 @@ class NetworkService {
         return request("/api/events/\(eventId)/save", method: "POST")
     }
     
-    func rsvpToEvent(eventId: String) -> AnyPublisher<Bool, Error> {
+    func rsvpToEvent(eventId: String) -> AnyPublisher<RSVPResponse, Error> {
         struct Response: Codable {
             let success: Bool
+            let qrCode: String?
         }
         return request("/api/events/\(eventId)/rsvp", method: "POST")
-            .map { (response: Response) in response.success }
+            .map { (response: Response) in
+                RSVPResponse(success: response.success, qrCode: response.qrCode)
+            }
             .eraseToAnyPublisher()
+    }
+    
+    struct RSVPResponse {
+        let success: Bool
+        let qrCode: String?
     }
     
     func cancelRSVP(eventId: String) -> AnyPublisher<Bool, Error> {
@@ -342,6 +423,15 @@ class NetworkService {
     // MARK: - Users
     func fetchUserProfile(userId: String) -> AnyPublisher<User, Error> {
         return request("/api/users/\(userId)")
+    }
+    
+    func fetchTalentCompletedEvents(talentUserId: String) -> AnyPublisher<[Event], Error> {
+        struct Response: Codable {
+            let events: [Event]?
+        }
+        return request("/api/talent/\(talentUserId)/completed-events")
+            .map { (response: Response) in response.events ?? [] }
+            .eraseToAnyPublisher()
     }
     
     func fetchUserEvents(userId: String) -> AnyPublisher<[Event], Error> {
@@ -384,9 +474,116 @@ class NetworkService {
         return request("/api/users/\(userId)/posts")
     }
     
-    func updateProfile(name: String?, bio: String?, location: String?) -> AnyPublisher<User, Error> {
+    func createPost(caption: String?, mediaUrls: [String] = [], location: String? = nil, eventId: String? = nil) -> AnyPublisher<Post, Error> {
+        var body: [String: Any] = [:]
+        if let caption = caption { body["caption"] = caption }
+        if !mediaUrls.isEmpty { body["mediaUrls"] = mediaUrls }
+        if let location = location { body["location"] = location }
+        if let eventId = eventId { body["eventId"] = eventId }
+        
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else {
+            return Fail(error: NetworkError.unknown).eraseToAnyPublisher()
+        }
+        
+        return request("/api/posts", method: "POST", body: jsonData)
+    }
+    
+    // MARK: - Group Chats
+    func createGroupChat(title: String, memberIds: [String]) -> AnyPublisher<GroupChat, Error> {
+        let body: [String: Any] = [
+            "title": title,
+            "memberIds": memberIds
+        ]
+        
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else {
+            return Fail(error: NetworkError.unknown).eraseToAnyPublisher()
+        }
+        
+        struct Response: Codable {
+            let id: String
+            let title: String
+            let isGroup: Bool
+            let members: [GroupMember]
+            let createdAt: String
+        }
+
+        let endpoints = [
+            "/api/messages/groups",
+            "/api/messages/group-chats",      // fallback alias
+            "/api/messages/groupchat"         // fallback alias
+        ]
+
+        func attempt(_ index: Int) -> AnyPublisher<GroupChat, Error> {
+            guard index < endpoints.count else {
+                return Fail(error: NetworkError.serverError("Group chat endpoint unavailable")).eraseToAnyPublisher()
+            }
+
+            return request(endpoints[index], method: "POST", body: jsonData)
+                .map { (response: Response) in
+                    let formatter = ISO8601DateFormatter()
+                    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                    let date = formatter.date(from: response.createdAt) ?? Date()
+                    
+                    return GroupChat(
+                        id: response.id,
+                        title: response.title,
+                        members: response.members,
+                        createdAt: date
+                    )
+                }
+                .catch { error -> AnyPublisher<GroupChat, Error> in
+                    if case let NetworkError.serverError(message) = error,
+                       message.contains("404") {
+                        // Retry next alias on 404
+                        return attempt(index + 1)
+                    }
+                    return Fail(error: error).eraseToAnyPublisher()
+                }
+                .eraseToAnyPublisher()
+        }
+
+        return attempt(0)
+    }
+    
+    func getGroupMembers(conversationId: String) -> AnyPublisher<[GroupMember], Error> {
+        struct Response: Codable {
+            let members: [GroupMember]
+        }
+        return request("/api/messages/groups/\(conversationId)/members")
+            .map { (response: Response) in response.members }
+            .eraseToAnyPublisher()
+    }
+    
+    func addGroupMembers(conversationId: String, memberIds: [String]) -> AnyPublisher<Bool, Error> {
+        let body: [String: Any] = [
+            "memberIds": memberIds
+        ]
+        
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else {
+            return Fail(error: NetworkError.unknown).eraseToAnyPublisher()
+        }
+        
+        struct Response: Codable {
+            let success: Bool
+        }
+        return request("/api/messages/groups/\(conversationId)/members", method: "POST", body: jsonData)
+            .map { (response: Response) in response.success }
+            .eraseToAnyPublisher()
+    }
+    
+    func removeGroupMember(conversationId: String, memberId: String) -> AnyPublisher<Bool, Error> {
+        struct Response: Codable {
+            let success: Bool
+        }
+        return request("/api/messages/groups/\(conversationId)/members/\(memberId)", method: "DELETE")
+            .map { (response: Response) in response.success }
+            .eraseToAnyPublisher()
+    }
+    
+    func updateProfile(name: String?, username: String?, bio: String?, location: String?) -> AnyPublisher<User, Error> {
         var body: [String: Any] = [:]
         if let name = name { body["name"] = name }
+        if let username = username { body["username"] = username }
         if let bio = bio { body["bio"] = bio }
         if let location = location { body["location"] = location }
         
@@ -398,13 +595,25 @@ class NetworkService {
     }
     
     func uploadProfilePicture(image: UIImage) -> AnyPublisher<String, Error> {
-        // Convert image to base64 or upload to server
-        // For now, we'll use a simple approach: convert to base64 and send
-        guard let imageData = image.jpegData(compressionQuality: 0.8) else {
+        // Resize and compress image before upload to avoid HTTP 413 errors
+        let resizedImage = image.resized(to: CGSize(width: 800, height: 800))
+        
+        // Try different compression qualities to keep file size under 1MB
+        var compressionQuality: CGFloat = 0.7
+        var imageData = resizedImage.jpegData(compressionQuality: compressionQuality)
+        let maxSize = 1 * 1024 * 1024 // 1MB
+        
+        // Reduce quality if image is still too large
+        while let data = imageData, data.count > maxSize && compressionQuality > 0.1 {
+            compressionQuality -= 0.1
+            imageData = resizedImage.jpegData(compressionQuality: compressionQuality)
+        }
+        
+        guard let finalImageData = imageData else {
             return Fail(error: NetworkError.unknown).eraseToAnyPublisher()
         }
         
-        let base64String = imageData.base64EncodedString()
+        let base64String = finalImageData.base64EncodedString()
         let body: [String: Any] = [
             "avatar": "data:image/jpeg;base64,\(base64String)"
         ]
@@ -422,24 +631,115 @@ class NetworkService {
             .eraseToAnyPublisher()
     }
     
-    func toggleFollow(userId: String) -> AnyPublisher<Bool, Error> {
-        return request("/api/users/\(userId)/follow", method: "POST")
+    struct FollowUpdateResponse: Codable {
+        let following: Bool
+        let followerCount: Int?
+        let followingCount: Int?
     }
     
-    func fetchFollowers(userId: String) -> AnyPublisher<[User], Error> {
+    private func performFollowRequest(userId: String, method: String) -> AnyPublisher<FollowUpdateResponse, Error> {
+        struct LegacyToggleResponse: Codable { let following: Bool }
+        
+        let primary: AnyPublisher<FollowUpdateResponse, Error> = request("/api/follow/\(userId)", method: method)
+        
+        return primary
+            .catch { error -> AnyPublisher<FollowUpdateResponse, Error> in
+                if case NetworkError.serverError(let message) = error, message.contains("HTTP 404") {
+                    // Fallback to legacy toggle endpoint
+                    return self.request("/api/users/\(userId)/follow", method: "POST")
+                        .flatMap { (legacy: LegacyToggleResponse) -> AnyPublisher<FollowUpdateResponse, Error> in
+                            // Fetch updated counts so UI can refresh
+                            return self.fetchUserProfile(userId: userId)
+                                .map { profile in
+                                    FollowUpdateResponse(
+                                        following: legacy.following,
+                                        followerCount: profile.followerCount,
+                                        followingCount: nil
+                                    )
+                                }
+                                .eraseToAnyPublisher()
+                        }
+                        .eraseToAnyPublisher()
+                }
+                return Fail(error: error).eraseToAnyPublisher()
+            }
+            .eraseToAnyPublisher()
+    }
+    
+    func follow(userId: String) -> AnyPublisher<FollowUpdateResponse, Error> {
+        return performFollowRequest(userId: userId, method: "POST")
+    }
+    
+    func unfollow(userId: String) -> AnyPublisher<FollowUpdateResponse, Error> {
+        return performFollowRequest(userId: userId, method: "DELETE")
+    }
+    
+    func fetchMyFollowing() -> AnyPublisher<[User], Error> {
         struct Response: Codable {
             let users: [User]
         }
-        return request("/api/users/\(userId)/followers")
+        return request("/api/following")
+            .map { (response: Response) in response.users }
+            .catch { error -> AnyPublisher<[User], Error> in
+                if case NetworkError.serverError(let message) = error, message.contains("HTTP 404") {
+                    // Legacy fallback to following-list
+                    guard let currentUserId = StorageService.shared.getUserId() else {
+                        return Just([]).setFailureType(to: Error.self).eraseToAnyPublisher()
+                    }
+                    struct LegacyResponse: Codable { let users: [User] }
+                    return self.request("/api/users/\(currentUserId)/following-list")
+                        .map { (response: LegacyResponse) in response.users }
+                        .eraseToAnyPublisher()
+                }
+                return Fail(error: error).eraseToAnyPublisher()
+            }
+            .eraseToAnyPublisher()
+    }
+    
+    func fetchMyFollowingIds() -> AnyPublisher<[String], Error> {
+        struct Response: Codable {
+            let followingIds: [String]?
+        }
+        return request("/api/following")
+            .map { (response: Response) in response.followingIds ?? [] }
+            .catch { error -> AnyPublisher<[String], Error> in
+                if case NetworkError.serverError(let message) = error, message.contains("HTTP 404") {
+                    // Legacy fallback to following-list
+                    guard let currentUserId = StorageService.shared.getUserId() else {
+                        return Just([]).setFailureType(to: Error.self).eraseToAnyPublisher()
+                    }
+                    struct LegacyResponse: Codable { let users: [User] }
+                    return self.request("/api/users/\(currentUserId)/following-list")
+                        .map { (response: LegacyResponse) in response.users.map { $0.id } }
+                        .eraseToAnyPublisher()
+                }
+                return Fail(error: error).eraseToAnyPublisher()
+            }
+            .eraseToAnyPublisher()
+    }
+    
+    func fetchFollowers(userId: String, userType: UserType? = nil) -> AnyPublisher<[User], Error> {
+        struct Response: Codable {
+            let users: [User]
+        }
+        var endpoint = "/api/users/\(userId)/followers"
+        if let userType = userType {
+            endpoint += "?userType=\(userType.rawValue)"
+        }
+        return request(endpoint)
             .map { (response: Response) in response.users }
             .eraseToAnyPublisher()
     }
     
-    func fetchFollowing(userId: String) -> AnyPublisher<[User], Error> {
+    func fetchFollowing(userId: String, userType: UserType? = nil) -> AnyPublisher<[User], Error> {
         struct Response: Codable {
             let users: [User]
         }
-        return request("/api/users/\(userId)/following-list")
+        var endpoint = "/api/users/\(userId)/following-list"
+        if let userType = userType {
+            endpoint += "?userType=\(userType.rawValue)"
+        }
+        return request(endpoint)
             .map { (response: Response) in response.users }
             .eraseToAnyPublisher()
     }
@@ -465,6 +765,23 @@ class NetworkService {
     
     func fetchTalentProfile(talentId: String) -> AnyPublisher<Talent, Error> {
         return request("/api/talent/\(talentId)")
+    }
+    
+    func registerTalent(category: TalentCategory, bio: String?, priceMin: Double?, priceMax: Double?) -> AnyPublisher<Talent, Error> {
+        struct Response: Codable {
+            let talent: Talent
+        }
+        var body: [String: Any] = [
+            "category": category.rawValue
+        ]
+        if let bio = bio { body["bio"] = bio }
+        if let priceMin = priceMin { body["priceMin"] = priceMin }
+        if let priceMax = priceMax { body["priceMax"] = priceMax }
+        
+        let jsonData = try? JSONSerialization.data(withJSONObject: body)
+        return request("/api/talent", method: "POST", body: jsonData)
+            .map { (response: Response) in response.talent }
+            .eraseToAnyPublisher()
     }
     
     // MARK: - Bookings
@@ -531,44 +848,20 @@ class NetworkService {
     }
     
     func checkFollowing(userId: String) -> AnyPublisher<[String: Bool], Error> {
-        struct Response: Codable {
-            let following: Bool
-        }
-        return request("/api/users/\(userId)/following")
-            .map { (response: Response) in ["following": response.following] }
+        return fetchMyFollowingIds()
+            .map { ids in ["following": ids.contains(userId)] }
             .eraseToAnyPublisher()
     }
     
     // MARK: - Event Promotion (for brands)
     func promoteEvent(eventId: String, expiresAt: Date? = nil, promotionBudget: Double = 0) -> AnyPublisher<Bool, Error> {
-        struct Response: Codable {
-            let success: Bool
-        }
-        
-        var body: [String: Any] = [
-            "promotionBudget": promotionBudget
-        ]
-        
-        if let expiresAt = expiresAt {
-            body["expiresAt"] = ISO8601DateFormatter().string(from: expiresAt)
-        }
-        
-        guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else {
-            return Fail(error: NetworkError.unknown).eraseToAnyPublisher()
-        }
-        
-        return request("/api/events/\(eventId)/promote", method: "POST", body: jsonData)
-            .map { (response: Response) in response.success }
-            .eraseToAnyPublisher()
+        // Brand promotions have been removed
+        return Fail(error: NetworkError.serverError("Brand promotions are disabled")).eraseToAnyPublisher()
     }
     
     func unpromoteEvent(eventId: String) -> AnyPublisher<Bool, Error> {
-        struct Response: Codable {
-            let success: Bool
-        }
-        return request("/api/events/\(eventId)/promote", method: "DELETE")
-            .map { (response: Response) in response.success }
-            .eraseToAnyPublisher()
+        // Brand promotions have been removed
+        return Fail(error: NetworkError.serverError("Brand promotions are disabled")).eraseToAnyPublisher()
     }
     
     // MARK: - Reviews
@@ -602,6 +895,99 @@ class NetworkService {
         return request("/api/reviews/\(reviewId)", method: "DELETE")
             .map { (response: Response) in response.success }
             .eraseToAnyPublisher()
+    }
+    
+    // MARK: - Brand Insights
+    func fetchBrandInsights() -> AnyPublisher<BrandInsights, Error> {
+        return request("/api/brands/insights")
+    }
+    
+    func trackEventImpression(eventId: String) -> AnyPublisher<Bool, Error> {
+        struct Response: Codable {
+            let success: Bool
+        }
+        let body: [String: Any] = ["eventId": eventId]
+        let jsonData = try? JSONSerialization.data(withJSONObject: body)
+        return request("/api/brands/track-impression", method: "POST", body: jsonData)
+            .map { (response: Response) in response.success }
+            .eraseToAnyPublisher()
+    }
+    
+    func fetchBrandPromotedEvents() -> AnyPublisher<[PromotedEvent], Error> {
+        struct PromotedEventsResponse: Codable {
+            let events: [PromotedEvent]
+        }
+        return request("/api/brands/promoted-events")
+            .map { (response: PromotedEventsResponse) in response.events }
+            .eraseToAnyPublisher()
+    }
+    
+    // MARK: - Earnings
+    func fetchEarnings() -> AnyPublisher<EarningsResponse, Error> {
+        return request("/api/earnings")
+    }
+    
+    func withdrawEarnings(amount: Double, bankAccountId: String) -> AnyPublisher<Bool, Error> {
+        struct WithdrawResponse: Codable {
+            let success: Bool
+        }
+        let body: [String: Any] = [
+            "amount": amount,
+            "bankAccountId": bankAccountId
+        ]
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else {
+            return Fail(error: NetworkError.unknown).eraseToAnyPublisher()
+        }
+        return request("/api/earnings/withdraw", method: "POST", body: jsonData)
+            .map { (response: WithdrawResponse) in response.success }
+            .eraseToAnyPublisher()
+    }
+}
+
+// MARK: - Earnings Models
+struct Earning: Identifiable, Codable {
+    let id: String
+    let amount: Double
+    let source: String
+    let date: Date
+    let eventId: String?
+}
+
+struct Withdrawal: Identifiable, Codable {
+    let id: String
+    let amount: Double
+    let bankAccountName: String
+    let date: Date
+    let status: WithdrawalStatus
+}
+
+enum WithdrawalStatus: String, Codable {
+    case pending
+    case processing
+    case completed
+    case failed
+}
+
+struct EarningsResponse: Codable {
+    let totalEarnings: Double
+    let earnings: [Earning]
+    let withdrawals: [Withdrawal]
+}
+
+// MARK: - Brand Models
+struct PromotedEvent: Identifiable, Codable {
+    let id: String
+    let title: String
+    let location: String
+    let date: Date?
+    let promotedAt: Date?
+    let expiresAt: Date?
+    let budget: Double
+    
+    enum CodingKeys: String, CodingKey {
+        case id, title, location, date, budget
+        case promotedAt = "promotedAt"
+        case expiresAt = "expiresAt"
     }
 }
 

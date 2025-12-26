@@ -14,6 +14,7 @@ struct PartierInboxView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var showSearch = false
+    @State private var showCreateGroup = false
     @State private var cancellables = Set<AnyCancellable>()
     @AppStorage("selectedUserRole") private var selectedRoleRaw: String = ""
     
@@ -70,6 +71,15 @@ struct PartierInboxView: View {
             .navigationTitle("Inbox")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: {
+                        showCreateGroup = true
+                    }) {
+                        Image(systemName: "person.2.fill")
+                            .foregroundColor(.sioreeIcyBlue)
+                    }
+                }
+                
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: {
                         showSearch = true
@@ -82,6 +92,9 @@ struct PartierInboxView: View {
             .sheet(isPresented: $showSearch) {
                 UserSearchView()
             }
+            .sheet(isPresented: $showCreateGroup) {
+                CreateGroupChatView()
+            }
             .onAppear {
                 loadConversations()
             }
@@ -90,9 +103,8 @@ struct PartierInboxView: View {
     
     private func loadConversations() {
         isLoading = true
-        // Pass the current role to filter messages by role
-        let currentRole = selectedRoleRaw.isEmpty ? "partier" : selectedRoleRaw
-        messagingService.getConversations(role: currentRole)
+        // Fetch shared inbox across all roles
+        messagingService.getConversations()
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
@@ -103,7 +115,7 @@ struct PartierInboxView: View {
                     }
                 },
                 receiveValue: { fetchedConversations in
-                    conversations = fetchedConversations
+                    conversations = fetchedConversations.sorted { $0.lastMessageTime > $1.lastMessageTime }
                     isLoading = false
                 }
             )

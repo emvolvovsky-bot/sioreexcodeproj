@@ -12,3 +12,10 @@ UPDATE messages
 SET sender_role = (SELECT user_type FROM users WHERE id = messages.sender_id)
 WHERE sender_role IS NULL;
 
+
+
+
+
+
+
+

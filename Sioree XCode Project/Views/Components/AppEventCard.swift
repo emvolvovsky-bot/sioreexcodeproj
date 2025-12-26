@@ -46,7 +46,7 @@ struct AppEventCard: View {
                         .shadow(color: .sioreeIcyBlue.opacity(0.5), radius: 10)
                 }
                 
-                // Content
+                // Content - Fixed height container
                 VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                     HStack {
                         Text(event.title)
@@ -54,6 +54,7 @@ struct AppEventCard: View {
                             .foregroundColor(Color.sioreeWhite)
                             .lineLimit(2)
                             .minimumScaleFactor(0.8)
+                            .frame(height: 44) // Fixed height for title
                         
                         Spacer()
                         
@@ -80,7 +81,9 @@ struct AppEventCard: View {
                         Text(event.location)
                             .font(.sioreeBodySmall)
                             .foregroundColor(Color.sioreeLightGrey)
+                            .lineLimit(1)
                     }
+                    .frame(height: 20) // Fixed height for host/location
                     
                     HStack {
                         Text(event.date.formatted(date: .abbreviated, time: .shortened))
@@ -93,10 +96,13 @@ struct AppEventCard: View {
                             .font(.sioreeH4)
                             .foregroundColor(Color.sioreeIcyBlue)
                     }
+                    .frame(height: 24) // Fixed height for date/price
                 }
                 .padding(Theme.Spacing.m)
+                .frame(height: 120) // Fixed total content height
                 .background(Color.sioreeBlack.opacity(0.8))
             }
+            .frame(height: 320) // Fixed total card height
             .background(
                 RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
                     .fill(Color.sioreeBlack.opacity(0.8))

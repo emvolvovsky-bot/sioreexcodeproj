@@ -34,12 +34,9 @@ struct ProfileView: View {
                             
                             // Stats - Followers, Following, Events, and Username
                             ProfileStatsView(
-                                eventsHosted: user.eventCount,
-                                eventsAttended: 0, // Will be fetched separately if needed
-                                followers: user.followerCount,
-                                following: user.followingCount,
+                                followers: viewModel.followerCount,
+                                following: viewModel.followingCount,
                                 username: user.username,
-                                userType: user.userType,
                                 userId: user.id
                             )
                             

@@ -24,7 +24,13 @@ async function runMigrations() {
       "005_add_event_promotions.sql",
       "006_add_reviews.sql",
       "007_add_event_talent_needs.sql",
-      "008_add_role_to_messages.sql"
+      "008_add_role_to_messages.sql",
+      "009_add_event_id_to_posts.sql",
+      "010_add_group_chats.sql",
+      "011_add_event_talent_table.sql",
+      "012_add_brand_insights_tables.sql",
+      "013_add_user_type_to_follows.sql",
+      "014_add_earnings_tables.sql"
     ];
     
     for (const file of migrationFiles) {

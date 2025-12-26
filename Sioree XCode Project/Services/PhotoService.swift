@@ -76,8 +76,8 @@ class PhotoService: ObservableObject {
     func uploadImage(_ image: UIImage) -> AnyPublisher<String, Error> {
         let networkService = NetworkService()
         
-        // Convert UIImage to Data
-        guard let imageData = image.jpegData(compressionQuality: 0.8) else {
+        // Resize & compress to avoid 413/decoding errors from oversized payloads
+        guard let imageData = prepareImageData(image) else {
             return Fail(error: NSError(domain: "PhotoService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to convert image to data"]))
                 .eraseToAnyPublisher()
         }
@@ -115,7 +115,25 @@ class PhotoService: ObservableObject {
         }
         
         return URLSession.shared.dataTaskPublisher(for: request)
-            .map(\.data)
+            .tryMap { data, response -> Data in
+                guard let http = response as? HTTPURLResponse else {
+                    throw NSError(domain: "PhotoService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid response from server"])
+                }
+                
+                // Surface server-side errors with readable messages
+                guard (200...299).contains(http.statusCode) else {
+                    if let json = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any],
+                       let message = json["error"] as? String {
+                        throw NSError(domain: "PhotoService", code: http.statusCode, userInfo: [NSLocalizedDescriptionKey: message])
+                    }
+                    
+                    let bodyText = String(data: data, encoding: .utf8) ?? ""
+                    let message = bodyText.isEmpty ? "Upload failed with status \(http.statusCode)" : bodyText
+                    throw NSError(domain: "PhotoService", code: http.statusCode, userInfo: [NSLocalizedDescriptionKey: message])
+                }
+                
+                return data
+            }
             .decode(type: UploadResponse.self, decoder: JSONDecoder())
             .map { $0.url }
             .receive(on: DispatchQueue.main)
@@ -129,6 +147,23 @@ class PhotoService: ObservableObject {
             .flatMap { $0 }
             .collect()
             .eraseToAnyPublisher()
+    }
+    
+    // MARK: - Helpers
+    /// Resize and compress image to keep uploads under ~1.5MB and within sensible dimensions.
+    private func prepareImageData(_ image: UIImage) -> Data? {
+        // Cap longest side to 1600px to avoid enormous payloads
+        let resized = image.resized(toMaxDimension: 1600)
+        var quality: CGFloat = 0.8
+        let maxSize = 1_500_000 // ~1.5MB
+        var data = resized.jpegData(compressionQuality: quality)
+        
+        while let current = data, current.count > maxSize, quality > 0.2 {
+            quality -= 0.1
+            data = resized.jpegData(compressionQuality: quality)
+        }
+        
+        return data
     }
 }
 

@@ -15,6 +15,7 @@ struct TalentInboxView: View {
     @State private var selectedConversation: Conversation?
     @State private var errorMessage: String?
     @State private var showSearch = false
+    @State private var showCreateGroup = false
     @AppStorage("selectedUserRole") private var selectedRoleRaw: String = ""
     
     var body: some View {
@@ -64,6 +65,15 @@ struct TalentInboxView: View {
             .navigationTitle("Inbox")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: {
+                        showCreateGroup = true
+                    }) {
+                        Image(systemName: "person.2.fill")
+                            .foregroundColor(.sioreeIcyBlue)
+                    }
+                }
+                
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: {
                         showSearch = true
@@ -75,6 +85,9 @@ struct TalentInboxView: View {
             }
             .sheet(isPresented: $showSearch) {
                 UserSearchView()
+            }
+            .sheet(isPresented: $showCreateGroup) {
+                CreateGroupChatView()
             }
             .onAppear {
                 loadConversations()
@@ -99,9 +112,8 @@ struct TalentInboxView: View {
     
     private func loadConversations() {
         isLoading = true
-        // Pass the current role to filter messages by role
-        let currentRole = selectedRoleRaw.isEmpty ? "talent" : selectedRoleRaw
-        messagingService.getConversations(role: currentRole)
+        // Fetch shared inbox across all roles
+        messagingService.getConversations()
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
@@ -111,7 +123,7 @@ struct TalentInboxView: View {
                     }
                 },
                 receiveValue: { conversations in
-                    self.conversations = conversations
+                    self.conversations = conversations.sorted { $0.lastMessageTime > $1.lastMessageTime }
                 }
             )
             .store(in: &cancellables)

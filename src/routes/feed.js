@@ -1,8 +1,61 @@
 import express from "express";
-import db from "../db/database.js";
+import { db } from "../db/database.js";
 import jwt from "jsonwebtoken";
 
 const router = express.Router();
+const FEATURED_FOLLOWER_THRESHOLD = 500;
+const isFeaturedByFollowers = (row) => {
+  if (!row) return false;
+  const followerCount = Number(row.follower_count || 0);
+  const userType = (row.user_type || "").toLowerCase();
+  return (userType === "host" || userType === "talent") && followerCount >= FEATURED_FOLLOWER_THRESHOLD;
+};
+
+const normalizeTalentIds = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.map(id => id?.toString()).filter(Boolean);
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map(id => id.trim())
+      .filter(id => id.length > 0);
+  }
+  return [value.toString()].filter(Boolean);
+};
+
+const normalizeRoles = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value
+      .map(role => (role ?? "").toString().trim())
+      .filter(role => role.length > 0);
+  }
+  if (typeof value === "string") {
+    return value
+      .split(/[,|]/)
+      .map(role => role.trim())
+      .filter(role => role.length > 0);
+  }
+  return [value.toString()].filter(Boolean);
+};
+
+const buildLookingForLabel = (roles = [], legacy = null, notes = null) => {
+  const cleanRoles = normalizeRoles(roles);
+  const parts = [];
+
+  if (cleanRoles.length > 0) {
+    parts.push(cleanRoles.join(", "));
+  } else if (legacy && legacy.trim()) {
+    parts.push(legacy.trim());
+  }
+
+  if (notes && notes.trim()) {
+    parts.push(notes.trim());
+  }
+
+  const label = parts.join(" — ").trim();
+  return label.length > 0 ? label : null;
+};
 
 // Helper to get user ID from token
 function getUserIdFromToken(req) {
@@ -37,6 +90,8 @@ router.get("/", async (req, res) => {
           u.username as host_username,
           u.name as host_name,
           u.avatar as host_avatar,
+          u.follower_count,
+          u.user_type,
           COALESCE(el.likes_count, 0) as likes,
           COALESCE(ela.user_liked, false) as is_liked,
           COALESCE(esa.user_saved, false) as is_saved
@@ -59,6 +114,7 @@ router.get("/", async (req, res) => {
           WHERE user_id = $1
         ) esa ON esa.event_id = e.id
         WHERE e.event_date > NOW()
+          AND COALESCE(e.status, 'published') <> 'cancelled'
           AND f.follower_id IS NOT NULL
         ORDER BY e.event_date ASC
         LIMIT $2 OFFSET $3
@@ -72,6 +128,8 @@ router.get("/", async (req, res) => {
           u.username as host_username,
           u.name as host_name,
           u.avatar as host_avatar,
+          u.follower_count,
+          u.user_type,
           COALESCE(el.likes_count, 0) as likes,
           COALESCE(ela.user_liked, false) as is_liked,
           COALESCE(esa.user_saved, false) as is_saved
@@ -93,6 +151,7 @@ router.get("/", async (req, res) => {
           WHERE user_id = $1
         ) esa ON esa.event_id = e.id
         WHERE e.event_date > NOW()
+        AND COALESCE(e.status, 'published') <> 'cancelled'
         ORDER BY e.event_date ASC
         LIMIT $2 OFFSET $3
       `;
@@ -105,6 +164,8 @@ router.get("/", async (req, res) => {
           u.username as host_username,
           u.name as host_name,
           u.avatar as host_avatar,
+          u.follower_count,
+          u.user_type,
           COALESCE(el.likes_count, 0) as likes,
           COALESCE(ela.user_liked, false) as is_liked,
           COALESCE(esa.user_saved, false) as is_saved
@@ -126,6 +187,7 @@ router.get("/", async (req, res) => {
           WHERE user_id = $1
         ) esa ON esa.event_id = e.id
         WHERE e.event_date > NOW()
+        AND COALESCE(e.status, 'published') <> 'cancelled'
         ORDER BY (COALESCE(el.likes_count, 0) + e.attendee_count) DESC, e.event_date ASC
         LIMIT $2 OFFSET $3
       `;
@@ -138,6 +200,8 @@ router.get("/", async (req, res) => {
           u.username as host_username,
           u.name as host_name,
           u.avatar as host_avatar,
+          u.follower_count,
+          u.user_type,
           COALESCE(el.likes_count, 0) as likes,
           COALESCE(ela.user_liked, false) as is_liked,
           COALESCE(esa.user_saved, false) as is_saved
@@ -159,6 +223,7 @@ router.get("/", async (req, res) => {
           WHERE user_id = $1
         ) esa ON esa.event_id = e.id
         WHERE e.event_date > NOW()
+        AND COALESCE(e.status, 'published') <> 'cancelled'
         ORDER BY e.event_date ASC
         LIMIT $2 OFFSET $3
       `;
@@ -228,27 +293,37 @@ router.get("/", async (req, res) => {
     const postsResult = await db.query(postsQuery, postsParams);
 
     // Format events
-    const events = eventsResult.rows.map(row => ({
-      id: row.id.toString(),
-      title: row.title,
-      description: row.description || "",
-      hostId: row.creator_id?.toString() || "",
-      hostName: row.host_name || row.host_username || "Unknown Host",
-      hostAvatar: row.host_avatar || null,
-      date: new Date(row.event_date).toISOString(),
-      location: row.location || "",
-      images: [],
-      ticketPrice: parseFloat(row.ticket_price) || 0,
-      capacity: row.capacity || null,
-      attendees: row.attendee_count || 0,
-      isLiked: row.is_liked || false,
-      isSaved: row.is_saved || false,
-      likes: parseInt(row.likes) || 0,
-      isFeatured: row.is_featured || false,
-      status: "published",
-      createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
-      talentIds: []
-    }));
+    const events = eventsResult.rows.map(row => {
+      const lookingForRoles = normalizeRoles(row.looking_for_roles);
+      const lookingForNotes = row.looking_for_notes || null;
+      const lookingForLabel = buildLookingForLabel(lookingForRoles, row.looking_for_talent_type, lookingForNotes);
+      const isFeatured = isFeaturedByFollowers(row) || row.is_featured || false;
+
+      return {
+        id: row.id.toString(),
+        title: row.title,
+        description: row.description || "",
+        hostId: row.creator_id?.toString() || "",
+        hostName: row.host_name || row.host_username || "Unknown Host",
+        hostAvatar: row.host_avatar || null,
+        date: new Date(row.event_date).toISOString(),
+        location: row.location || "",
+        images: [],
+        ticketPrice: parseFloat(row.ticket_price) || 0,
+        capacity: row.capacity || null,
+        attendees: row.attendee_count || 0,
+        isLiked: row.is_liked || false,
+        isSaved: row.is_saved || false,
+        likes: parseInt(row.likes) || 0,
+        isFeatured,
+        status: row.status || "published",
+        createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+        talentIds: normalizeTalentIds(row.talent_ids),
+        lookingForTalentType: lookingForLabel,
+        lookingForRoles,
+        lookingForNotes
+      };
+    });
 
     // Format posts
     const posts = postsResult.rows.map(row => ({

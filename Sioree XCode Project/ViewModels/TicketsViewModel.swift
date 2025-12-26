@@ -18,6 +18,45 @@ class TicketsViewModel: ObservableObject {
     private let networkService = NetworkService()
     private var cancellables = Set<AnyCancellable>()
     
+    init() {
+        // Listen for RSVP notifications to refresh upcoming events
+        NotificationCenter.default.publisher(for: NSNotification.Name("EventRSVPed"))
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                // Reload upcoming events to include the newly RSVPed event
+                self?.loadUpcomingEvents()
+            }
+            .store(in: &cancellables)
+        
+        // Listen for event creation notifications (for hosts who create events)
+        NotificationCenter.default.publisher(for: NSNotification.Name("EventCreated"))
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                // Reload upcoming events to include newly created event
+                self?.loadUpcomingEvents()
+            }
+            .store(in: &cancellables)
+    }
+    
+    private func loadUpcomingEvents() {
+        guard let userId = StorageService.shared.getUserId() else { return }
+        
+        networkService.fetchUpcomingAttendingEvents()
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { [weak self] completion in
+                    if case .failure(let error) = completion {
+                        print("❌ Failed to reload upcoming events: \(error.localizedDescription)")
+                    }
+                },
+                receiveValue: { [weak self] events in
+                    self?.upcomingEvents = events
+                    print("✅ Reloaded \(events.count) upcoming events")
+                }
+            )
+            .store(in: &cancellables)
+    }
+    
     func loadTickets() {
         guard let userId = StorageService.shared.getUserId() else {
             // Add placeholder data if no user
@@ -50,20 +89,7 @@ class TicketsViewModel: ObservableObject {
             .store(in: &cancellables)
         
         // Fetch upcoming events (events user RSVPed to that are in the future)
-        networkService.fetchUpcomingAttendingEvents()
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { [weak self] completion in
-                    if case .failure(let error) = completion {
-                        print("❌ Failed to load upcoming events: \(error.localizedDescription)")
-                    }
-                },
-                receiveValue: { [weak self] events in
-                    // These are already filtered to be upcoming and user is attending
-                    self?.upcomingEvents = events
-                }
-            )
-            .store(in: &cancellables)
+        loadUpcomingEvents()
     }
     
     private func addPlaceholderData() {

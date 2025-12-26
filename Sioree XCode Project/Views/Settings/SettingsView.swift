@@ -40,10 +40,6 @@ struct SettingsView: View {
                             SettingsRow(icon: "person.circle", title: "Edit Profile", color: .sioreeIcyBlue)
                         }
                         
-                        NavigationLink(destination: SocialMediaSettingsView()) {
-                            SettingsRow(icon: "link", title: "Connect Social Media", color: .sioreeIcyBlue)
-                        }
-                        
                         NavigationLink(destination: PaymentMethodsView()) {
                             SettingsRow(icon: "creditcard", title: "Payment Methods", color: .sioreeIcyBlue)
                         }
@@ -96,10 +92,6 @@ struct SettingsView: View {
                     
                     // App Settings Section
                     Section {
-                        NavigationLink(destination: AppearanceSettingsView()) {
-                            SettingsRow(icon: "paintbrush", title: "Appearance", color: .sioreeIcyBlue)
-                        }
-                        
                         NavigationLink(destination: LanguageSettingsView()) {
                             SettingsRow(icon: "globe", title: "Language", color: .sioreeIcyBlue)
                         }
@@ -189,6 +181,9 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.large)
+            .onAppear {
+                loadNotificationPreferences()
+            }
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") {
@@ -269,6 +264,54 @@ struct SettingsView: View {
     }
     
     @State private var cancellables = Set<AnyCancellable>()
+    
+    private func saveNotificationPreferences() {
+        // Save notification preferences to UserDefaults
+        UserDefaults.standard.set(notificationsEnabled, forKey: "notificationsEnabled")
+        UserDefaults.standard.set(emailNotifications, forKey: "emailNotifications")
+        UserDefaults.standard.set(pushNotifications, forKey: "pushNotifications")
+        
+        // Send preferences to backend
+        let networkService = NetworkService()
+        let body: [String: Any] = [
+            "notificationsEnabled": notificationsEnabled,
+            "emailNotifications": emailNotifications,
+            "pushNotifications": pushNotifications
+        ]
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else { return }
+        
+        let publisher: AnyPublisher<NotificationPreferencesResponse, Error> = networkService.request("/api/users/notification-preferences", method: "PATCH", body: jsonData)
+        
+        publisher
+        .sink(
+            receiveCompletion: { completion in
+                if case .failure(let error) = completion {
+                    print("❌ Failed to save notification preferences: \(error)")
+                }
+            },
+            receiveValue: { (_: NotificationPreferencesResponse) in
+                print("✅ Notification preferences saved")
+            }
+        )
+        .store(in: &cancellables)
+    }
+
+    private struct NotificationPreferencesResponse: Decodable {
+        let success: Bool?
+        let message: String?
+    }
+    
+    private func loadNotificationPreferences() {
+        // Load from UserDefaults
+        notificationsEnabled = UserDefaults.standard.bool(forKey: "notificationsEnabled")
+        emailNotifications = UserDefaults.standard.bool(forKey: "emailNotifications")
+        pushNotifications = UserDefaults.standard.bool(forKey: "pushNotifications")
+        
+        // If preferences are enabled, request authorization
+        if notificationsEnabled || pushNotifications {
+            NotificationService.shared.requestAuthorization()
+        }
+    }
 }
 
 struct SettingsRow: View {

@@ -16,11 +16,18 @@ enum UserListType {
 struct UserListListView: View {
     let userId: String
     let listType: UserListType
+    let userType: UserType? // Current user's type to filter followers/following
     @State private var users: [User] = []
     @State private var isLoading = true
     @Environment(\.dismiss) var dismiss
     private let networkService = NetworkService()
     @State private var cancellables = Set<AnyCancellable>()
+    
+    init(userId: String, listType: UserListType, userType: UserType? = nil) {
+        self.userId = userId
+        self.listType = listType
+        self.userType = userType
+    }
     
     var body: some View {
         NavigationStack {
@@ -83,12 +90,10 @@ struct UserListListView: View {
     private func loadUsers() {
         isLoading = true
         
-        let publisher: AnyPublisher<[User], Error>
-        if listType == .followers {
-            publisher = networkService.fetchFollowers(userId: userId)
-        } else {
-            publisher = networkService.fetchFollowing(userId: userId)
-        }
+        // Always fetch full lists so counts match the displayed totals
+        let publisher: AnyPublisher<[User], Error> = listType == .followers
+            ? networkService.fetchFollowers(userId: userId, userType: nil)
+            : networkService.fetchFollowing(userId: userId, userType: nil)
         
         publisher
             .receive(on: DispatchQueue.main)
@@ -177,7 +182,7 @@ struct UserEventsListView: View {
                         Image(systemName: "calendar.badge.exclamationmark")
                             .font(.system(size: 50))
                             .foregroundColor(.sioreeLightGrey.opacity(0.5))
-                        Text(userType == .partier ? "No events attended yet" : "No events hosted yet")
+                        Text(emptyStateTitle)
                             .font(.sioreeH4)
                             .foregroundColor(.sioreeWhite)
                     }
@@ -192,7 +197,7 @@ struct UserEventsListView: View {
                                 .buttonStyle(PlainButtonStyle())
                             }
                         } header: {
-                            Text("\(events.count) \(userType == .partier ? "Events Attended" : "Events Hosted")")
+                            Text("\(events.count) \(eventsSectionTitle)")
                                 .foregroundColor(.sioreeLightGrey)
                         }
                     }
@@ -200,7 +205,7 @@ struct UserEventsListView: View {
                     .listStyle(.insetGrouped)
                 }
             }
-            .navigationTitle(userType == .partier ? "Events Attended" : "Events Hosted")
+            .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -219,10 +224,14 @@ struct UserEventsListView: View {
     private func loadEvents() {
         isLoading = true
         
-        // For partiers, fetch attended events; for others, fetch hosted events
+        // Partier: attended, Host: hosted, Talent: worked at (completed gigs), fallback: hosted
         let publisher: AnyPublisher<[Event], Error>
         if userType == .partier {
             publisher = networkService.fetchAttendedEvents(userId: userId)
+        } else if userType == .host {
+            publisher = networkService.fetchUserEvents(userId: userId)
+        } else if userType == .talent {
+            publisher = networkService.fetchTalentCompletedEvents(talentUserId: userId)
         } else {
             publisher = networkService.fetchUserEvents(userId: userId)
         }
@@ -242,6 +251,27 @@ struct UserEventsListView: View {
                 }
             )
             .store(in: &cancellables)
+    }
+    
+    private var navigationTitle: String {
+        if userType == .partier { return "Events Attended" }
+        if userType == .host { return "Events Hosted" }
+        if userType == .talent { return "Events Worked At" }
+        return "Events Hosted"
+    }
+    
+    private var eventsSectionTitle: String {
+        if userType == .partier { return "Events Attended" }
+        if userType == .host { return "Events Hosted" }
+        if userType == .talent { return "Events Worked At" }
+        return "Events Hosted"
+    }
+    
+    private var emptyStateTitle: String {
+        if userType == .partier { return "No events attended yet" }
+        if userType == .host { return "No events hosted yet" }
+        if userType == .talent { return "No events worked at yet" }
+        return "No events hosted yet"
     }
 }
 

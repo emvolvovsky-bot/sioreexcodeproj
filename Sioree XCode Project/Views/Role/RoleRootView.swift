@@ -54,17 +54,9 @@ struct RoleRootView: View {
         case .talent:
             return [
                 ("Gigs", "briefcase.fill", AnyView(TalentGigsView())),
-                ("Map", "map.fill", AnyView(MapViewPlaceholder())),
+                ("Map", "map.fill", AnyView(EventsMapView())),
                 ("Inbox", "envelope.fill", AnyView(TalentInboxView())),
                 ("Profile", "person.fill", AnyView(TalentMarketplaceProfileView().environmentObject(authViewModel)))
-            ]
-        case .brand:
-            return [
-                ("Campaigns", "megaphone.fill", AnyView(BrandCampaignsView())),
-                ("Events", "calendar", AnyView(BrandEventsView())),
-                ("Insights", "chart.bar.fill", AnyView(BrandInsightsView())),
-                ("Inbox", "envelope.fill", AnyView(BrandInboxView())),
-                ("Profile", "person.fill", AnyView(BrandProfileView()))
             ]
         }
     }

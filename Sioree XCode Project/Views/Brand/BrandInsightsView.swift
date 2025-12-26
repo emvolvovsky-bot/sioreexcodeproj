@@ -6,8 +6,11 @@
 //
 
 import SwiftUI
+import Combine
 
 struct BrandInsightsView: View {
+    @StateObject private var viewModel = BrandInsightsViewModel()
+    
     var body: some View {
         NavigationStack {
             ZStack {
@@ -44,11 +47,16 @@ struct BrandInsightsView: View {
                         )
                         .padding(.horizontal, Theme.Spacing.m)
                         
-                        MetricCard(title: "Total Impressions", value: "125K", subtitle: "+12% from last month")
-                        MetricCard(title: "Avg. Cost per Attendee", value: "$2.50", subtitle: "Below industry avg")
-                        MetricCard(title: "Cities Activated", value: "8", subtitle: "3 new this month")
-                        MetricCard(title: "Campaign ROI", value: "340%", subtitle: "Above target", progress: 0.85)
-                        MetricCard(title: "Engagement Rate", value: "8.2%", subtitle: "Industry leading", progress: 0.82)
+                        if viewModel.isLoading {
+                            ProgressView()
+                                .padding()
+                        } else {
+                            MetricCard(title: "Total Impressions", value: viewModel.totalImpressions, subtitle: nil)
+                            MetricCard(title: "Avg. Cost per Attendee", value: "N/A", subtitle: nil)
+                            MetricCard(title: "Cities Activated", value: viewModel.citiesActivated, subtitle: nil)
+                            MetricCard(title: "Campaign ROI", value: "N/A", subtitle: nil)
+                            MetricCard(title: "Engagement Rate", value: "N/A", subtitle: nil)
+                        }
                     }
                     .padding(.top, -Theme.Spacing.m)
                     .padding(.bottom, Theme.Spacing.m)
@@ -56,6 +64,9 @@ struct BrandInsightsView: View {
             }
             .navigationTitle("Insights")
             .navigationBarTitleDisplayMode(.large)
+            .onAppear {
+                viewModel.loadInsights()
+            }
         }
     }
 }

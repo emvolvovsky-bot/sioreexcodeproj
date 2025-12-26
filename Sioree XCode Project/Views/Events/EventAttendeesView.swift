@@ -112,26 +112,19 @@ struct EventAttendeesView: View {
     }
     
     private func checkFollowStatuses() {
-        guard let currentUserId = authViewModel.currentUser?.id else { return }
+        guard authViewModel.currentUser?.id != nil else { return }
         
-        for index in attendees.indices {
-            let attendeeId = attendees[index].id
-            // Check if current user follows this attendee
-            networkService.checkFollowing(userId: attendeeId)
-                .receive(on: DispatchQueue.main)
-                .sink(
-                    receiveCompletion: { _ in },
-                    receiveValue: { response in
-                        if let response = response as? [String: Bool], let following = response["following"] {
-                            // Find the attendee by ID and update
-                            if let foundIndex = attendees.firstIndex(where: { $0.id == attendeeId }) {
-                                attendees[foundIndex].isFollowing = following
-                            }
-                        }
+        networkService.fetchMyFollowingIds()
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { _ in },
+                receiveValue: { followingIds in
+                    for index in attendees.indices {
+                        attendees[index].isFollowing = followingIds.contains(attendees[index].id)
                     }
-                )
-                .store(in: &cancellables)
-        }
+                }
+            )
+            .store(in: &cancellables)
     }
 }
 

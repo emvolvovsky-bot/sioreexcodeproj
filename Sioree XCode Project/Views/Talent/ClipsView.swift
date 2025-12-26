@@ -93,17 +93,13 @@ struct AddClipView: View {
     @Binding var clips: [TalentClip]
     @StateObject private var photoService = PhotoService.shared
     @State private var title = ""
-    @State private var duration = ""
-    @State private var selectedThumbnail = "video.fill"
-    @State private var selectedImage: UIImage?
-    @State private var showPhotoPicker = false
+    @State private var selectedVideo: URL?
+    @State private var showVideoPicker = false
     @State private var showPermissionAlert = false
     @State private var isUploading = false
     
-    let thumbnailOptions = ["video.fill", "music.note.list", "party.popper.fill", "sun.max.fill", "star.fill", "flame.fill"]
-    
     private var isFormValid: Bool {
-        !title.isEmpty && !duration.isEmpty
+        !title.isEmpty && selectedVideo != nil
     }
     
     var body: some View {
@@ -117,44 +113,74 @@ struct AddClipView: View {
                 )
                 .ignoresSafeArea()
                 
-                Form {
-                    Section("Clip Details") {
-                        CustomTextField(placeholder: "Title *", text: $title)
-                        CustomTextField(placeholder: "Duration (e.g., 3:45) *", text: $duration)
-                    }
-                    
-                    Section("Thumbnail") {
-                        if let image = selectedImage {
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(height: 200)
+                ScrollView {
+                    VStack(spacing: Theme.Spacing.l) {
+                        // Title Input
+                        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                            Text("Title")
+                                .font(.sioreeH4)
+                                .foregroundColor(.sioreeWhite)
+                                .padding(.horizontal, Theme.Spacing.m)
+                            
+                            TextField("Enter clip title", text: $title)
+                                .padding(Theme.Spacing.m)
+                                .background(Color.sioreeLightGrey.opacity(0.1))
+                                .cornerRadius(Theme.CornerRadius.medium)
+                                .foregroundColor(.sioreeWhite)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                                        .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 1)
+                                )
+                                .padding(.horizontal, Theme.Spacing.m)
+                        }
+                        .padding(.top, Theme.Spacing.m)
+                        
+                        // Video Selection
+                        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                            Text("Video")
+                                .font(.sioreeH4)
+                                .foregroundColor(.sioreeWhite)
+                                .padding(.horizontal, Theme.Spacing.m)
+                            
+                            Button(action: {
+                                showVideoPicker = true
+                            }) {
+                                HStack {
+                                    Image(systemName: selectedVideo == nil ? "video.badge.plus" : "video.fill")
+                                        .font(.system(size: 20))
+                                        .foregroundColor(.sioreeIcyBlue)
+                                    
+                                    Text(selectedVideo == nil ? "Select Video" : "Video Selected")
+                                        .font(.sioreeBody)
+                                        .foregroundColor(.sioreeWhite)
+                                    
+                                    Spacer()
+                                    
+                                    if selectedVideo != nil {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundColor(.sioreeIcyBlue)
+                                    }
+                                }
+                                .padding(Theme.Spacing.m)
+                                .background(Color.sioreeLightGrey.opacity(0.1))
                                 .cornerRadius(Theme.CornerRadius.medium)
                                 .overlay(
-                                    Button(action: {
-                                        selectedImage = nil
-                                    }) {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .foregroundColor(.white)
-                                            .background(Color.black.opacity(0.6))
-                                            .clipShape(Circle())
-                                    }
-                                    .padding(8),
-                                    alignment: .topTrailing
+                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                                        .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 1)
                                 )
-                        }
-                        
-                        Button(action: {
-                            checkPermissionAndShowPicker()
-                        }) {
-                            HStack {
-                                Image(systemName: "photo.on.rectangle")
-                                Text(selectedImage == nil ? "Select Photo" : "Change Photo")
-                                    .font(.sioreeBody)
                             }
-                            .foregroundColor(.sioreeIcyBlue)
+                            .padding(.horizontal, Theme.Spacing.m)
+                            
+                            if let videoURL = selectedVideo {
+                                Text(videoURL.lastPathComponent)
+                                    .font(.sioreeCaption)
+                                    .foregroundColor(.sioreeLightGrey)
+                                    .padding(.horizontal, Theme.Spacing.m)
+                                    .padding(.top, Theme.Spacing.xs)
+                            }
                         }
                     }
+                    .padding(.vertical, Theme.Spacing.m)
                 }
                 .scrollContentBackground(.hidden)
             }
@@ -175,10 +201,10 @@ struct AddClipView: View {
                     .disabled(!isFormValid || isUploading)
                 }
             }
-            .sheet(isPresented: $showPhotoPicker) {
-                PhotoPicker(selectedImage: $selectedImage)
+            .sheet(isPresented: $showVideoPicker) {
+                VideoPicker(selectedVideo: $selectedVideo)
             }
-            .alert("Photo Library Access", isPresented: $showPermissionAlert) {
+            .alert("Video Library Access", isPresented: $showPermissionAlert) {
                 Button("Settings") {
                     if let url = URL(string: UIApplication.openSettingsURLString) {
                         UIApplication.shared.open(url)
@@ -186,66 +212,27 @@ struct AddClipView: View {
                 }
                 Button("Cancel", role: .cancel) { }
             } message: {
-                Text("Please allow access to your photo library to select clip thumbnails.")
+                Text("Please allow access to your photo library to select videos.")
             }
         }
     }
     
-    private func checkPermissionAndShowPicker() {
-        photoService.checkPermissionStatus()
-        
-        switch photoService.permissionStatus {
-        case .authorized, .limited:
-            showPhotoPicker = true
-        case .notDetermined:
-            photoService.requestPermission()
-                .sink { status in
-                    if status == .authorized || status == .limited {
-                        showPhotoPicker = true
-                    } else {
-                        showPermissionAlert = true
-                    }
-                }
-                .store(in: &cancellables)
-        case .denied, .restricted:
-            showPermissionAlert = true
-        }
-    }
-    
     private func addClip() {
+        guard let videoURL = selectedVideo else { return }
         isUploading = true
         
-        if let image = selectedImage {
-            photoService.uploadImage(image)
-                .sink(
-                    receiveCompletion: { completion in
-                        isUploading = false
-                        if case .failure(let error) = completion {
-                            print("Upload error: \(error)")
-                        }
-                    },
-                    receiveValue: { imageUrl in
-                        let newClip = TalentClip(
-                            id: UUID().uuidString,
-                            title: title,
-                            thumbnail: imageUrl, // Store URL instead of icon name
-                            duration: duration
-                        )
-                        clips.append(newClip)
-                        dismiss()
-                    }
-                )
-                .store(in: &cancellables)
-        } else {
-            let newClip = TalentClip(
-                id: UUID().uuidString,
-                title: title,
-                thumbnail: selectedThumbnail,
-                duration: duration
-            )
-            clips.append(newClip)
-            dismiss()
-        }
+        // TODO: Upload video to backend and get video URL
+        // For now, create clip with video URL
+        let newClip = TalentClip(
+            id: UUID().uuidString,
+            title: title,
+            thumbnail: "video.fill", // Will be replaced with actual thumbnail from video
+            videoURL: videoURL.absoluteString,
+            duration: "" // No duration needed
+        )
+        clips.append(newClip)
+        isUploading = false
+        dismiss()
     }
     
     @State private var cancellables = Set<AnyCancellable>()

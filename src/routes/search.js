@@ -1,8 +1,54 @@
 import express from "express";
-import db from "../db/database.js";
+import { db } from "../db/database.js";
 import jwt from "jsonwebtoken";
 
 const router = express.Router();
+
+const normalizeTalentIds = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.map(id => id?.toString()).filter(Boolean);
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map(id => id.trim())
+      .filter(id => id.length > 0);
+  }
+  return [value.toString()].filter(Boolean);
+};
+
+const normalizeRoles = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value
+      .map(role => (role ?? "").toString().trim())
+      .filter(role => role.length > 0);
+  }
+  if (typeof value === "string") {
+    return value
+      .split(/[,|]/)
+      .map(role => role.trim())
+      .filter(role => role.length > 0);
+  }
+  return [value.toString()].filter(Boolean);
+};
+
+const buildLookingForLabel = (roles = [], legacy = null, notes = null) => {
+  const cleanRoles = normalizeRoles(roles);
+  const parts = [];
+
+  if (cleanRoles.length > 0) {
+    parts.push(cleanRoles.join(", "));
+  } else if (legacy && legacy.trim()) {
+    parts.push(legacy.trim());
+  }
+
+  if (notes && notes.trim()) {
+    parts.push(notes.trim());
+  }
+
+  const label = parts.join(" — ").trim();
+  return label.length > 0 ? label : null;
+};
 
 // Helper to get user ID from token
 function getUserIdFromToken(req) {
@@ -59,27 +105,36 @@ router.get("/", async (req, res) => {
         [searchPattern]
       );
 
-      results.events = eventsResult.rows.map(row => ({
-        id: row.id.toString(),
-        title: row.title,
-        description: row.description || "",
-        hostId: row.creator_id?.toString() || "",
-        hostName: row.host_name || row.host_username || "Unknown Host",
-        hostAvatar: row.host_avatar || null,
-        date: new Date(row.event_date).toISOString(),
-        location: row.location || "",
-        images: [],
-        ticketPrice: parseFloat(row.ticket_price) || 0,
-        capacity: row.capacity || null,
-        attendees: row.attendee_count || 0,
-        isLiked: false,
-        isSaved: false,
-        likes: parseInt(row.likes) || 0,
-        isFeatured: row.is_featured || false,
-        status: "published",
-        createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
-        talentIds: []
-      }));
+      results.events = eventsResult.rows.map(row => {
+        const lookingForRoles = normalizeRoles(row.looking_for_roles);
+        const lookingForNotes = row.looking_for_notes || null;
+        const lookingForLabel = buildLookingForLabel(lookingForRoles, row.looking_for_talent_type, lookingForNotes);
+
+        return {
+          id: row.id.toString(),
+          title: row.title,
+          description: row.description || "",
+          hostId: row.creator_id?.toString() || "",
+          hostName: row.host_name || row.host_username || "Unknown Host",
+          hostAvatar: row.host_avatar || null,
+          date: new Date(row.event_date).toISOString(),
+          location: row.location || "",
+          images: [],
+          ticketPrice: parseFloat(row.ticket_price) || 0,
+          capacity: row.capacity || null,
+          attendees: row.attendee_count || 0,
+          isLiked: false,
+          isSaved: false,
+          likes: parseInt(row.likes) || 0,
+          isFeatured: row.is_featured || false,
+          status: "published",
+          createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+          talentIds: normalizeTalentIds(row.talent_ids),
+          lookingForTalentType: lookingForLabel,
+          lookingForRoles,
+          lookingForNotes
+        };
+      });
     }
 
     // Search hosts (users with user_type = 'host')

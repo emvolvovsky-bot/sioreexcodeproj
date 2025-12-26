@@ -6,11 +6,32 @@ dotenv.config();
 const isLocalDB = process.env.DATABASE_URL?.includes("localhost") || 
                   process.env.DATABASE_URL?.includes("127.0.0.1") ||
                   (!process.env.DATABASE_URL?.includes("supabase") && 
-                   !process.env.DATABASE_URL?.includes("amazonaws"));
+                   !process.env.DATABASE_URL?.includes("amazonaws") &&
+                   !process.env.DATABASE_URL?.includes("neon.tech"));
 
 // Parse DATABASE_URL - ensure SSL mode and connection parameters are set correctly
 // These parameters are CRITICAL for SCRAM authentication to complete and receive server signature
 let databaseUrl = process.env.DATABASE_URL;
+
+// 🔧 Neon compatibility: add missing project options to avoid "Tenant or user not found"
+try {
+  if (databaseUrl && databaseUrl.includes(".neon.tech") && !databaseUrl.includes("options=")) {
+    const url = new URL(databaseUrl);
+    // Neon expects options=project%3D<projectId> where projectId is the host prefix (ep-xxxxx)
+    const projectId = url.hostname.split(".")[0];
+    const params = new URLSearchParams(url.search);
+    params.set("options", `project%3D${projectId}`);
+    // Always require SSL for Neon
+    if (!params.has("sslmode")) {
+      params.set("sslmode", "require");
+    }
+    url.search = params.toString();
+    databaseUrl = url.toString();
+    console.log(`🔧 Added Neon project options to connection string (project: ${projectId})`);
+  }
+} catch (e) {
+  console.warn("⚠️ Neon URL adjustment skipped:", e.message);
+}
 if (databaseUrl && databaseUrl.includes("supabase")) {
   console.log("📊 Using Supabase database connection");
   
@@ -241,6 +262,8 @@ const db = {
   pool: pool
 };
 
+// Provide both named and default exports for compatibility with existing imports
+export { db };
 export default db;
 
 

@@ -195,6 +195,12 @@ app.use(express.json({ limit: "10mb" })); // Limit request body size
 
 // Media ping for connectivity checks (place before other routes)
 app.get("/api/media/ping", (req, res) => {
+  console.log("PING /api/media/ping");
+  res.json({ ok: true, source: "Skeleton Backend/sioree-backend/src/index.js" });
+});
+// Handle possible trailing slash or double slashes
+app.get(/^\/api\/media\/ping\/?$/, (req, res) => {
+  console.log("PING /api/media/ping (regex)");
   res.json({ ok: true, source: "Skeleton Backend/sioree-backend/src/index.js" });
 });
 

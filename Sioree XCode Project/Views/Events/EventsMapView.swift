@@ -13,6 +13,7 @@ import Combine
 struct EventsMapView: View {
     @StateObject private var locationManager = LocationManager()
     @StateObject private var viewModel = FeedViewModel()
+    @EnvironmentObject var authViewModel: AuthViewModel
     @State private var region = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 34.0522, longitude: -118.2437), // Default to LA
         span: MKCoordinateSpan(latitudeDelta: 0.1, longitudeDelta: 0.1)
@@ -60,7 +61,10 @@ struct EventsMapView: View {
             }
         }
         .sheet(item: $selectedEvent) { event in
-            EventDetailView(eventId: event.id)
+            EventDetailView(
+                eventId: event.id,
+                isTalentMapMode: authViewModel.currentUser?.userType == .talent
+            )
         }
         .onAppear {
             viewModel.refreshFeed()
@@ -164,5 +168,6 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
 
 #Preview {
     EventsMapView()
+        .environmentObject(AuthViewModel())
 }
 

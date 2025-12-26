@@ -129,14 +129,14 @@ struct SignUpView: View {
                 .font(.sioreeH3)
                 .foregroundColor(Color.sioreeWhite)
             
-            ForEach([UserType.host, .partier, .talent, .brand], id: \.self) { type in
+            ForEach([UserType.host, .partier, .talent], id: \.self) { type in
                 Button(action: {
                     selectedUserType = type
                 }) {
                     HStack {
                         Text(type.rawValue.capitalized)
                             .font(.sioreeBody)
-                            .foregroundColor(Color.sioreeWhite)
+                            .foregroundColor(selectedUserType == type ? Color.sioreeWhite : Color.sioreeBlack)
                         Spacer()
                         if selectedUserType == type {
                             Image(systemName: "checkmark.circle.fill")

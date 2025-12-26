@@ -45,7 +45,7 @@ class MessagingService: ObservableObject {
     private let networkService = NetworkService()
     
     // MARK: - Get Conversations
-    func getConversations(role: String? = nil) -> AnyPublisher<[Conversation], Error> {
+    func getConversations() -> AnyPublisher<[Conversation], Error> {
         // ✅ Using real backend API
         let useMockMessaging = false
         
@@ -62,12 +62,7 @@ class MessagingService: ObservableObject {
             let conversations: [Conversation]
         }
         
-        var endpoint = "/api/messages/conversations"
-        if let role = role {
-            endpoint += "?role=\(role)"
-        }
-        
-        return networkService.request(endpoint)
+        return networkService.request("/api/messages/conversations")
             .map { (response: Response) in response.conversations }
             .eraseToAnyPublisher()
     }

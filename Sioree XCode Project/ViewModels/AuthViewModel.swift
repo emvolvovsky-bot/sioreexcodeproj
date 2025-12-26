@@ -69,6 +69,8 @@ class AuthViewModel: ObservableObject {
                     self?.isAuthenticated = true
                     print("✅ isAuthenticated set to: \(self?.isAuthenticated ?? false)")
                     print("✅ Current user: \(response.user.email ?? "unknown")")
+                    // Send push notification for login
+                    NotificationService.shared.notifyLogin(userName: response.user.name)
                     // Don't call fetchCurrentUser immediately - use the user data from login response
                     // fetchCurrentUser can be called later if needed, but won't block login
                 }
@@ -116,6 +118,8 @@ class AuthViewModel: ObservableObject {
                     self?.isAuthenticated = true
                     print("✅ isAuthenticated set to: \(self?.isAuthenticated ?? false)")
                     print("✅ Current user: \(response.user.email ?? "unknown")")
+                    // Send push notification for signup
+                    NotificationService.shared.notifySignup(userName: response.user.name)
                 }
             )
             .store(in: &cancellables)

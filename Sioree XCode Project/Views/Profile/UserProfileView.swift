@@ -15,7 +15,9 @@ struct UserProfileView: View {
     @State private var showMessageView = false
     @State private var selectedConversation: Conversation?
     @State private var cancellables = Set<AnyCancellable>()
-    @State private var eventsAttendedCount = 0
+    @State private var showFollowersList = false
+    @State private var showFollowingList = false
+    @AppStorage("selectedUserRole") private var selectedRoleRaw: String = ""
     private let networkService = NetworkService()
     
     init(userId: String) {
@@ -42,103 +44,96 @@ struct UserProfileView: View {
                     LoadingView()
                 } else if let user = viewModel.user {
                     ScrollView {
-                        VStack(spacing: Theme.Spacing.l) {
-                            // Profile Header
-                            ProfileHeaderView(user: user)
-                            
-                            // Stats
-                            ProfileStatsView(
-                                eventsHosted: user.eventCount,
-                                eventsAttended: eventsAttendedCount,
-                                followers: user.followerCount,
-                                following: user.followingCount,
-                                username: user.username,
-                                userType: user.userType,
-                                userId: user.id
+                        VStack(spacing: 0) {
+                            // Instagram-style profile header
+                            InstagramStyleProfileHeader(
+                                user: user,
+                                postsCount: viewModel.posts.count,
+                                followerCount: viewModel.followerCount,
+                                followingCount: viewModel.followingCount,
+                                onEditProfile: {},
+                                onFollowersTap: {
+                                    showFollowersList = true
+                                },
+                                onFollowingTap: {
+                                    showFollowingList = true
+                                },
+                                showEventsStat: false,
+                                showEditButton: isCurrentUser
                             )
+                            .padding(.top, 8)
                             
-                            // Reviews Section (for hosts and talents)
-                            if (user.userType == .host || user.userType == .talent) && !isCurrentUser {
-                                NavigationLink(destination: ReviewsView(userId: user.id, userName: user.name)) {
-                                    HStack {
-                                        Image(systemName: "star.fill")
-                                            .foregroundColor(.sioreeWarmGlow)
-                                        Text("View Reviews")
-                                            .font(.sioreeBody)
-                                            .foregroundColor(.sioreeIcyBlue)
-                                        Spacer()
-                                        Image(systemName: "chevron.right")
-                                            .font(.system(size: 14))
-                                            .foregroundColor(.sioreeIcyBlue)
-                                    }
-                                    .padding(Theme.Spacing.m)
-                                    .background(Color.sioreeIcyBlue.opacity(0.1))
-                                    .cornerRadius(Theme.CornerRadius.medium)
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                                .padding(.horizontal, Theme.Spacing.l)
-                            }
-                            
-                            // Action Buttons
+                            // Action Buttons (if not current user)
                             if !isCurrentUser {
-                                VStack(spacing: Theme.Spacing.m) {
-                                    HStack(spacing: Theme.Spacing.m) {
-                                        // Follow/Unfollow Button
-                                        CustomButton(
-                                            title: viewModel.isFollowing ? "Following" : "Follow",
-                                            variant: viewModel.isFollowing ? .secondary : .primary,
-                                            size: .medium
-                                        ) {
-                                            viewModel.toggleFollow()
-                                        }
-                                        
-                                        // Message Button
-                                        CustomButton(
-                                            title: "Message",
-                                            variant: .secondary,
-                                            size: .medium
-                                        ) {
-                                            startConversation()
-                                        }
+                                HStack(spacing: Theme.Spacing.m) {
+                                    // Follow/Unfollow Button
+                                    Button(action: {
+                                        viewModel.toggleFollow()
+                                    }) {
+                                        Text(viewModel.isFollowing ? "Following" : "Follow")
+                                            .font(.system(size: 15, weight: .semibold))
+                                            .foregroundColor(viewModel.isFollowing ? .sioreeWhite : .sioreeWhite)
+                                            .frame(maxWidth: .infinity)
+                                            .frame(height: 36)
+                                            .background {
+                                                if viewModel.isFollowing {
+                                                    Color.sioreeLightGrey.opacity(0.2)
+                                                } else {
+                                                    LinearGradient(
+                                                        colors: [Color.sioreeIcyBlue.opacity(0.8), Color.sioreeIcyBlue],
+                                                        startPoint: .leading,
+                                                        endPoint: .trailing
+                                                    )
+                                                }
+                                            }
+                                            .cornerRadius(18)
                                     }
                                     
-                                    // Leave a Review Button (for hosts and talents)
-                                    if user.userType == .host || user.userType == .talent {
-                                        NavigationLink(destination: ReviewsView(userId: user.id, userName: user.name)) {
-                                            HStack {
-                                                Image(systemName: "star.fill")
-                                                    .foregroundColor(.sioreeWarmGlow)
-                                                Text("Leave a Review")
-                                                    .font(.sioreeBody)
-                                                    .foregroundColor(.sioreeIcyBlue)
-                                                Spacer()
-                                                Image(systemName: "chevron.right")
-                                                    .font(.system(size: 14))
-                                                    .foregroundColor(.sioreeIcyBlue)
-                                            }
-                                            .padding(Theme.Spacing.m)
-                                            .background(Color.sioreeWarmGlow.opacity(0.1))
-                                            .cornerRadius(Theme.CornerRadius.medium)
-                                        }
-                                        .buttonStyle(PlainButtonStyle())
+                                    // Message Button
+                                    Button(action: {
+                                        startConversation()
+                                    }) {
+                                        Text("Message")
+                                            .font(.system(size: 15, weight: .semibold))
+                                            .foregroundColor(.sioreeWhite)
+                                            .frame(maxWidth: .infinity)
+                                            .frame(height: 36)
+                                            .background(Color.sioreeLightGrey.opacity(0.2))
+                                            .cornerRadius(18)
                                     }
                                 }
-                                .padding(.horizontal, Theme.Spacing.l)
+                                .padding(.horizontal, 16)
+                                .padding(.top, 12)
                             }
                             
-                            // Content Tabs
-                            Picker("", selection: $viewModel.selectedTab) {
-                                ForEach(ProfileViewModel.ProfileTab.allCases, id: \.self) { tab in
-                                    Text(tab.rawValue).tag(tab)
+                            // Posts Grid (Instagram-style)
+                            if viewModel.posts.isEmpty {
+                                VStack(spacing: Theme.Spacing.m) {
+                                    Image(systemName: "photo")
+                                        .font(.system(size: 60))
+                                        .foregroundColor(.sioreeLightGrey.opacity(0.5))
+                                    Text("No posts yet")
+                                        .font(.sioreeH3)
+                                        .foregroundColor(.sioreeWhite)
                                 }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, Theme.Spacing.xxl)
+                            } else {
+                                LazyVGrid(columns: [
+                                    GridItem(.flexible(), spacing: 2),
+                                    GridItem(.flexible(), spacing: 2),
+                                    GridItem(.flexible(), spacing: 2)
+                                ], spacing: 2) {
+                                    ForEach(viewModel.posts) { post in
+                                        NavigationLink(destination: PostDetailView(post: post)) {
+                                            PostGridItem(post: post)
+                                        }
+                                    }
+                                }
+                                .padding(.top, Theme.Spacing.m)
                             }
-                            .pickerStyle(.segmented)
-                            .padding(.horizontal, Theme.Spacing.l)
-                            
-                            // Content
-                            contentView
                         }
-                        .padding(.vertical, Theme.Spacing.m)
+                        .padding(.bottom, Theme.Spacing.m)
                     }
                 }
             }
@@ -148,117 +143,34 @@ struct UserProfileView: View {
                 RealMessageView(conversation: conversation)
             }
             .onAppear {
-                loadEventsAttendedCount()
             }
             .onChange(of: viewModel.user?.id) { _ in
-                loadEventsAttendedCount()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("PostCreated"))) { notification in
+                // Refresh posts when a new post is created
+                if let postUserId = notification.userInfo?["userId"] as? String,
+                   postUserId == userId {
+                    viewModel.loadUserContent()
+                }
+            }
+            .sheet(isPresented: $showFollowersList) {
+                UserListListView(userId: userId, listType: .followers, userType: getUserTypeFromRole())
+            }
+            .sheet(isPresented: $showFollowingList) {
+                UserListListView(userId: userId, listType: .following, userType: getUserTypeFromRole())
             }
         }
     }
     
-    private func loadEventsAttendedCount() {
-        // Only fetch count for partiers
-        guard let user = viewModel.user, user.userType == .partier else {
-            eventsAttendedCount = 0
-            return
+    private func getUserTypeFromRole() -> UserType? {
+        guard let role = UserRole(rawValue: selectedRoleRaw) else { 
+            // If no role selected, try to get from current user
+            return authViewModel.currentUser?.userType
         }
-        
-        networkService.fetchAttendedEvents(userId: userId)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { _ in },
-                receiveValue: { events in
-                    eventsAttendedCount = events.count
-                }
-            )
-            .store(in: &cancellables)
-    }
-    
-    @ViewBuilder
-    private var contentView: some View {
-        switch viewModel.selectedTab {
-        case .events:
-            if viewModel.events.isEmpty {
-                VStack(spacing: Theme.Spacing.m) {
-                    Image(systemName: "calendar")
-                        .font(.system(size: 50))
-                        .foregroundColor(.sioreeLightGrey.opacity(0.5))
-                    Text("No events yet")
-                        .font(.sioreeBody)
-                        .foregroundColor(.sioreeLightGrey)
-                }
-                .padding(.vertical, Theme.Spacing.xl)
-            } else {
-                LazyVStack(spacing: Theme.Spacing.m) {
-                    ForEach(viewModel.events) { event in
-                        NavigationLink(destination: EventDetailView(eventId: event.id)) {
-                            AppEventCard(event: event) {
-                                // Navigation handled by NavigationLink
-                            }
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                    }
-                }
-                .padding(.horizontal, Theme.Spacing.m)
-            }
-        case .posts:
-            if viewModel.posts.isEmpty {
-                VStack(spacing: Theme.Spacing.m) {
-                    Image(systemName: "photo")
-                        .font(.system(size: 50))
-                        .foregroundColor(.sioreeLightGrey.opacity(0.5))
-                    Text("No posts yet")
-                        .font(.sioreeBody)
-                        .foregroundColor(.sioreeLightGrey)
-                }
-                .padding(.vertical, Theme.Spacing.xl)
-            } else {
-                LazyVStack(spacing: Theme.Spacing.m) {
-                    ForEach(viewModel.posts) { post in
-                        // Post card view
-                        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                            if let caption = post.caption {
-                                Text(caption)
-                                    .font(.sioreeBody)
-                                    .foregroundColor(.sioreeWhite)
-                            }
-                            if !post.images.isEmpty {
-                                Text("\(post.images.count) image(s)")
-                                    .font(.sioreeCaption)
-                                    .foregroundColor(.sioreeLightGrey)
-                            }
-                        }
-                        .padding()
-                        .background(Color.sioreeLightGrey.opacity(0.1))
-                        .cornerRadius(Theme.CornerRadius.medium)
-                    }
-                }
-                .padding(.horizontal, Theme.Spacing.m)
-            }
-        case .saved:
-            if viewModel.savedEvents.isEmpty {
-                VStack(spacing: Theme.Spacing.m) {
-                    Image(systemName: "bookmark")
-                        .font(.system(size: 50))
-                        .foregroundColor(.sioreeLightGrey.opacity(0.5))
-                    Text("No saved events")
-                        .font(.sioreeBody)
-                        .foregroundColor(.sioreeLightGrey)
-                }
-                .padding(.vertical, Theme.Spacing.xl)
-            } else {
-                LazyVStack(spacing: Theme.Spacing.m) {
-                    ForEach(viewModel.savedEvents) { event in
-                        NavigationLink(destination: EventDetailView(eventId: event.id)) {
-                            AppEventCard(event: event) {
-                                // Navigation handled by NavigationLink
-                            }
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                    }
-                }
-                .padding(.horizontal, Theme.Spacing.m)
-            }
+        switch role {
+        case .partier: return .partier
+        case .host: return .host
+        case .talent: return .talent
         }
     }
     

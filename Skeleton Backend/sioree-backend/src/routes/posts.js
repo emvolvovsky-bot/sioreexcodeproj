@@ -1,5 +1,5 @@
 import express from "express";
-import db from "../db/database.js";
+import { db } from "../db/database.js";
 import jwt from "jsonwebtoken";
 
 const router = express.Router();
@@ -23,14 +23,37 @@ router.post("/", async (req, res) => {
     const userId = getUserIdFromToken(req);
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { caption, mediaUrls, location } = req.body;
+    const { caption, mediaUrls, location, eventId } = req.body;
 
-    const result = await db.query(
-      `INSERT INTO posts (user_id, caption, media_urls, location)
-       VALUES ($1, $2, $3, $4)
-       RETURNING *`,
-      [userId, caption || null, mediaUrls || [], location || null]
-    );
+    // Check if event_id column exists before using it
+    let hasEventIdColumn = false;
+    try {
+      const columnCheck = await db.query(
+        `SELECT column_name FROM information_schema.columns 
+         WHERE table_name = 'posts' AND column_name = 'event_id'`
+      );
+      hasEventIdColumn = columnCheck.rows.length > 0;
+    } catch (err) {
+      // Column check failed, assume it doesn't exist
+      hasEventIdColumn = false;
+    }
+
+    let result;
+    if (hasEventIdColumn && eventId) {
+      result = await db.query(
+        `INSERT INTO posts (user_id, caption, media_urls, location, event_id)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING *`,
+        [userId, caption || null, mediaUrls || [], location || null, eventId]
+      );
+    } else {
+      result = await db.query(
+        `INSERT INTO posts (user_id, caption, media_urls, location)
+         VALUES ($1, $2, $3, $4)
+         RETURNING *`,
+        [userId, caption || null, mediaUrls || [], location || null]
+      );
+    }
 
     const postRow = result.rows[0];
     const userResult = await db.query(`SELECT username, name, avatar FROM users WHERE id = $1`, [userId]);
@@ -45,9 +68,11 @@ router.post("/", async (req, res) => {
       caption: postRow.caption || "",
       images: postRow.media_urls || [],
       location: postRow.location || null,
+      eventId: hasEventIdColumn && postRow.event_id ? postRow.event_id.toString() : (eventId || null),
       likes: 0,
       comments: 0,
       isLiked: false,
+      isSaved: false,
       createdAt: postRow.created_at ? new Date(postRow.created_at).toISOString() : new Date().toISOString()
     };
 

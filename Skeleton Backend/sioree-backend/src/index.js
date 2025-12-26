@@ -1,8 +1,14 @@
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
+import dotenv from "dotenv"
+dotenv.config();
+;
 import http from "http";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import { Server } from "socket.io";
+import db from "./db/database.js";
 import authRoutes from "./routes/auth.js";
 import eventRoutes from "./routes/events.js";
 import messageRoutes from "./routes/messages.js";
@@ -15,10 +21,115 @@ import talentRoutes from "./routes/talent.js";
 import notificationRoutes from "./routes/notifications.js";
 import bookingRoutes from "./routes/bookings.js";
 import reviewRoutes from "./routes/reviews.js";
+import socialRoutes from "./routes/social.js";
+import brandRoutes from "./routes/brands.js";
+import bankRoutes from "./routes/bank.js";
+import earningsRoutes from "./routes/earnings.js";
+import mediaRoutes from "./routes/media.js";
 
 dotenv.config();
 
 const app = express();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const migrationsDir = path.join(__dirname, "..", "migrations");
+
+// Run migrations automatically on boot to avoid missing columns in production
+async function runMigrationsOnBoot() {
+  const migrationFiles = [
+    "001_initial_schema.sql",
+    "002_add_user_fields.sql",
+    "003_add_messaging_tables.sql",
+    "004_add_social_features.sql",
+    "005_add_event_promotions.sql",
+    "006_add_reviews.sql",
+    "007_add_event_talent_needs.sql",
+    "008_add_role_to_messages.sql",
+    "009_add_event_id_to_posts.sql",
+    "010_add_group_chats.sql",
+    "011_add_event_talent_table.sql",
+    "012_add_brand_insights_tables.sql",
+    "013_add_user_type_to_follows.sql",
+    "014_add_earnings_tables.sql"
+  ];
+
+  for (const file of migrationFiles) {
+    const filePath = path.join(migrationsDir, file);
+    if (!fs.existsSync(filePath)) {
+      console.warn(`⚠️ Migration ${file} not found at ${filePath}, skipping`);
+      continue;
+    }
+
+    try {
+      const sql = fs.readFileSync(filePath, "utf8");
+      console.log(`🔄 Running migration ${file}...`);
+      await db.query(sql);
+      console.log(`✅ Migration ${file} applied`);
+    } catch (err) {
+      // Ignore idempotent errors so boot can continue
+      const msg = err.message || "";
+      if (
+        msg.includes("already exists") ||
+        msg.includes("duplicate key") ||
+        msg.includes("duplicate column")
+      ) {
+        console.log(`ℹ️ Migration ${file} already applied (or partially), continuing`);
+      } else {
+        console.error(`⚠️ Migration ${file} failed:`, msg);
+      }
+    }
+  }
+
+  console.log("✅ Boot migrations completed (non-blocking)");
+}
+
+// Minimal schema guard for production where migrations may be stale
+async function ensureCoreSchema() {
+  try {
+    // Messaging columns
+    await db.query(`
+      ALTER TABLE messages
+        ADD COLUMN IF NOT EXISTS sender_role VARCHAR(50),
+        ADD COLUMN IF NOT EXISTS receiver_role VARCHAR(50),
+        ADD COLUMN IF NOT EXISTS text TEXT,
+        ADD COLUMN IF NOT EXISTS message_type VARCHAR(50) DEFAULT 'text',
+        ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;
+    `);
+
+    // Event promotions + featured flag
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS event_promotions (
+        id SERIAL PRIMARY KEY,
+        event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+        brand_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        promoted_at TIMESTAMP DEFAULT NOW(),
+        expires_at TIMESTAMP,
+        is_active BOOLEAN DEFAULT true,
+        promotion_budget DECIMAL(10, 2) DEFAULT 0.00,
+        created_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(event_id, brand_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_event_promotions_event_id ON event_promotions(event_id);
+      CREATE INDEX IF NOT EXISTS idx_event_promotions_brand_id ON event_promotions(brand_id);
+      CREATE INDEX IF NOT EXISTS idx_event_promotions_active ON event_promotions(is_active, expires_at);
+      ALTER TABLE events ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT false;
+    `);
+
+    console.log("✅ Core schema guard executed");
+  } catch (err) {
+    console.error("⚠️ Core schema guard failed (non-blocking):", err.message);
+  }
+}
+
+// Run migrations then ensure critical columns/tables exist (non-blocking if fails)
+(async () => {
+  try {
+    await runMigrationsOnBoot();
+    await ensureCoreSchema();
+  } catch (err) {
+    console.error("⚠️ Startup schema guard failed (continuing):", err.message);
+  }
+})();
 
 // Security Headers Middleware
 app.use((req, res, next) => {
@@ -82,6 +193,11 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json({ limit: "10mb" })); // Limit request body size
 
+// Media ping for connectivity checks (place before other routes)
+app.get("/api/media/ping", (req, res) => {
+  res.json({ ok: true, source: "Skeleton Backend/sioree-backend/src/index.js" });
+});
+
 // Request logging middleware (sanitized - no IPs or sensitive data)
 // Place BEFORE routes to log all requests
 app.use((req, res, next) => {
@@ -140,6 +256,11 @@ app.use("/api/talent", talentRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/reviews", reviewRoutes);
+app.use("/api/brands", brandRoutes);
+app.use("/api/social", socialRoutes);
+app.use("/api/bank", bankRoutes);
+app.use("/api/earnings", earningsRoutes);
+app.use("/api/media", mediaRoutes);
 
 app.get("/health", (req, res) => {
   res.json({ status: "Backend running", database: "Supabase Postgres" });

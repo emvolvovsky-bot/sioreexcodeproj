@@ -937,6 +937,29 @@ class NetworkService {
         return request("/api/posts", method: "POST", body: jsonData)
     }
 
+    func createPost(caption: String?, mediaUrls: [String] = [], location: String? = nil, eventId: String? = nil) -> AnyPublisher<Post, Error> {
+        var body: [String: Any] = [
+            "mediaUrls": mediaUrls
+        ]
+
+        if let caption = caption {
+            body["caption"] = caption
+        }
+        if let location = location {
+            body["location"] = location
+        }
+        if let eventId = eventId {
+            body["eventId"] = eventId
+        }
+
+        print("📡 NetworkService.createPost sending body: \(body)")
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else {
+            return Fail(error: NetworkError.unknown).eraseToAnyPublisher()
+        }
+
+        return request("/api/posts", method: "POST", body: jsonData)
+    }
+
     func fetchPostsForEvent(eventId: String) -> AnyPublisher<[Post], Error> {
         struct Response: Codable {
             let posts: [Post]

@@ -406,7 +406,24 @@ struct EventPhotosViewer: View {
         let storageKey = "event_photos_\(event.id)"
         print("📱 Loading photos from storage key: \(storageKey)")
 
-        let storedPhotos = UserDefaults.standard.array(forKey: storageKey) as? [[String: Any]] ?? []
+        // DEBUG: Add test data if no photos exist
+        var storedPhotos = UserDefaults.standard.array(forKey: storageKey) as? [[String: Any]] ?? []
+        if storedPhotos.isEmpty {
+            print("📱 No photos found, adding test data for debugging")
+            let testPhoto: [String: Any] = [
+                "id": "test-photo-1",
+                "eventId": event.id,
+                "userId": "6",
+                "userName": "Test User",
+                "userAvatar": "",
+                "images": ["https://picsum.photos/400/400?random=1"],
+                "caption": "Test photo",
+                "uploadedAt": Date().timeIntervalSince1970
+            ]
+            storedPhotos.append(testPhoto)
+            UserDefaults.standard.set(storedPhotos, forKey: storageKey)
+        }
+
         print("📱 Found \(storedPhotos.count) raw photo records in storage")
 
         let localPosts = storedPhotos.compactMap { photoData -> Post? in

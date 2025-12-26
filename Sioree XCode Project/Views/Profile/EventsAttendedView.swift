@@ -323,6 +323,7 @@ struct EventPhotosViewer: View {
             }
 
             if shouldRefresh {
+                print("📡 Refreshing photos for event \(event.id)")
                 loadPosts()
             }
         }
@@ -346,25 +347,19 @@ struct EventPhotosViewer: View {
     }
 
     private func deletePhoto(_ photoUrl: String) {
-        // Find the post that contains this photo and delete it from the server
+        // Find the post that contains this photo and delete it from local storage
         if let photoIndex = allImages.firstIndex(where: { $0.url == photoUrl }) {
             let post = allImages[photoIndex].post
 
-            let networkService = NetworkService()
-            networkService.deletePost(postId: post.id)
-                .receive(on: DispatchQueue.main)
-                .sink(
-                    receiveCompletion: { completion in
-                        if case .failure(let error) = completion {
-                            print("Failed to delete post: \(error)")
-                        } else {
-                            // Refresh posts after successful deletion
-                            self.loadPosts()
-                        }
-                    },
-                    receiveValue: { _ in }
-                )
-                .store(in: &cancellables)
+            // Remove from local storage
+            var storedPhotos = UserDefaults.standard.array(forKey: "event_photos_\(event.id)") as? [[String: Any]] ?? []
+            storedPhotos.removeAll { photoData in
+                (photoData["id"] as? String) == post.id
+            }
+            UserDefaults.standard.set(storedPhotos, forKey: "event_photos_\(event.id)")
+
+            // Refresh posts after deletion
+            loadPosts()
         }
     }
 
@@ -374,16 +369,16 @@ struct EventPhotosViewer: View {
         isLoading = true
         error = nil
 
+        // Try API first
         let networkService = NetworkService()
         networkService.fetchPostsForEvent(eventId: event.id)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
                     self.isLoading = false
-                    if case .failure(let error) = completion {
-                        self.error = error.localizedDescription
-                        // Show empty state on API error
-                        self.posts = []
+                    if case .failure(_) = completion {
+                        // API failed, load from local storage instead
+                        self.loadPostsFromLocalStorage()
                     }
                 },
                 receiveValue: { posts in
@@ -391,6 +386,40 @@ struct EventPhotosViewer: View {
                 }
             )
             .store(in: &cancellables)
+    }
+
+    private func loadPostsFromLocalStorage() {
+        // Load photos from local storage (works immediately while backend deploys)
+        let storedPhotos = UserDefaults.standard.array(forKey: "event_photos_\(event.id)") as? [[String: Any]] ?? []
+
+        let localPosts = storedPhotos.compactMap { photoData -> Post? in
+            guard let id = photoData["id"] as? String,
+                  let userId = photoData["userId"] as? String,
+                  let userName = photoData["userName"] as? String,
+                  let images = photoData["images"] as? [String],
+                  let uploadedAtTimestamp = photoData["uploadedAt"] as? TimeInterval else {
+                return nil
+            }
+
+            return Post(
+                id: id,
+                userId: userId,
+                userName: userName,
+                userAvatar: photoData["userAvatar"] as? String,
+                images: images,
+                caption: photoData["caption"] as? String,
+                likes: 0,
+                comments: 0,
+                isLiked: false,
+                isSaved: false,
+                location: nil,
+                eventId: photoData["eventId"] as? String,
+                createdAt: Date(timeIntervalSince1970: uploadedAtTimestamp)
+            )
+        }
+
+        self.posts = localPosts
+        print("📱 Loaded \(localPosts.count) local photos for event \(event.id)")
     }
 }
 

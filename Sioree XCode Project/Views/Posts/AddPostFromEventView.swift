@@ -206,44 +206,50 @@ struct AddPostFromEventView: View {
                     }
                 },
                 receiveValue: { [self] uploadedUrls in
-                    // Now create a post on the server with the uploaded image URLs
-                    print("📤 Creating post with \(uploadedUrls.count) image URLs: \(uploadedUrls)")
-                    networkService.createPost(
-                        caption: nil, // Simple photo upload - no caption needed
-                        mediaUrls: uploadedUrls,
-                        location: nil,
-                        eventId: event?.id
-                    )
-                    .receive(on: DispatchQueue.main)
-                    .sink(
-                        receiveCompletion: { [self] completion in
-                            isUploading = false
-                            if case .failure(let error) = completion {
-                                errorMessage = "Failed to save photos: \(error.localizedDescription)"
-                                showError = true
-                            }
-                        },
-                        receiveValue: { [self] post in
-                            // Success! Post created on server
-                            print("✅ Post created successfully on server: \(post.id)")
+                    print("📤 Photos uploaded successfully: \(uploadedUrls)")
 
-                            // Notify other views that a new post was created
-                            NotificationCenter.default.post(
-                                name: NSNotification.Name("PostCreated"),
-                                object: nil,
-                                userInfo: [
-                                    "userId": authViewModel.currentUser?.id ?? "",
-                                    "eventId": event?.id
-                                ]
-                            )
+                    // Store photos locally with event association since posts API isn't deployed
+                    self.savePhotosLocally(uploadedUrls)
 
-                            dismiss()
-                        }
+                    // Notify listeners that photos were added
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("PostCreated"),
+                        object: nil,
+                        userInfo: [
+                            "userId": authViewModel.currentUser?.id ?? "",
+                            "eventId": event?.id,
+                            "photoUrls": uploadedUrls
+                        ]
                     )
-                    .store(in: &cancellables)
+
+                    isUploading = false
+                    dismiss()
                 }
             )
-            .store(in: &cancellables)
+                    .store(in: &cancellables)
+    }
+
+    private func savePhotosLocally(_ photoUrls: [String]) {
+        guard let eventId = event?.id, let userId = authViewModel.currentUser?.id else { return }
+
+        // Create a local photo record
+        let photoRecord: [String: Any] = [
+            "id": UUID().uuidString,
+            "eventId": eventId,
+            "userId": userId,
+            "userName": authViewModel.currentUser?.name ?? "You",
+            "userAvatar": authViewModel.currentUser?.avatar ?? "",
+            "images": photoUrls,
+            "caption": "",
+            "uploadedAt": Date().timeIntervalSince1970
+        ]
+
+        // Save to local storage
+        var eventPhotos = UserDefaults.standard.array(forKey: "event_photos_\(eventId)") as? [[String: Any]] ?? []
+        eventPhotos.append(photoRecord)
+        UserDefaults.standard.set(eventPhotos, forKey: "event_photos_\(eventId)")
+
+        print("💾 Saved \(photoUrls.count) photos locally for event \(eventId)")
     }
 }
 

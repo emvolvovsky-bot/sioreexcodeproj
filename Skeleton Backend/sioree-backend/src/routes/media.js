@@ -38,12 +38,10 @@ const uploadToS3 = async ({ key, body, contentType }) => {
   };
 
   const result = await s3.upload(params).promise();
+  console.log("[S3 UPLOAD] Location from S3:", result.Location);
   
-  // Return the public URL
-  return {
-    ...result,
-    Location: `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`
-  };
+  // Use S3's returned Location URL (has correct region)
+  return result;
 };
 
 const singleUploadHandler = async (req, res) => {

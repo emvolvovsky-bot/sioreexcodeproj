@@ -74,8 +74,6 @@ class PhotoService: ObservableObject {
     
     // MARK: - Upload Image
     func uploadImage(_ image: UIImage) -> AnyPublisher<String, Error> {
-        let networkService = NetworkService()
-        
         // Resize & compress to avoid 413/decoding errors from oversized payloads
         guard let imageData = prepareImageData(image) else {
             return Fail(error: NSError(domain: "PhotoService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to convert image to data"]))

@@ -2,31 +2,19 @@
 //  StripePaymentService.swift
 //  Sioree
 //
-//  Real payment processing with Stripe
+//  Stripe payment processing service
 //
 
 import Foundation
 import Combine
-import PassKit // For Apple Pay
 
+// MARK: - Stripe Models
 struct StripePaymentIntent: Codable {
+    let id: String
     let clientSecret: String
-    let paymentIntentId: String
-    
-    init(clientSecret: String) {
-        self.clientSecret = clientSecret
-        // Extract payment intent ID from client secret (format: pi_xxx_secret_yyy)
-        if let piIndex = clientSecret.range(of: "pi_") {
-            let afterPi = clientSecret[piIndex.upperBound...]
-            if let secretIndex = afterPi.range(of: "_secret_") {
-                self.paymentIntentId = String(clientSecret[piIndex.lowerBound..<secretIndex.lowerBound])
-            } else {
-                self.paymentIntentId = ""
-            }
-        } else {
-            self.paymentIntentId = ""
-        }
-    }
+    let amount: Int
+    let currency: String
+    let status: String
 }
 
 struct StripePaymentMethod: Codable {
@@ -42,179 +30,80 @@ struct StripeCard: Codable {
     let expYear: Int
 }
 
+// MARK: - StripePaymentService
 class StripePaymentService: ObservableObject {
     static let shared = StripePaymentService()
+
     private let networkService = NetworkService()
-    
-    // MARK: - Create Payment Intent
-    func createPaymentIntent(amount: Double, hostStripeAccountId: String? = nil, description: String? = nil, bookingId: String? = nil) -> AnyPublisher<String, Error> {
-        var body: [String: Any] = [
-            "amount": amount // Send as dollars, backend will convert to cents
-        ]
-        
-        if let hostStripeAccountId = hostStripeAccountId {
-            body["hostStripeAccountId"] = hostStripeAccountId
-        }
-        
+    private let baseURL = "https://api.stripe.com/v1"
+
+    private init() {}
+
+    // MARK: - Apple Pay Processing
+    func processApplePay(amount: Double, hostStripeAccountId: String?, description: String, bookingId: String?) -> AnyPublisher<String, Error> {
+        let body: [String: Any] = [
+            "amount": Int(amount * 100), // Convert to cents
+            "currency": "usd",
+            "description": description,
+            "bookingId": bookingId,
+            "hostStripeAccountId": hostStripeAccountId
+        ].compactMapValues { $0 }
+
         guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else {
             return Fail(error: NetworkError.unknown).eraseToAnyPublisher()
         }
-        
-        struct Response: Codable {
-            let clientSecret: String
+
+        return networkService.request("/api/payments/apple-pay", method: "POST", body: jsonData)
+            .map { (response: [String: String]) in
+                response["clientSecret"] ?? ""
+            }
+            .eraseToAnyPublisher()
+    }
+
+    // MARK: - Payment Intent Creation
+    func createPaymentIntent(amount: Double, hostStripeAccountId: String?, description: String, bookingId: String?) -> AnyPublisher<String, Error> {
+        let body: [String: Any] = [
+            "amount": Int(amount * 100), // Convert to cents
+            "currency": "usd",
+            "description": description,
+            "bookingId": bookingId,
+            "hostStripeAccountId": hostStripeAccountId
+        ].compactMapValues { $0 }
+
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else {
+            return Fail(error: NetworkError.unknown).eraseToAnyPublisher()
         }
-        
+
         return networkService.request("/api/payments/create-intent", method: "POST", body: jsonData)
-            .map { (response: Response) in
-                response.clientSecret
+            .map { (response: [String: String]) in
+                response["clientSecret"] ?? ""
             }
             .eraseToAnyPublisher()
     }
-    
-    // MARK: - Confirm Payment
-    func confirmPayment(paymentIntentId: String, paymentMethodId: String) -> AnyPublisher<Payment, Error> {
+
+    // MARK: - Payment Confirmation
+    func confirmPayment(clientSecret: String, paymentMethodId: String?) -> AnyPublisher<Payment, Error> {
         let body: [String: Any] = [
-            "paymentIntentId": paymentIntentId,
+            "clientSecret": clientSecret,
             "paymentMethodId": paymentMethodId
-        ]
-        
+        ].compactMapValues { $0 }
+
         guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else {
             return Fail(error: NetworkError.unknown).eraseToAnyPublisher()
         }
-        
-        struct PaymentResponse: Codable {
-            let id: String
-            let userId: String
-            let amount: Double
-            let method: String
-            let status: String
-            let transactionId: String?
-            let description: String?
-            let createdAt: String
-            
-            init(from decoder: Decoder) throws {
-                let container = try decoder.container(keyedBy: CodingKeys.self)
-                
-                func decodeString(_ key: CodingKeys) throws -> String {
-                    if let stringVal = try? container.decode(String.self, forKey: key) {
-                        return stringVal
-                    }
-                    if let intVal = try? container.decode(Int.self, forKey: key) {
-                        return String(intVal)
-                    }
-                    if let doubleVal = try? container.decode(Double.self, forKey: key) {
-                        return String(doubleVal)
-                    }
-                    return ""
-                }
-                
-                id = try decodeString(.id)
-                userId = try decodeString(.userId)
-                amount = (try? container.decode(Double.self, forKey: .amount)) ?? 0
-                method = (try? container.decode(String.self, forKey: .method)) ?? "credit_card"
-                status = (try? container.decode(String.self, forKey: .status)) ?? "pending"
-                transactionId = try? container.decodeIfPresent(String.self, forKey: .transactionId)
-                description = try? container.decodeIfPresent(String.self, forKey: .description)
-                createdAt = (try? container.decode(String.self, forKey: .createdAt)) ?? ISO8601DateFormatter().string(from: Date())
-            }
-        }
-        
+
         return networkService.request("/api/payments/confirm", method: "POST", body: jsonData)
-            .map { (response: PaymentResponse) -> Payment in
-                // Convert response to Payment model
-                let paymentMethod: PaymentMethod
-                switch response.method {
-                case "credit_card", "debit_card":
-                    paymentMethod = response.method == "credit_card" ? .creditCard : .debitCard
-                case "apple_pay":
-                    paymentMethod = .applePay
-                default:
-                    paymentMethod = .creditCard
-                }
-                
-                let paymentStatus: PaymentStatus
-                switch response.status {
-                case "paid":
-                    paymentStatus = .paid
-                case "pending":
-                    paymentStatus = .pending
-                case "failed":
-                    paymentStatus = .failed
-                case "refunded":
-                    paymentStatus = .refunded
-                default:
-                    paymentStatus = .pending
-                }
-                
-                let dateFormatter = ISO8601DateFormatter()
-                dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-                let createdAt = dateFormatter.date(from: response.createdAt) ?? Date()
-                
-                return Payment(
-                    id: response.id,
-                    userId: response.userId,
-                    amount: response.amount,
-                    method: paymentMethod,
-                    status: paymentStatus,
-                    transactionId: response.transactionId,
-                    description: response.description,
-                    createdAt: createdAt
-                )
-            }
+    }
+
+    // MARK: - Alternative Payment Confirmation (for compatibility)
+    func confirmPayment(paymentIntentId: String, paymentMethodId: String) -> AnyPublisher<Payment, Error> {
+        // Stub implementation - payments not implemented yet
+        return Fail(error: NSError(domain: "StripePaymentService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Payments not implemented yet"]))
             .eraseToAnyPublisher()
     }
-    
-    // MARK: - Process Apple Pay
-    func processApplePay(amount: Double, hostStripeAccountId: String? = nil, description: String? = nil, bookingId: String? = nil) -> AnyPublisher<String, Error> {
-        // Create payment intent and return clientSecret for Apple Pay
-        return createPaymentIntent(amount: amount, hostStripeAccountId: hostStripeAccountId, description: description, bookingId: bookingId)
-    }
-    
-    // MARK: - Save Payment Method
-    func savePaymentMethod(paymentMethodId: String, setAsDefault: Bool = false) -> AnyPublisher<Bool, Error> {
-        let body: [String: Any] = [
-            "paymentMethodId": paymentMethodId,
-            "setAsDefault": setAsDefault
-        ]
-        
-        guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else {
-            return Fail(error: NetworkError.unknown).eraseToAnyPublisher()
-        }
-        
-        struct Response: Codable {
-            let success: Bool
-        }
-        
-        return networkService.request("/api/payments/save-method", method: "POST", body: jsonData)
-            .map { (response: Response) in response.success }
-            .eraseToAnyPublisher()
-    }
-    
-    // MARK: - Get Payment Methods
-    func getPaymentMethods() -> AnyPublisher<[StripePaymentMethod], Error> {
-        struct Response: Codable {
-            let paymentMethods: [StripePaymentMethod]
-        }
-        
-        return networkService.request("/api/payments/methods")
-            .map { (response: Response) in response.paymentMethods }
-            .eraseToAnyPublisher()
-    }
-    
-    // MARK: - Delete Payment Method
-    func deletePaymentMethod(paymentMethodId: String) -> AnyPublisher<Bool, Error> {
-        struct Response: Codable {
-            let success: Bool
-        }
-        
-        return networkService.request("/api/payments/methods/\(paymentMethodId)", method: "DELETE")
-            .map { (response: Response) in response.success }
-            .eraseToAnyPublisher()
-    }
-    
-    // MARK: - Expose Network Service
+
+    // MARK: - Network Service Access
     func getNetworkService() -> NetworkService {
         return networkService
     }
 }
-

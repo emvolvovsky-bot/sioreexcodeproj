@@ -471,6 +471,106 @@ struct EventPhotosViewer: View {
     }
 }
 
+struct EventCardZStack: View {
+    let event: Event
+    let index: Int
+    let total: Int
+
+    var body: some View {
+        ZStack {
+            // Event card with offset based on index
+            VStack(alignment: .leading, spacing: 0) {
+                // Hero Image
+                ZStack(alignment: .topTrailing) {
+                    if let firstImage = event.images.first {
+                        AsyncImage(url: URL(string: firstImage)) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            ZStack {
+                                LinearGradient(
+                                    colors: [Color.sioreeIcyBlue.opacity(0.3), Color.sioreeWarmGlow.opacity(0.2)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                                Image(systemName: "party.popper.fill")
+                                    .font(.system(size: 60))
+                                    .foregroundColor(.sioreeIcyBlue.opacity(0.6))
+                            }
+                        }
+                        .frame(height: 200)
+                        .clipped()
+                    } else {
+                        ZStack {
+                            LinearGradient(
+                                colors: [Color.sioreeIcyBlue.opacity(0.3), Color.sioreeWarmGlow.opacity(0.2)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                            Image(systemName: "party.popper.fill")
+                                .font(.system(size: 60))
+                                .foregroundColor(.sioreeIcyBlue.opacity(0.6))
+                        }
+                        .frame(height: 200)
+                    }
+                }
+
+                // Content
+                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                    Text(event.title)
+                        .font(.sioreeH4)
+                        .foregroundColor(Color.sioreeWhite)
+                        .lineLimit(2)
+
+                    HStack(spacing: Theme.Spacing.s) {
+                        Image(systemName: "person.circle.fill")
+                            .foregroundColor(Color.sioreeLightGrey.opacity(0.7))
+                            .font(.system(size: 16))
+                        Text(event.hostName)
+                            .font(.sioreeBodySmall)
+                            .foregroundColor(Color.sioreeLightGrey.opacity(0.7))
+                    }
+
+                    HStack(spacing: Theme.Spacing.m) {
+                        Label(event.date.formattedEventDate(), systemImage: "calendar")
+                        Label(event.time.formattedEventTime(), systemImage: "clock")
+                    }
+                    .font(.sioreeCaption)
+                    .foregroundColor(Color.sioreeLightGrey.opacity(0.6))
+
+                    if let price = event.ticketPrice {
+                        Text(Helpers.formatCurrency(price))
+                            .font(.sioreeBody)
+                            .fontWeight(.semibold)
+                            .foregroundColor(Color.sioreeIcyBlue)
+                    }
+                }
+                .padding(Theme.Spacing.m)
+            }
+            .background(
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                    .fill(Color.sioreeCharcoal.opacity(0.8))
+                    .shadow(color: Color.black.opacity(0.3), radius: 8, x: 0, y: 4)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                    .stroke(
+                        LinearGradient(
+                            colors: [Color.sioreeIcyBlue.opacity(0.3), Color.sioreeWarmGlow.opacity(0.2)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+            )
+            .cornerRadius(Theme.CornerRadius.medium)
+            .offset(x: CGFloat(index) * 8, y: CGFloat(index) * 8) // Stack offset
+            .zIndex(Double(total - index)) // Ensure proper stacking order
+        }
+    }
+}
+
 struct EventsAttendedView: View {
     @StateObject private var viewModel = ProfileViewModel(userId: nil, useAttendedEvents: true)
     @State private var selectedEvent: Event? = nil

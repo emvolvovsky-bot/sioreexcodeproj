@@ -18,7 +18,7 @@ class PaymentService {
         case .applePay:
             return stripeService.processApplePay(
                 amount: amount,
-                hostStripeAccountId: nil,
+                hostStripeAccountId: nil as String?,
                 description: "Sioree Payment",
                 bookingId: bookingId
             )
@@ -29,7 +29,8 @@ class PaymentService {
                     amount: amount,
                     method: method,
                     status: .pending,
-                    transactionId: clientSecret.components(separatedBy: "_secret_").first,
+                    transactionId: clientSecret.components(separatedBy
+                                                           : "_secret_").first,
                     description: "Payment pending confirmation"
                 )
             }
@@ -39,7 +40,7 @@ class PaymentService {
             // This will be handled by PaymentCheckoutView
             return stripeService.createPaymentIntent(
                 amount: amount,
-                hostStripeAccountId: nil,
+                hostStripeAccountId: nil as String?,
                 description: "Sioree Payment",
                 bookingId: bookingId
             )

@@ -309,7 +309,7 @@ struct EventCardGridItem: View {
                         .font(.system(size: 10))
                         .foregroundColor(Color.sioreeLightGrey.opacity(0.9))
                     Text(event.date.formatted(date: .abbreviated, time: .omitted))
-                        .font(.sioreeCaptionSmall)
+                        .font(.sioreeCaption)
                         .foregroundColor(Color.sioreeLightGrey.opacity(0.9))
                 }
                 .shadow(color: Color.black.opacity(0.8), radius: 2)

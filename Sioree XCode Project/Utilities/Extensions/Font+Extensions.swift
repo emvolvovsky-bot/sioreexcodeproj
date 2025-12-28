@@ -21,5 +21,6 @@ extension Font {
     static let sioreeBodyBold = Font.system(size: 15, weight: .semibold, design: .default)
     static let sioreeBodySmall = Font.system(size: 13, weight: .light, design: .default)
     static let sioreeCaption = Font.system(size: 11, weight: .light, design: .default)
+    static let sioreeCaptionSmall = Font.system(size: 10, weight: .light, design: .default)
 }
 

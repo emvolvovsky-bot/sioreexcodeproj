@@ -152,11 +152,11 @@ struct HostProfileView: View {
                                     // Host History (only for hosts)
                                     NavigationLink(destination: HostHistoryView(hostId: user.id, hostName: user.name ?? user.username)) {
                                         HStack {
-                                            Image(systemName: "photo.on.rectangle.angled")
+                                            Image(systemName: "video.fill")
                                                 .font(.system(size: 20))
                                                 .foregroundColor(Color.sioreeIcyBlue)
-                                            
-                                            Text("View Host History")
+
+                                            Text("View Video Compilation")
                                                 .font(.sioreeBody)
                                                 .foregroundColor(Color.sioreeWhite)
                                             

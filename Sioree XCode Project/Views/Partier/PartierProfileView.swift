@@ -151,17 +151,17 @@ struct PartierProfileView: View {
             spacing: Theme.Spacing.m
         ) {
             ForEach(Array(viewModel.events.prefix(6)), id: \.id) { event in
-                                                EventCardGridItem(event: event)
-                                                    .onTapGesture {
-                                                        selectedEventForPhotos = event
-                                                    }
-                                                    .contextMenu {
-                                                        Button(action: {
-                                                            selectedEventForPost = event
-                                                        }) {
-                                                            Label("Add Photos", systemImage: "photo.fill")
-                                                        }
-                                                    }
+                EventCardGridItem(event: event)
+                    .onTapGesture {
+                        selectedEventForPhotos = event
+                    }
+                    .contextMenu {
+                        Button(action: {
+                            selectedEventForPost = event
+                        }) {
+                            Label("Add Photos", systemImage: "photo.fill")
+                        }
+                    }
             }
         }
         .padding(.all, Theme.Spacing.m)

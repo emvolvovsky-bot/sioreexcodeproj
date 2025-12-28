@@ -135,15 +135,22 @@ struct AddPostFromEventView: View {
                                 .disabled(isUploading)
                                 .opacity(isUploading ? 0.6 : 1.0)
 
-                                // Add more photos button
-                                Button(action: {
-                                    showImagePicker = true
-                                }) {
-                                    Text("Add More Photos")
+                                // Add more photos button (limit to 5 photos)
+                                if selectedImages.count < Constants.Limits.maxPostImages {
+                                    Button(action: {
+                                        showImagePicker = true
+                                    }) {
+                                        Text("Add More Photos (\(selectedImages.count)/\(Constants.Limits.maxPostImages))")
+                                            .font(.sioreeBodySmall)
+                                            .foregroundColor(.sioreeIcyBlue)
+                                    }
+                                    .padding(.top, Theme.Spacing.s)
+                                } else {
+                                    Text("Maximum \(Constants.Limits.maxPostImages) photos reached")
                                         .font(.sioreeBodySmall)
-                                        .foregroundColor(.sioreeIcyBlue)
+                                        .foregroundColor(.sioreeLightGrey)
+                                        .padding(.top, Theme.Spacing.s)
                                 }
-                                .padding(.top, Theme.Spacing.s)
                             }
                         }
                     }

@@ -136,7 +136,7 @@ struct MockData {
             imageName: "party.popper.fill",
             tags: ["House Party", "Halloween", "Mansion"],
             isFeatured: true,
-            images: ["Getty_515070156_EDITORIALONLY_LosAngeles_HollywoodBlvd_Web72DPI_0.jpg"]
+            images: ["Getty_515070156_EDITORIALONLY_LosAngeles_HollywoodBlvd_Web72DPI_0.jpg", "Lights_of_Rockefeller_Center_during_sunset.jpg", "iStock-528897870.jpg.webp"]
         ),
         AppEvent(
             hostId: "h2",

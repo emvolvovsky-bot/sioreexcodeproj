@@ -19,12 +19,13 @@ struct EventPhotosViewer: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var authViewModel: AuthViewModel
     @State private var currentPhotoIndex = 0
-    @State private var showDeleteConfirmation = false
-    @State private var postToDelete: String? = nil
     @State private var posts: [Post] = []
     @State private var isLoading = true
     @State private var error: String? = nil
     @State private var showAddPhotos = false
+    @State private var showFullScreenViewer = false
+    @State private var showDeleteConfirmation = false
+    @State private var postToDelete: String? = nil
 
     init(event: Event) {
         print("🎬 EventPhotosViewer initialized for event: \(event.title) (ID: \(event.id))")
@@ -53,7 +54,7 @@ struct EventPhotosViewer: View {
         if isHost {
             return "Photos from attendees will appear here"
         } else {
-            return "Add photos to share your memories from this event!"
+            return "Add your photos to share memories from this event"
         }
     }
 
@@ -128,9 +129,9 @@ struct EventPhotosViewer: View {
                 .padding(.vertical, Theme.Spacing.s)
                 .padding(.horizontal, Theme.Spacing.m)
 
-                // Photo counter
-                if allImages.count > 1 {
-                    Text("\(currentPhotoIndex + 1) of \(allImages.count)")
+                // Photo count
+                if !allImages.isEmpty {
+                    Text("\(allImages.count) photo\(allImages.count == 1 ? "" : "s")")
                         .font(.sioreeCaption)
                         .foregroundColor(Color.sioreeLightGrey.opacity(0.6))
                         .padding(.vertical, Theme.Spacing.xs)
@@ -143,163 +144,121 @@ struct EventPhotosViewer: View {
                             .tint(Color.sioreeIcyBlue)
                             .scaleEffect(1.5)
                     } else if allImages.isEmpty {
-                        VStack(spacing: Theme.Spacing.m) {
+                        VStack(spacing: Theme.Spacing.l) {
                             Spacer()
-                            Image(systemName: "photo.stack")
-                                .font(.system(size: 60))
-                                .foregroundColor(Color.sioreeLightGrey.opacity(0.5))
-                            Text(emptyStateTitle)
-                                .font(.sioreeH3)
-                                .foregroundColor(Color.sioreeWhite)
-                            Text(emptyStateSubtitle)
-                                .font(.sioreeBody)
-                                .foregroundColor(Color.sioreeLightGrey.opacity(0.7))
-                                .multilineTextAlignment(.center)
+                            Image(systemName: "camera.fill")
+                                .font(.system(size: 80))
+                                .foregroundColor(Color.sioreeIcyBlue.opacity(0.6))
+                            VStack(spacing: Theme.Spacing.s) {
+                                Text(emptyStateTitle)
+                                    .font(.sioreeH2)
+                                    .foregroundColor(Color.sioreeWhite)
+                                Text(emptyStateSubtitle)
+                                    .font(.sioreeBody)
+                                    .foregroundColor(Color.sioreeLightGrey.opacity(0.8))
+                                    .multilineTextAlignment(.center)
+                            }
                             Spacer()
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .padding(.horizontal, Theme.Spacing.l)
                     } else {
-                        TabView(selection: $currentPhotoIndex) {
-                            ForEach(allImages.indices, id: \.self) { index in
-                                let photo = allImages[index]
-                                ZStack(alignment: .bottomLeading) {
-                                    if let url = URL(string: photo.url) {
-                                        AsyncImage(url: url) { phase in
-                                            switch phase {
-                                            case .empty:
-                                                Rectangle()
-                                                    .fill(Color.sioreeCharcoal)
-                                                    .overlay(
-                                                        ProgressView()
-                                                            .tint(Color.sioreeIcyBlue)
-                                                            .scaleEffect(1.5)
-                                                    )
-                                            case .success(let image):
-                                                image
-                                                    .resizable()
-                                                    .scaledToFill()
-                                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                                    .clipped()
-                                            case .failure:
-                                                Rectangle()
-                                                    .fill(Color.sioreeCharcoal)
-                                                    .overlay(
-                                                        VStack(spacing: Theme.Spacing.s) {
-                                                            Image(systemName: "photo")
-                                                                .font(.system(size: 50))
-                                                                .foregroundColor(Color.sioreeLightGrey)
-                                                            Text("Failed to load")
-                                                                .font(.sioreeCaption)
-                                                                .foregroundColor(Color.sioreeLightGrey.opacity(0.7))
+                        ScrollView {
+                            LazyVGrid(
+                                columns: [
+                                    GridItem(.flexible(), spacing: Theme.Spacing.s),
+                                    GridItem(.flexible(), spacing: Theme.Spacing.s),
+                                    GridItem(.flexible(), spacing: Theme.Spacing.s)
+                                ],
+                                spacing: Theme.Spacing.s
+                            ) {
+                                ForEach(allImages.indices, id: \.self) { index in
+                                    let photo = allImages[index]
+                                    ZStack(alignment: .topTrailing) {
+                                        Button(action: {
+                                            currentPhotoIndex = index
+                                            showFullScreenViewer = true
+                                        }) {
+                                            ZStack(alignment: .bottomLeading) {
+                                                if let url = URL(string: photo.url) {
+                                                    AsyncImage(url: url) { phase in
+                                                        switch phase {
+                                                        case .empty:
+                                                            Rectangle()
+                                                                .fill(Color.sioreeCharcoal)
+                                                                .overlay(
+                                                                    ProgressView()
+                                                                        .tint(Color.sioreeIcyBlue)
+                                                                        .scaleEffect(1.5)
+                                                                )
+                                                        case .success(let image):
+                                                            image
+                                                                .resizable()
+                                                                .scaledToFill()
+                                                                .frame(height: 120)
+                                                                .clipped()
+                                                        case .failure:
+                                                            Rectangle()
+                                                                .fill(Color.sioreeCharcoal)
+                                                                .overlay(
+                                                                    VStack(spacing: Theme.Spacing.xs) {
+                                                                        Image(systemName: "photo")
+                                                                            .font(.system(size: 30))
+                                                                            .foregroundColor(Color.sioreeLightGrey)
+                                                                        Text("Failed to load")
+                                                                            .font(.sioreeCaptionSmall)
+                                                                            .foregroundColor(Color.sioreeLightGrey.opacity(0.7))
+                                                                    }
+                                                                )
+                                                        @unknown default:
+                                                            Rectangle()
+                                                                .fill(Color.sioreeCharcoal)
                                                         }
-                                                    )
-                                            @unknown default:
-                                                Rectangle()
-                                                    .fill(Color.sioreeCharcoal)
-                                            }
-                                        }
-                                    }
-
-                                    // Photo info overlay
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Spacer()
-                                        if let caption = photo.post.caption, !caption.isEmpty {
-                                            Text(caption)
-                                                .font(.sioreeBody)
-                                                .foregroundColor(Color.sioreeWhite)
-                                                .lineLimit(3)
-                                                .shadow(color: Color.black.opacity(0.8), radius: 4)
-                                                .padding(.horizontal, Theme.Spacing.m)
-                                                .padding(.bottom, 8)
-                                        }
-
-                                        HStack(spacing: 8) {
-                                            // User info - show for hosts or when viewing others' photos
-                                            if isHost || photo.post.userId != authViewModel.currentUser?.id {
-                                                HStack(spacing: 6) {
-                                                    if let avatarUrl = photo.post.userAvatar, let url = URL(string: avatarUrl) {
-                                                        AsyncImage(url: url) { phase in
-                                                            switch phase {
-                                                            case .success(let image):
-                                                                image
-                                                                    .resizable()
-                                                                    .scaledToFill()
-                                                                    .frame(width: 24, height: 24)
-                                                                    .clipShape(Circle())
-                                                            default:
-                                                                Circle()
-                                                                    .fill(Color.sioreeLightGrey.opacity(0.3))
-                                                                    .frame(width: 24, height: 24)
-                                                            }
-                                                        }
-                                                    } else {
-                                                        Circle()
-                                                            .fill(Color.sioreeLightGrey.opacity(0.3))
-                                                            .frame(width: 24, height: 24)
-                                                            .overlay(
-                                                                Image(systemName: "person.fill")
-                                                                    .font(.system(size: 12))
-                                                                    .foregroundColor(Color.sioreeLightGrey)
-                                                            )
                                                     }
-
-                                                    Text(photo.post.userName)
-                                                        .font(.sioreeCaption)
-                                                        .foregroundColor(Color.sioreeWhite)
                                                 }
-                                                .shadow(color: Color.black.opacity(0.8), radius: 4)
+
+                                                // Simple overlay with photo number
+                                                VStack(alignment: .trailing, spacing: 2) {
+                                                    Spacer()
+                                                    HStack {
+                                                        Spacer()
+                                                        Text("\(index + 1)")
+                                                            .font(.sioreeCaptionSmall)
+                                                            .foregroundColor(Color.sioreeWhite)
+                                                            .padding(.horizontal, 6)
+                                                            .padding(.vertical, 2)
+                                                            .background(Color.black.opacity(0.6))
+                                                            .cornerRadius(Theme.CornerRadius.small)
+                                                            .padding(Theme.Spacing.xs)
+                                                    }
+                                                }
                                             }
+                                            .frame(height: 120)
+                                            .cornerRadius(Theme.CornerRadius.medium)
+                                            .shadow(color: Color.black.opacity(0.3), radius: 4, x: 0, y: 2)
                                         }
-                                        .padding(.horizontal, Theme.Spacing.m)
-                                        .padding(.bottom, Theme.Spacing.m)
-                                    }
 
-                                    // Delete button for own posts only
-                                    if photo.post.userId == authViewModel.currentUser?.id {
-                                        VStack {
-                                            HStack {
-                                                Spacer()
-                                                Button(action: {
-                                                    postToDelete = photo.post.id
-                                                    showDeleteConfirmation = true
-                                                }) {
-                                                    Image(systemName: "trash")
-                                                        .font(.system(size: 16, weight: .medium))
-                                                        .foregroundColor(.white)
-                                                        .padding(12)
-                                                        .background(Color.red.opacity(0.8))
-                                                        .clipShape(Circle())
-                                                        .shadow(radius: 4)
-                                                }
-                                                .padding(.top, 120)
-                                                .padding(.trailing, Theme.Spacing.m)
+                                        // Delete button for user's own photos
+                                        if photo.post.userId == authViewModel.currentUser?.id {
+                                            Button(action: {
+                                                postToDelete = photo.post.id
+                                                showDeleteConfirmation = true
+                                            }) {
+                                                Image(systemName: "trash.circle.fill")
+                                                    .font(.system(size: 24))
+                                                    .foregroundColor(Color.red.opacity(0.9))
+                                                    .background(Color.black.opacity(0.6))
+                                                    .clipShape(Circle())
+                                                    .padding(Theme.Spacing.xs)
                                             }
-                                            Spacer()
+                                            .padding(Theme.Spacing.xs)
                                         }
                                     }
                                 }
-                                .tag(index)
                             }
+                            .padding(.horizontal, Theme.Spacing.m)
+                            .padding(.vertical, Theme.Spacing.s)
                         }
-                        .tabViewStyle(.page)
-                        .indexViewStyle(.page(backgroundDisplayMode: .always))
-                        .gesture(
-                            DragGesture()
-                                .onEnded { gesture in
-                                    // Smooth swipe detection
-                                    let width = gesture.translation.width
-                                    let height = abs(gesture.translation.height)
-
-                                    if abs(width) > height && abs(width) > 50 {
-                                        if width > 0 && currentPhotoIndex > 0 {
-                                            currentPhotoIndex -= 1
-                                        } else if width < 0 && currentPhotoIndex < allImages.count - 1 {
-                                            currentPhotoIndex += 1
-                                        }
-                                    }
-                                }
-                        )
                     }
                 }
             }
@@ -338,19 +297,25 @@ struct EventPhotosViewer: View {
             print("🎬 EventPhotosViewer appeared, loading posts...")
             loadPosts()
         }
-        .alert("Delete Photo", isPresented: $showDeleteConfirmation) {
-            Button("Cancel", role: .cancel) { }
-            Button("Delete", role: .destructive) {
-                if let postToDelete = postToDelete {
-                    deletePost(postToDelete)
-                }
-            }
-        } message: {
-            Text("Are you sure you want to delete this photo? This action cannot be undone.")
-        }
             .sheet(isPresented: $showAddPhotos) {
                 AddPostFromEventView(event: event)
                     .environmentObject(authViewModel)
+            }
+            .sheet(isPresented: $showFullScreenViewer) {
+                FullScreenPhotoViewer(
+                    photos: allImages,
+                    currentIndex: $currentPhotoIndex
+                )
+            }
+            .alert("Delete Photo", isPresented: $showDeleteConfirmation) {
+                Button("Cancel", role: .cancel) { }
+                Button("Delete", role: .destructive) {
+                    if let postToDelete = postToDelete {
+                        deletePost(postToDelete)
+                    }
+                }
+            } message: {
+                Text("Are you sure you want to delete this photo? This action cannot be undone.")
             }
     }
 
@@ -649,6 +614,143 @@ struct EventsAttendedView: View {
     }
 }
 
+
+struct FullScreenPhotoViewer: View {
+    let photos: [EventPhoto]
+    @Binding var currentIndex: Int
+    @Environment(\.dismiss) var dismiss
+
+    var body: some View {
+        ZStack {
+            Color.sioreeBlack.edgesIgnoringSafeArea(.all)
+
+            TabView(selection: $currentIndex) {
+                ForEach(photos.indices, id: \.self) { index in
+                    let photo = photos[index]
+                    ZStack(alignment: .bottomLeading) {
+                        if let url = URL(string: photo.url) {
+                            AsyncImage(url: url) { phase in
+                                switch phase {
+                                case .empty:
+                                    Rectangle()
+                                        .fill(Color.sioreeCharcoal)
+                                        .overlay(
+                                            ProgressView()
+                                                .tint(Color.sioreeIcyBlue)
+                                                .scaleEffect(2)
+                                        )
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                case .failure:
+                                    Rectangle()
+                                        .fill(Color.sioreeCharcoal)
+                                        .overlay(
+                                            VStack(spacing: Theme.Spacing.m) {
+                                                Image(systemName: "photo")
+                                                    .font(.system(size: 60))
+                                                    .foregroundColor(Color.sioreeLightGrey)
+                                                Text("Failed to load")
+                                                    .font(.sioreeH4)
+                                                    .foregroundColor(Color.sioreeLightGrey.opacity(0.7))
+                                            }
+                                        )
+                                @unknown default:
+                                    Rectangle()
+                                        .fill(Color.sioreeCharcoal)
+                                }
+                            }
+                        }
+
+                        // Photo info overlay
+                        VStack(alignment: .leading, spacing: 4) {
+                            Spacer()
+                            if let caption = photo.post.caption, !caption.isEmpty {
+                                Text(caption)
+                                    .font(.sioreeBody)
+                                    .foregroundColor(Color.sioreeWhite)
+                                    .lineLimit(3)
+                                    .shadow(color: Color.black.opacity(0.8), radius: 4)
+                                    .padding(.horizontal, Theme.Spacing.m)
+                                    .padding(.bottom, 8)
+                            }
+
+                            HStack(spacing: 8) {
+                                Text("\(index + 1) of \(photos.count)")
+                                    .font(.sioreeCaption)
+                                    .foregroundColor(Color.sioreeWhite.opacity(0.8))
+                                    .padding(.horizontal, Theme.Spacing.s)
+                                    .padding(.vertical, Theme.Spacing.xs)
+                                    .background(Color.black.opacity(0.6))
+                                    .cornerRadius(Theme.CornerRadius.medium)
+
+                                Spacer()
+
+                                // User info
+                                HStack(spacing: 6) {
+                                    if let avatarUrl = photo.post.userAvatar, let url = URL(string: avatarUrl) {
+                                        AsyncImage(url: url) { phase in
+                                            switch phase {
+                                            case .success(let image):
+                                                image
+                                                    .resizable()
+                                                    .scaledToFill()
+                                                    .frame(width: 24, height: 24)
+                                                    .clipShape(Circle())
+                                            default:
+                                                Circle()
+                                                    .fill(Color.sioreeLightGrey.opacity(0.3))
+                                                    .frame(width: 24, height: 24)
+                                            }
+                                        }
+                                    } else {
+                                        Circle()
+                                            .fill(Color.sioreeLightGrey.opacity(0.3))
+                                            .frame(width: 24, height: 24)
+                                            .overlay(
+                                                Image(systemName: "person.fill")
+                                                    .font(.system(size: 12))
+                                                    .foregroundColor(Color.sioreeLightGrey)
+                                            )
+                                    }
+
+                                    Text(photo.post.userName)
+                                        .font(.sioreeCaption)
+                                        .foregroundColor(Color.sioreeWhite)
+                                }
+                                .shadow(color: Color.black.opacity(0.8), radius: 4)
+                            }
+                            .padding(.horizontal, Theme.Spacing.m)
+                            .padding(.bottom, Theme.Spacing.m)
+                        }
+                    }
+                    .tag(index)
+                }
+            }
+            .tabViewStyle(.page)
+            .indexViewStyle(.page(backgroundDisplayMode: .always))
+
+            // Close button
+            VStack {
+                HStack {
+                    Spacer()
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 30))
+                            .foregroundColor(Color.sioreeWhite.opacity(0.8))
+                            .background(Color.black.opacity(0.6))
+                            .clipShape(Circle())
+                            .padding(.top, Theme.Spacing.m)
+                            .padding(.trailing, Theme.Spacing.m)
+                    }
+                }
+                Spacer()
+            }
+        }
+    }
+}
 
 #Preview {
     EventsAttendedView()

@@ -46,16 +46,75 @@ class HomeViewModel: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+
+        // Listen for new event creation to add event immediately
+        NotificationCenter.default.publisher(for: NSNotification.Name("EventCreated"))
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                if let event = notification.userInfo?["event"] as? Event {
+                    print("📡 Received EventCreated notification, adding event: \(event.title)")
+                    self?.addNewEventToLists(event: event)
+                }
+                // Don't do fallback refresh - let the event persist locally
+            }
+            .store(in: &cancellables)
     }
     
     private func removeEventFromLists(eventId: String) {
         // Remove from featured events
         featuredEvents.removeAll { $0.id == eventId }
-        
+
         // Remove from nearby events
         nearbyEvents.removeAll { $0.id == eventId }
-        
+
         print("✅ Removed event \(eventId) from nearby/featured lists")
+    }
+
+    private func addNewEventToLists(event: Event) {
+        // Check if event already exists to avoid duplicates
+        let eventExists = allFeaturedEvents.contains { $0.id == event.id } || allNearbyEvents.contains { $0.id == event.id }
+        if eventExists {
+            print("⚠️ Event \(event.id) already exists, skipping duplicate add")
+            return
+        }
+
+        // Ensure event has required fields with proper defaults
+        var completeEvent = event
+
+        // Set default values for missing fields that might cause display issues
+        if completeEvent.status == .draft {
+            completeEvent.status = .published
+        }
+        if completeEvent.attendeeCount < 0 { // Allow 0 but not negative
+            completeEvent.attendeeCount = 0
+        }
+        if completeEvent.likes < 0 {
+            completeEvent.likes = 0
+        }
+
+        // Add to the appropriate list based on event properties
+        if completeEvent.isFeatured {
+            // Add to featured events
+            allFeaturedEvents.insert(completeEvent, at: 0) // Add to beginning
+            print("✅ Added new featured event: \(completeEvent.title)")
+        } else {
+            // Add to nearby events (default for new events)
+            allNearbyEvents.insert(completeEvent, at: 0) // Add to beginning
+            print("✅ Added new nearby event: \(completeEvent.title)")
+        }
+
+        // Only apply date filter if we have loaded events before
+        // This prevents filtering out the new event before the user sees it
+        if hasLoaded {
+            applyDateFilter()
+        } else {
+            // If not loaded yet, just update the display arrays
+            if completeEvent.isFeatured {
+                featuredEvents = allFeaturedEvents
+            } else {
+                nearbyEvents = allNearbyEvents
+            }
+        }
     }
     
     func loadEvents(userLocation: CLLocationCoordinate2D? = nil) {
@@ -87,8 +146,11 @@ class HomeViewModel: ObservableObject {
                         self?.allFeaturedEvents = self?.generatePlaceholderFeaturedEvents() ?? []
                         print("📋 Using \(self?.allFeaturedEvents.count ?? 0) placeholder featured events")
                     } else {
-                        self?.allFeaturedEvents = events
-                        print("✅ Loaded \(events.count) featured events")
+                        // Merge server events with locally created events that might not be in server response yet
+                        let serverEventIds = Set(events.map { $0.id })
+                        let existingLocalEvents = self?.allFeaturedEvents.filter { !serverEventIds.contains($0.id) } ?? []
+                        self?.allFeaturedEvents = events + existingLocalEvents
+                        print("✅ Loaded \(events.count) featured events from server, kept \(existingLocalEvents.count) local events")
                     }
                     // Apply date filter if one is selected
                     self?.applyDateFilter()
@@ -139,8 +201,11 @@ class HomeViewModel: ObservableObject {
                     self?.allNearbyEvents = self?.generatePlaceholderNearbyEvents() ?? []
                     print("📋 Using \(self?.allNearbyEvents.count ?? 0) placeholder nearby events")
                 } else {
-                    self?.allNearbyEvents = events
-                    print("✅ Loaded \(events.count) nearby events")
+                    // Merge server events with locally created events that might not be in server response yet
+                    let serverEventIds = Set(events.map { $0.id })
+                    let existingLocalEvents = self?.allNearbyEvents.filter { !serverEventIds.contains($0.id) } ?? []
+                    self?.allNearbyEvents = events + existingLocalEvents
+                    print("✅ Loaded \(events.count) nearby events from server, kept \(existingLocalEvents.count) local events")
                 }
                 // Apply date filter if one is selected
                 self?.applyDateFilter()

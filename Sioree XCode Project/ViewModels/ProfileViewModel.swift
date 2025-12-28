@@ -20,29 +20,30 @@ class ProfileViewModel: ObservableObject {
     @Published var selectedTab: ProfileTab = .events
     @Published var followerCount: Int = 0
     @Published var followingCount: Int = 0
-    
+
     enum ProfileTab: String, CaseIterable {
         case events = "Events"
         case posts = "Posts"
         case saved = "Saved"
     }
-    
+
     private let networkService = NetworkService()
     private let storageService = StorageService.shared
     private var cancellables = Set<AnyCancellable>()
     private let userId: String?
     private let useAttendedEvents: Bool
+    private weak var authViewModel: AuthViewModel?
     
     init(userId: String? = nil, useAttendedEvents: Bool = false) {
         self.userId = userId
         self.useAttendedEvents = useAttendedEvents
-        
+
         // Use cached follow state immediately so the button reflects prior actions
         if let userId = userId {
             isFollowing = storageService.getFollowingIds().contains(userId)
         }
         loadProfile()
-        
+
         // Listen for post creation to refresh posts
         NotificationCenter.default.publisher(for: NSNotification.Name("PostCreated"))
             .receive(on: DispatchQueue.main)
@@ -55,6 +56,10 @@ class ProfileViewModel: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+    }
+
+    func setAuthViewModel(_ authViewModel: AuthViewModel) {
+        self.authViewModel = authViewModel
     }
     
     func loadProfile() {
@@ -168,10 +173,20 @@ class ProfileViewModel: ObservableObject {
                     if let followerCount = response.followerCount {
                         self.followerCount = followerCount
                         self.user?.followerCount = followerCount
+
+                        // If this is the current user's profile, update AuthViewModel
+                        if self.userId == nil || self.userId == StorageService.shared.getUserId() {
+                            self.authViewModel?.currentUser?.followerCount = followerCount
+                        }
                     }
                     if let followingCount = response.followingCount {
                         self.followingCount = followingCount
                         self.user?.followingCount = followingCount
+
+                        // If this is the current user's profile, update AuthViewModel
+                        if self.userId == nil || self.userId == StorageService.shared.getUserId() {
+                            self.authViewModel?.currentUser?.followingCount = followingCount
+                        }
                     }
                 }
             )
@@ -200,25 +215,37 @@ class ProfileViewModel: ObservableObject {
     func loadFollowCounts() {
         let targetUserId = userId ?? StorageService.shared.getUserId()
         guard let uid = targetUserId else { return }
-        
+
         networkService.fetchFollowers(userId: uid, userType: nil)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { _ in },
                 receiveValue: { [weak self] users in
-                    self?.followerCount = users.count
-                    self?.user?.followerCount = users.count
+                    guard let self = self else { return }
+                    self.followerCount = users.count
+                    self.user?.followerCount = users.count
+
+                    // If this is the current user's profile, update AuthViewModel
+                    if self.userId == nil || self.userId == StorageService.shared.getUserId() {
+                        self.authViewModel?.currentUser?.followerCount = users.count
+                    }
                 }
             )
             .store(in: &cancellables)
-        
+
         networkService.fetchFollowing(userId: uid, userType: nil)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { _ in },
                 receiveValue: { [weak self] users in
-                    self?.followingCount = users.count
-                    self?.user?.followingCount = users.count
+                    guard let self = self else { return }
+                    self.followingCount = users.count
+                    self.user?.followingCount = users.count
+
+                    // If this is the current user's profile, update AuthViewModel
+                    if self.userId == nil || self.userId == StorageService.shared.getUserId() {
+                        self.authViewModel?.currentUser?.followingCount = users.count
+                    }
                 }
             )
             .store(in: &cancellables)

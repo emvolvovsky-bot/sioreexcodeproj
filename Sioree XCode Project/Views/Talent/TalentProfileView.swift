@@ -252,11 +252,13 @@ struct TalentProfileView: View {
                     .environmentObject(authViewModel)
             }
             .onAppear {
+                viewModel.setAuthViewModel(authViewModel)
                 viewModel.loadUserContent()
                 loadClips()
                 loadPortfolio()
             }
             .onChange(of: authViewModel.currentUser?.id) { _ in
+                viewModel.setAuthViewModel(authViewModel)
                 viewModel.loadUserContent()
                 loadClips()
                 loadPortfolio()

@@ -243,9 +243,11 @@ struct HostProfileView: View {
                     .environmentObject(authViewModel)
             }
             .onAppear {
+                viewModel.setAuthViewModel(authViewModel)
                 viewModel.loadUserContent()
             }
             .onChange(of: authViewModel.currentUser?.id) { _ in
+                viewModel.setAuthViewModel(authViewModel)
                 viewModel.loadUserContent()
             }
             .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("PostCreated"))) { notification in

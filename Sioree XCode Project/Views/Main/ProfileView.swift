@@ -105,11 +105,13 @@ struct ProfileView: View {
             .onChange(of: authViewModel.currentUser?.avatar) { oldValue, newValue in
                 // Refresh profile when avatar changes
                 if newValue != oldValue {
+                    viewModel.setAuthViewModel(authViewModel)
                     viewModel.loadProfile()
                 }
             }
             .onAppear {
                 // Refresh profile when view appears
+                viewModel.setAuthViewModel(authViewModel)
                 viewModel.loadProfile()
             }
         }

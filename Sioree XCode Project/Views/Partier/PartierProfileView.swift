@@ -237,9 +237,11 @@ struct PartierProfileView: View {
                     .environmentObject(authViewModel)
             }
             .onAppear {
+                viewModel.setAuthViewModel(authViewModel)
                 viewModel.loadUserContent()
             }
             .onChange(of: authViewModel.currentUser?.id) { _ in
+                viewModel.setAuthViewModel(authViewModel)
                 viewModel.loadUserContent()
             }
         }

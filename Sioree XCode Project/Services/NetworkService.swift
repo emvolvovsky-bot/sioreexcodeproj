@@ -679,6 +679,15 @@ class NetworkService {
             case targetFollowingCount = "targetFollowingCount"
             case wasInserted
         }
+
+        init(following: Bool, followerCount: Int? = nil, followingCount: Int? = nil, targetFollowerCount: Int? = nil, targetFollowingCount: Int? = nil, wasInserted: Bool? = nil) {
+            self.following = following
+            self.followerCount = followerCount
+            self.followingCount = followingCount
+            self.targetFollowerCount = targetFollowerCount
+            self.targetFollowingCount = targetFollowingCount
+            self.wasInserted = wasInserted
+        }
     }
     
     private func performFollowRequest(userId: String, method: String) -> AnyPublisher<FollowUpdateResponse, Error> {

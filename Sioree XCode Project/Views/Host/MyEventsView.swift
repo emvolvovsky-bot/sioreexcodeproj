@@ -77,14 +77,23 @@ struct MyEventsView: View {
         .padding(.vertical, Theme.Spacing.xxl)
     }
     
-    private var eventsListView: some View {
-        ForEach(visibleEvents) { event in
-            eventRowView(for: event)
-                .transition(.asymmetric(
-                    insertion: .opacity.combined(with: .scale(scale: 0.95)),
-                    removal: .opacity.combined(with: .scale(scale: 0.95))
-                ))
+    private var eventsGridView: some View {
+        LazyVGrid(
+            columns: [
+                GridItem(.flexible(), spacing: Theme.Spacing.m),
+                GridItem(.flexible(), spacing: Theme.Spacing.m)
+            ],
+            spacing: Theme.Spacing.m
+        ) {
+            ForEach(visibleEvents) { event in
+                HostEventCardGrid(event: event)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .scale(scale: 0.95)),
+                        removal: .opacity.combined(with: .scale(scale: 0.95))
+                    ))
+            }
         }
+        .padding(.horizontal, Theme.Spacing.m)
     }
     
     private func eventRowView(for event: Event) -> some View {
@@ -173,7 +182,7 @@ struct MyEventsView: View {
                 } else if visibleEvents.isEmpty && homeViewModel.hasLoaded {
                     emptyStateView
                 } else {
-                    eventsListView
+                    eventsGridView
                 }
             }
             .padding(.top, Theme.Spacing.s)

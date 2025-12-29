@@ -17,6 +17,7 @@ struct HostProfileView: View {
     @State private var showFollowersList = false
     @State private var showFollowingList = false
     @State private var selectedEventForPost: Event?
+    @State private var selectedEventForPhotos: Event? = nil
     
     private var currentUser: User? {
         authViewModel.currentUser
@@ -74,44 +75,18 @@ struct HostProfileView: View {
                                             .padding(.horizontal, Theme.Spacing.m)
                                             .padding(.bottom, Theme.Spacing.m)
                                     } else {
-                                        VStack(spacing: Theme.Spacing.m) {
+                                        LazyVGrid(
+                                            columns: [
+                                                GridItem(.flexible(), spacing: Theme.Spacing.m),
+                                                GridItem(.flexible(), spacing: Theme.Spacing.m)
+                                            ],
+                                            spacing: Theme.Spacing.m
+                                        ) {
                                             ForEach(viewModel.events) { event in
-                                                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                                                    HStack {
-                                                        VStack(alignment: .leading, spacing: 4) {
-                                                            Text(event.title)
-                                                                .font(.sioreeH4)
-                                                                .foregroundColor(.sioreeWhite)
-                                                                .lineLimit(2)
-                                                            Text(event.date.formatted(date: .abbreviated, time: .shortened))
-                                                                .font(.sioreeBodySmall)
-                                                                .foregroundColor(.sioreeLightGrey)
-                                                        }
-                                                        Spacer()
+                                                HostEventCardGrid(event: event)
+                                                    .onTapGesture {
+                                                        selectedEventForPhotos = event
                                                     }
-                                                    
-                                                    HStack(spacing: Theme.Spacing.s) {
-                                                        Button(action: {
-                                                            selectedEventForPost = event
-                                                        }) {
-                                                            Label("Add photos", systemImage: "camera.fill")
-                                                                .font(.sioreeBodySmall)
-                                                                .foregroundColor(.sioreeWhite)
-                                                                .padding(.horizontal, Theme.Spacing.m)
-                                                                .padding(.vertical, Theme.Spacing.s)
-                                                                .background(Color.sioreeIcyBlue)
-                                                                .cornerRadius(Theme.CornerRadius.medium)
-                                                        }
-                                                        Spacer()
-                                                    }
-                                                }
-                                                .padding(Theme.Spacing.m)
-                                                .background(Color.sioreeLightGrey.opacity(0.08))
-                                                .cornerRadius(Theme.CornerRadius.medium)
-                                                .overlay(
-                                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                                                        .stroke(Color.sioreeIcyBlue.opacity(0.25), lineWidth: 1)
-                                                )
                                             }
                                         }
                                         .padding(.horizontal, Theme.Spacing.m)
@@ -268,6 +243,10 @@ struct HostProfileView: View {
             }
             .sheet(item: $selectedEventForPost) { event in
                 AddPostFromEventView(event: event)
+                    .environmentObject(authViewModel)
+            }
+            .sheet(item: $selectedEventForPhotos) { event in
+                EventPhotosViewer(event: event)
                     .environmentObject(authViewModel)
             }
             .onAppear {

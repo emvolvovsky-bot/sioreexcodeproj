@@ -16,6 +16,7 @@ const mediaRoutes = require('./routes/media');
 const eventRoutes = require('./routes/events');
 const paymentRoutes = require('./routes/payments');
 const postRoutes = require('./routes/posts');
+const followRoutes = require('./routes/follow');
 
 const { authenticateSocket } = require('./middleware/socketAuth');
 const { initializeSocketHandlers } = require('./socket/handlers');
@@ -52,6 +53,9 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Set socket.io instance for routes that need it
+eventRoutes.setSocketIO(io);
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/messages', messageRoutes);
@@ -61,6 +65,7 @@ app.use('/api/media', mediaRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/posts', postRoutes);
+app.use('/api/follow', followRoutes);
 
 // Socket.io authentication
 io.use(authenticateSocket);

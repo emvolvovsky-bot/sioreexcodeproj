@@ -667,6 +667,18 @@ class NetworkService {
         let following: Bool
         let followerCount: Int?
         let followingCount: Int?
+        let targetFollowerCount: Int?
+        let targetFollowingCount: Int?
+        let wasInserted: Bool?
+
+        enum CodingKeys: String, CodingKey {
+            case following
+            case followerCount
+            case followingCount
+            case targetFollowerCount = "targetFollowerCount"
+            case targetFollowingCount = "targetFollowingCount"
+            case wasInserted
+        }
     }
     
     private func performFollowRequest(userId: String, method: String) -> AnyPublisher<FollowUpdateResponse, Error> {

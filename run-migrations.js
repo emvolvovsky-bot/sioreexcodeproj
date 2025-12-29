@@ -25,7 +25,8 @@ async function runMigrations() {
       "006_add_reviews.sql",
       "007_add_looking_for_and_talent_ids_to_events.sql",
       "008_add_looking_for_roles_array.sql",
-      "009_add_payment_workflows.sql"
+      "009_add_payment_workflows.sql",
+      "010_add_follow_relationships.sql"
     ];
     
     for (const file of migrationFiles) {

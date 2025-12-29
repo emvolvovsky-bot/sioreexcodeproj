@@ -8,185 +8,229 @@
 import SwiftUI
 import Combine
 
+class TalentProfileViewModel: ObservableObject {
+    @Published var user: User?
+    @Published var events: [Event] = []
+    @Published var posts: [Post] = []
+    @Published var isLoading = false
+    @Published var errorMessage: String?
+    @Published var followerCount: Int = 0
+    @Published var followingCount: Int = 0
+
+    private let networkService = NetworkService()
+    private let storageService = StorageService.shared
+    private var cancellables = Set<AnyCancellable>()
+    private weak var authViewModel: AuthViewModel?
+
+    func setAuthViewModel(_ authViewModel: AuthViewModel) {
+        self.authViewModel = authViewModel
+    }
+
+    func loadProfile() {
+        isLoading = true
+        errorMessage = nil
+
+        let authService = AuthService()
+        authService.getCurrentUser()
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { [weak self] completion in
+                    self?.isLoading = false
+                    if case .failure(let error) = completion {
+                        self?.errorMessage = error.localizedDescription
+                    }
+                },
+                receiveValue: { [weak self] user in
+                    self?.user = user
+                    self?.followerCount = user.followerCount
+                    self?.followingCount = user.followingCount
+                    self?.loadUserContent()
+                }
+            )
+            .store(in: &cancellables)
+    }
+
+    func loadUserContent() {
+        guard let userId = StorageService.shared.getUserId() else { return }
+
+        // Load talent's completed events (events they've worked at)
+        networkService.fetchTalentCompletedEvents(talentUserId: userId)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { _ in },
+                receiveValue: { [weak self] events in
+                    self?.events = events
+                }
+            )
+            .store(in: &cancellables)
+    }
+}
+
 struct TalentProfileView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @AppStorage("selectedUserRole") private var selectedRoleRaw: String = ""
-    @StateObject private var viewModel = ProfileViewModel()
+    @StateObject private var viewModel = TalentProfileViewModel()
     @State private var showRoleSelection = false
     @State private var showSettings = false
     @State private var showEditProfile = false
     @State private var showFollowersList = false
     @State private var showFollowingList = false
-    @State private var showClips = false
-    @State private var showPortfolio = false
-    @State private var showMarketplaceRegistration = false
-    @State private var clips: [TalentClip] = []
-    @State private var portfolioItems: [PortfolioItem] = []
-    private let networkService = NetworkService()
+    @State private var selectedEventForPhotos: Event? = nil
+    @State private var selectedEventForPost: Event?
     
     private var currentUser: User? {
         authViewModel.currentUser
     }
     
+    private var backgroundGradient: some View {
+        LinearGradient(
+            colors: [
+                Color.sioreeBlack,
+                Color.sioreeBlack.opacity(0.98),
+                Color.sioreeCharcoal.opacity(0.05)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
+    }
+
+    private var mainContent: some View {
+        Group {
+            if currentUser == nil {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let user = currentUser {
+                userProfileContent(user: user)
+            }
+        }
+    }
+
+    private func userProfileContent(user: User) -> some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                profileHeader(user: user)
+                eventsSection
+            }
+            .padding(.bottom, Theme.Spacing.xl)
+        }
+    }
+
+    private func profileHeader(user: User) -> some View {
+        InstagramStyleProfileHeader(
+            user: user,
+            postsCount: viewModel.events.count,
+            followerCount: viewModel.followerCount,
+            followingCount: viewModel.followingCount,
+            onEditProfile: {
+                showEditProfile = true
+            },
+            onFollowersTap: {
+                showFollowersList = true
+            },
+            onFollowingTap: {
+                showFollowingList = true
+            },
+            showEventsStat: false,
+            showEditButton: true
+        )
+        .padding(.top, 8)
+    }
+
+    private var eventsSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            eventsSectionHeader
+            eventsContent
+        }
+    }
+
+    private var eventsSectionHeader: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Event History")
+                    .font(.sioreeH2)
+                    .foregroundColor(Color.sioreeWhite)
+                Spacer()
+                if viewModel.events.count > 6 {
+                    NavigationLink(destination: TalentEventsWorkedView()) {
+                        Text("See All")
+                            .font(.sioreeBodySmall)
+                            .foregroundColor(Color.sioreeIcyBlue)
+                    }
+                }
+            }
+            .padding(.horizontal, Theme.Spacing.m)
+            .padding(.vertical, Theme.Spacing.m)
+
+            // Subtle divider
+            Rectangle()
+                .fill(Color.sioreeLightGrey.opacity(0.2))
+                .frame(height: 1)
+                .padding(.horizontal, Theme.Spacing.m)
+        }
+    }
+
+    private var eventsContent: some View {
+        Group {
+            if viewModel.events.isEmpty {
+                emptyEventsView
+            } else {
+                eventsGridView
+            }
+        }
+    }
+
+    private var emptyEventsView: some View {
+        VStack(spacing: Theme.Spacing.l) {
+            Image(systemName: "calendar.badge.exclamationmark")
+                .font(.system(size: 48))
+                .foregroundColor(Color.sioreeLightGrey.opacity(0.4))
+            VStack(spacing: Theme.Spacing.s) {
+                Text("No events worked at yet")
+                    .font(.sioreeH3)
+                    .foregroundColor(Color.sioreeWhite)
+                Text("Your completed events and clips will appear here")
+                    .font(.sioreeBody)
+                    .foregroundColor(Color.sioreeLightGrey.opacity(0.6))
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 300)
+        .padding(.vertical, Theme.Spacing.xl)
+        .padding(.horizontal, Theme.Spacing.l)
+    }
+
+    private var eventsGridView: some View {
+        LazyVGrid(
+            columns: [
+                GridItem(.flexible(), spacing: Theme.Spacing.m),
+                GridItem(.flexible(), spacing: Theme.Spacing.m)
+            ],
+            spacing: Theme.Spacing.m
+        ) {
+            ForEach(Array(viewModel.events.prefix(6)), id: \.id) { event in
+                EventCardGridItem(event: event)
+                    .onTapGesture {
+                        selectedEventForPhotos = event
+                    }
+                    .contextMenu {
+                        Button(action: {
+                            selectedEventForPost = event
+                        }) {
+                            Label("Add Photos", systemImage: "photo.fill")
+                        }
+                    }
+            }
+        }
+        .padding(.all, Theme.Spacing.m)
+    }
+
+
     var body: some View {
         NavigationStack {
             ZStack {
-                // Subtle gradient on black background
-                LinearGradient(
-                    colors: [Color.sioreeBlack, Color.sioreeBlack.opacity(0.95), Color.sioreeCharcoal.opacity(0.1)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
-                
-                Group {
-                    if currentUser == nil {
-                        ProgressView()
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else if let user = currentUser {
-                        ScrollView {
-                            VStack(spacing: 0) {
-                                // Talent-specific profile header (no Posts, no Username in stats)
-                                TalentProfileHeader(
-                                    user: user,
-                                    followerCount: viewModel.followerCount,
-                                    followingCount: viewModel.followingCount,
-                                    onEditProfile: {
-                                        showEditProfile = true
-                                    },
-                                    onFollowersTap: {
-                                        showFollowersList = true
-                                    },
-                                    onFollowingTap: {
-                                        showFollowingList = true
-                                    }
-                                )
-                                .padding(.top, 8)
-                                
-                                // Marketplace Registration Section
-                                Button(action: {
-                                    showMarketplaceRegistration = true
-                                }) {
-                                    HStack {
-                                        Image(systemName: "storefront.fill")
-                                            .font(.system(size: 20))
-                                            .foregroundColor(Color.sioreeIcyBlue)
-                                        
-                                        Text("Join Marketplace")
-                                            .font(.sioreeBody)
-                                            .foregroundColor(Color.sioreeWhite)
-                                        
-                                        Spacer()
-                                        
-                                        Image(systemName: "chevron.right")
-                                            .font(.system(size: 14))
-                                            .foregroundColor(Color.sioreeLightGrey)
-                                    }
-                                    .padding(Theme.Spacing.m)
-                                    .background(Color.sioreeLightGrey.opacity(0.1))
-                                    .cornerRadius(Theme.CornerRadius.medium)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                                            .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 1)
-                                    )
-                                }
-                                .padding(.horizontal, Theme.Spacing.m)
-                                .padding(.top, Theme.Spacing.m)
-                                
-                                // Talent-specific sections: Clips and Portfolio (instead of Posts)
-                                // Clips Section
-                                Button(action: {
-                                    showClips = true
-                                }) {
-                                    HStack {
-                                        Image(systemName: "video.fill")
-                                            .font(.system(size: 20))
-                                            .foregroundColor(Color.sioreeIcyBlue)
-                                        
-                                        Text("Clips")
-                                            .font(.sioreeBody)
-                                            .foregroundColor(Color.sioreeWhite)
-                                        
-                                        Spacer()
-                                        
-                                        Image(systemName: "chevron.right")
-                                            .font(.system(size: 14))
-                                            .foregroundColor(Color.sioreeLightGrey)
-                                    }
-                                    .padding(Theme.Spacing.m)
-                                    .background(Color.sioreeLightGrey.opacity(0.1))
-                                    .cornerRadius(Theme.CornerRadius.medium)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                                            .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 1)
-                                    )
-                                }
-                                .padding(.horizontal, Theme.Spacing.m)
-                                .padding(.top, Theme.Spacing.m)
-                                
-                                // Portfolio Section
-                                Button(action: {
-                                    showPortfolio = true
-                                }) {
-                                    HStack {
-                                        Image(systemName: "briefcase.fill")
-                                            .font(.system(size: 20))
-                                            .foregroundColor(Color.sioreeIcyBlue)
-                                        
-                                        Text("Portfolio")
-                                            .font(.sioreeBody)
-                                            .foregroundColor(Color.sioreeWhite)
-                                        
-                                        Spacer()
-                                        
-                                        Image(systemName: "chevron.right")
-                                            .font(.system(size: 14))
-                                            .foregroundColor(Color.sioreeLightGrey)
-                                    }
-                                    .padding(Theme.Spacing.m)
-                                    .background(Color.sioreeLightGrey.opacity(0.1))
-                                    .cornerRadius(Theme.CornerRadius.medium)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                                            .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 1)
-                                    )
-                                }
-                                .padding(.horizontal, Theme.Spacing.m)
-                                .padding(.top, Theme.Spacing.m)
-                                
-                                // Earnings (only for talent)
-                                NavigationLink(destination: TalentEarningsView()) {
-                                    HStack {
-                                        Image(systemName: "dollarsign.circle.fill")
-                                            .font(.system(size: 20))
-                                            .foregroundColor(Color.sioreeIcyBlue)
-                                        
-                                        Text("Earnings")
-                                            .font(.sioreeBody)
-                                            .foregroundColor(Color.sioreeWhite)
-                                        
-                                        Spacer()
-                                        
-                                        Image(systemName: "chevron.right")
-                                            .font(.system(size: 14))
-                                            .foregroundColor(Color.sioreeLightGrey)
-                                    }
-                                    .padding(Theme.Spacing.m)
-                                    .background(Color.sioreeLightGrey.opacity(0.1))
-                                    .cornerRadius(Theme.CornerRadius.medium)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                                            .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 1)
-                                    )
-                                }
-                                .padding(.horizontal, Theme.Spacing.m)
-                                .padding(.top, Theme.Spacing.m)
-                                
-                            }
-                            .padding(.bottom, Theme.Spacing.m)
-                        }
-                    }
-                }
+                backgroundGradient
+                mainContent
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -203,13 +247,14 @@ struct TalentProfileView: View {
                         }
                     }
                 }
+
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: {
                         showSettings = true
                     }) {
                         Image(systemName: "line.3.horizontal")
                             .foregroundColor(.sioreeWhite)
-                            .font(.system(size: 20, weight: .medium))
+                            .font(.system(size: 18, weight: .medium))
                     }
                 }
             }
@@ -233,54 +278,38 @@ struct TalentProfileView: View {
             }
             .sheet(isPresented: $showFollowersList) {
                 if let userId = currentUser?.id {
-                    UserListListView(userId: userId, listType: .followers, userType: .talent)
+                    UserListListView(userId: userId, listType: .followers, userType: .partier)
                 }
             }
             .sheet(isPresented: $showFollowingList) {
                 if let userId = currentUser?.id {
-                    UserListListView(userId: userId, listType: .following, userType: .talent)
+                    UserListListView(userId: userId, listType: .following, userType: .partier)
                 }
             }
-            .sheet(isPresented: $showClips) {
-                ClipsView(clips: $clips)
+            .sheet(item: $selectedEventForPhotos) { event in
+                EventPhotosViewer(event: event)
+                    .environmentObject(authViewModel)
             }
-            .sheet(isPresented: $showPortfolio) {
-                TalentPortfolioView(portfolioItems: $portfolioItems, userId: currentUser?.id ?? "")
-            }
-            .sheet(isPresented: $showMarketplaceRegistration) {
-                TalentMarketplaceRegistrationView()
+            .sheet(item: $selectedEventForPost) { event in
+                AddPostFromEventView(event: event)
                     .environmentObject(authViewModel)
             }
             .onAppear {
                 viewModel.setAuthViewModel(authViewModel)
-                viewModel.loadUserContent()
-                loadClips()
-                loadPortfolio()
+                viewModel.loadProfile()
             }
             .onChange(of: authViewModel.currentUser?.id) { _ in
                 viewModel.setAuthViewModel(authViewModel)
-                viewModel.loadUserContent()
-                loadClips()
-                loadPortfolio()
+                viewModel.loadProfile()
             }
         }
     }
-    
-    private func loadClips() {
-        // TODO: Load clips from backend
-        // For now, clips array is empty
-    }
-    
-    private func loadPortfolio() {
-        // TODO: Load portfolio from backend
-        // For now, portfolioItems array is empty
-    }
-    
-    @State private var cancellables = Set<AnyCancellable>()
+
 }
 
 #Preview {
     TalentProfileView()
         .environmentObject(AuthViewModel())
 }
+
 

@@ -12,6 +12,7 @@ struct EventCreateView: View {
     @Environment(\.dismiss) var dismiss
     @StateObject private var viewModel = EventViewModel(eventId: "")
     var onEventCreated: ((Event) -> Void)? = nil
+    var currentUserLocation: String? = nil
     
     @State private var title = ""
     @State private var description = ""
@@ -201,7 +202,7 @@ struct EventCreateView: View {
                 }
             }
             .fullScreenCover(isPresented: $showMap) {
-                EventLocationMapView(selectedLocation: $selectedCoordinate, selectedAddress: $selectedAddress)
+                EventLocationMapView(selectedLocation: $selectedCoordinate, selectedAddress: $selectedAddress, initialUserLocation: currentUserLocation)
             }
             .sheet(isPresented: $showTalentPicker) {
                 TalentSelectionView(selectedTalentIds: $selectedTalentIds)

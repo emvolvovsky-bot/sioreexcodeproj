@@ -159,9 +159,9 @@ struct HostProfileView: View {
                                             Text("View Video Compilation")
                                                 .font(.sioreeBody)
                                                 .foregroundColor(Color.sioreeWhite)
-                                            
+
                                             Spacer()
-                                            
+
                                             Image(systemName: "chevron.right")
                                                 .font(.system(size: 14))
                                                 .foregroundColor(Color.sioreeLightGrey)
@@ -172,6 +172,34 @@ struct HostProfileView: View {
                                         .overlay(
                                             RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
                                                 .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 2)
+                                        )
+                                    }
+                                    .padding(.horizontal, Theme.Spacing.m)
+                                    .padding(.top, Theme.Spacing.m)
+
+                                    // Talent Media (only for hosts)
+                                    NavigationLink(destination: TalentMediaView(hostId: user.id)) {
+                                        HStack {
+                                            Image(systemName: "person.2.fill")
+                                                .font(.system(size: 20))
+                                                .foregroundColor(Color.sioreeIcyBlue)
+
+                                            Text("Talent Media")
+                                                .font(.sioreeBody)
+                                                .foregroundColor(Color.sioreeWhite)
+
+                                            Spacer()
+
+                                            Image(systemName: "chevron.right")
+                                                .font(.system(size: 14))
+                                                .foregroundColor(Color.sioreeLightGrey)
+                                        }
+                                        .padding(Theme.Spacing.m)
+                                        .background(Color.sioreeLightGrey.opacity(0.1))
+                                        .cornerRadius(Theme.CornerRadius.medium)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                                                .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 1)
                                         )
                                     }
                                     .padding(.horizontal, Theme.Spacing.m)

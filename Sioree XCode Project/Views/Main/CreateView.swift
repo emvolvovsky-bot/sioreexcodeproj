@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct CreateView: View {
+    @EnvironmentObject var authViewModel: AuthViewModel
     @State private var showEventCreation = false
     @State private var showPostCreation = false
     
@@ -70,7 +71,7 @@ struct CreateView: View {
             .navigationTitle("Create")
             .navigationBarTitleDisplayMode(.large)
             .sheet(isPresented: $showEventCreation) {
-                EventCreateView()
+                EventCreateView(currentUserLocation: authViewModel.currentUser?.location)
             }
             .sheet(isPresented: $showPostCreation) {
                 Text("Post Creation View")

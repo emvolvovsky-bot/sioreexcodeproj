@@ -621,7 +621,48 @@ class NetworkService {
             .map { (response: Response) in response.avatar }
             .eraseToAnyPublisher()
     }
-    
+
+    func uploadTalentClips(eventId: String, images: [UIImage]) -> AnyPublisher<[String], Error> {
+        // Process images - resize and compress
+        let processedImages = images.map { image -> Data in
+            let resizedImage = image.resized(to: CGSize(width: 800, height: 800))
+
+            var compressionQuality: CGFloat = 0.7
+            var imageData = resizedImage.jpegData(compressionQuality: compressionQuality)
+            let maxSize = 1 * 1024 * 1024 // 1MB
+
+            while let data = imageData, data.count > maxSize && compressionQuality > 0.1 {
+                compressionQuality -= 0.1
+                imageData = resizedImage.jpegData(compressionQuality: compressionQuality)
+            }
+
+            return imageData ?? Data()
+        }
+
+        let base64Strings = processedImages.map { "data:image/jpeg;base64,\($0.base64EncodedString())" }
+
+        let body: [String: Any] = [
+            "eventId": eventId,
+            "clips": base64Strings
+        ]
+
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else {
+            return Fail(error: NetworkError.unknown).eraseToAnyPublisher()
+        }
+
+        struct Response: Codable {
+            let clips: [String]
+        }
+
+        return request("/api/talent/clips", method: "POST", body: jsonData)
+            .map { (response: Response) in response.clips }
+            .eraseToAnyPublisher()
+    }
+
+    func fetchTalentMediaForHost(hostId: String) -> AnyPublisher<[TalentMediaItem], Error> {
+        return request("/api/hosts/\(hostId)/talent-media")
+    }
+
     struct FollowUpdateResponse: Codable {
         let following: Bool
         let followerCount: Int?

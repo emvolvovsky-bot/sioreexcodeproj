@@ -20,7 +20,7 @@ struct MainTabView: View {
                 case .partier:
                     PartierProfileView()
                 case .talent:
-                    TalentMarketplaceProfileView()
+                    TalentProfileView()
                 }
             } else {
                 ProfileView() // Fallback to general profile view

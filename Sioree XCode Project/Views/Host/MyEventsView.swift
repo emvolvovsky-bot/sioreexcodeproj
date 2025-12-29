@@ -221,13 +221,13 @@ struct MyEventsView: View {
                 // Reload events after creation
                 homeViewModel.loadNearbyEvents()
             }) {
-                EventCreateView { event in
+                EventCreateView(onEventCreated: { event in
                     // Insert newly created event locally so it appears immediately
                     withAnimation {
                         localEvents.insert(event, at: 0)
                         homeViewModel.nearbyEvents.insert(event, at: 0)
                     }
-                }
+                }, currentUserLocation: authViewModel.currentUser?.location)
                 .environmentObject(authViewModel)
             }
             .sheet(isPresented: $showQRScanner) {

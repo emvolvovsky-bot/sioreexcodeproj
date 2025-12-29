@@ -13,8 +13,9 @@ struct EventLocationMapView: View {
     @Environment(\.dismiss) var dismiss
     @Binding var selectedLocation: CLLocationCoordinate2D?
     @Binding var selectedAddress: String?
+    var initialUserLocation: String? = nil
     
-    // Map state
+    // Map state - start with LA as fallback, will be updated if user location is available
     @State private var region = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 34.0522, longitude: -118.2437), // LA default
         span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
@@ -27,6 +28,7 @@ struct EventLocationMapView: View {
     )
     @State private var mapCenter: CLLocationCoordinate2D = CLLocationCoordinate2D(latitude: 34.0522, longitude: -118.2437)
     @State private var isGeocoding = false
+    @State private var isInitializingLocation = false
     
     var body: some View {
         NavigationStack {
@@ -120,6 +122,9 @@ struct EventLocationMapView: View {
                     region.center = preselected
                     cameraPosition = .region(region)
                     mapCenter = preselected
+                } else if let userLocation = initialUserLocation, !userLocation.isEmpty {
+                    // Try to geocode user's location
+                    geocodeUserLocation(userLocation)
                 } else {
                     cameraPosition = .region(region)
                     mapCenter = region.center
@@ -128,6 +133,34 @@ struct EventLocationMapView: View {
         }
     }
     
+    private func geocodeUserLocation(_ address: String) {
+        isInitializingLocation = true
+        let geocoder = CLGeocoder()
+
+        geocoder.geocodeAddressString(address) { [self] placemarks, error in
+            DispatchQueue.main.async {
+                isInitializingLocation = false
+                if let error = error {
+                    print("Geocoding user location error: \(error.localizedDescription)")
+                    // Keep LA as default if geocoding fails
+                    return
+                }
+
+                if let placemark = placemarks?.first,
+                   let coordinate = placemark.location?.coordinate {
+                    let newRegion = MKCoordinateRegion(
+                        center: coordinate,
+                        span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+                    )
+                    region = newRegion
+                    cameraPosition = .region(newRegion)
+                    mapCenter = coordinate
+                    print("✅ Set map to user's location: \(coordinate.latitude), \(coordinate.longitude)")
+                }
+            }
+        }
+    }
+
     private func geocodeLocation(_ coordinate: CLLocationCoordinate2D) {
         isGeocoding = true
         let geocoder = CLGeocoder()

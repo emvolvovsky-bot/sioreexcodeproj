@@ -106,14 +106,6 @@ struct SettingsView: View {
                     
                     // Support Section
                     Section {
-                        NavigationLink(destination: HelpCenterView()) {
-                            SettingsRow(icon: "questionmark.circle", title: "Help Center", color: .sioreeIcyBlue)
-                        }
-                        
-                        NavigationLink(destination: ContactSupportView()) {
-                            SettingsRow(icon: "message", title: "Contact Support", color: .sioreeIcyBlue)
-                        }
-                        
                         Button(action: {
                             showTerms = true
                         }) {

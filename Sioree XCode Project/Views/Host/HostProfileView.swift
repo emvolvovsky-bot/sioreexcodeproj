@@ -60,16 +60,28 @@ struct HostProfileView: View {
                                     showEditButton: true
                                 )
                                 .padding(.top, 8)
-                                
-                                // Events Hosted Section with add photos
+
+                                // Tab Picker for Events
+                                Picker("Event Type", selection: $viewModel.selectedHostTab) {
+                                    ForEach(ProfileViewModel.HostProfileTab.allCases, id: \.self) { tab in
+                                        Text(tab.rawValue).tag(tab)
+                                    }
+                                }
+                                .pickerStyle(.segmented)
+                                .padding(.horizontal, Theme.Spacing.m)
+                                .padding(.top, Theme.Spacing.m)
+
+                                // Events Section
                                 VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                                    Text("Events Hosted")
+                                    Text(viewModel.selectedHostTab.rawValue)
                                         .font(.sioreeH3)
                                         .foregroundColor(.sioreeWhite)
                                         .padding(.horizontal, Theme.Spacing.m)
-                                    
-                                    if viewModel.events.isEmpty {
-                                        Text("Host events to share photos from your shows.")
+
+                                    if viewModel.filteredEvents.isEmpty {
+                                        Text(viewModel.selectedHostTab == .hosted ?
+                                             "No past events yet. Host your first event!" :
+                                             "No upcoming events. Create your next event!")
                                             .font(.sioreeBody)
                                             .foregroundColor(.sioreeLightGrey)
                                             .padding(.horizontal, Theme.Spacing.m)
@@ -82,7 +94,7 @@ struct HostProfileView: View {
                                             ],
                                             spacing: Theme.Spacing.m
                                         ) {
-                                            ForEach(viewModel.events) { event in
+                                            ForEach(viewModel.filteredEvents) { event in
                                                 HostEventCardGrid(event: event)
                                                     .onTapGesture {
                                                         selectedEventForPhotos = event

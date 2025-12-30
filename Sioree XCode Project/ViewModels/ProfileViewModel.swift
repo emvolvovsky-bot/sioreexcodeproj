@@ -18,13 +18,41 @@ class ProfileViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var isFollowing = false
     @Published var selectedTab: ProfileTab = .events
+    @Published var selectedHostTab: HostProfileTab = .hosted
     @Published var followerCount: Int = 0
     @Published var followingCount: Int = 0
+
+    // Filtered events for host profile tabs
+    var hostedEvents: [Event] {
+        events.filter { event in
+            event.date < Date() || event.status == .completed
+        }
+    }
+
+    var upcomingEvents: [Event] {
+        events.filter { event in
+            event.date >= Date() && event.status != .completed
+        }
+    }
+
+    var filteredEvents: [Event] {
+        switch selectedHostTab {
+        case .hosted:
+            return hostedEvents
+        case .upcoming:
+            return upcomingEvents
+        }
+    }
 
     enum ProfileTab: String, CaseIterable {
         case events = "Events"
         case posts = "Posts"
         case saved = "Saved"
+    }
+
+    enum HostProfileTab: String, CaseIterable {
+        case hosted = "Events Hosted"
+        case upcoming = "Upcoming Events"
     }
 
     private let networkService = NetworkService()

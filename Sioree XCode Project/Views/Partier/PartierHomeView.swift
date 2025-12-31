@@ -14,7 +14,6 @@ struct PartierHomeView: View {
     @StateObject private var viewModel = HomeViewModel()
     @StateObject private var locationManager = LocationManager()
     @State private var showDatePicker = false
-    @State private var showMapView = false
     @State private var selectedTab: HomeTab = .featured
     
     var body: some View {
@@ -43,15 +42,8 @@ struct PartierHomeView: View {
                     viewModel.applyDateFilter()
                 }
             }
-            .sheet(isPresented: $showMapView) {
-                PartierMapView(viewModel: viewModel, locationManager: locationManager)
-            }
             .toolbar {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    Button(action: { showMapView = true }) {
-                        Image(systemName: "map")
-                            .foregroundColor(Color.sioreeIcyBlue)
-                    }
                     Button(action: { showDatePicker = true }) {
                         Image(systemName: "calendar")
                             .foregroundColor(Color.sioreeIcyBlue)

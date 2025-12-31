@@ -29,11 +29,10 @@ struct EventCreateView: View {
     @State private var showError = false
     @State private var errorMessage = ""
     
-    // Talent selection
-    @State private var selectedTalentIds: [String] = []
-    @State private var showTalentPicker = false
     @State private var selectedLookingForTalents: Set<TalentCategory> = []
     @State private var lookingForNotes: String = ""
+    @State private var isRequestingTalent = true
+    @State private var showTalentBrowser = false
     private let availableTalentCategories: [TalentCategory] = TalentCategory.allCases
     
     var body: some View {
@@ -79,25 +78,6 @@ struct EventCreateView: View {
                         }
                     }
                     
-                    Section("Tag Talent (optional)") {
-                        Button {
-                            showTalentPicker = true
-                        } label: {
-                            HStack {
-                                Image(systemName: "person.crop.circle.badge.checkmark")
-                                    .foregroundColor(.sioreeIcyBlue)
-                                Text(selectedTalentIds.isEmpty ? "Select talent to tag" : "Tagged \(selectedTalentIds.count) talent")
-                                    .foregroundColor(.sioreeIcyBlue)
-                                    .font(.sioreeBody)
-                                Spacer()
-                            }
-                        }
-                        
-                        if !selectedTalentIds.isEmpty {
-                            tagChip("Tagged \(selectedTalentIds.count) talent", color: .sioreeIcyBlue.opacity(0.85))
-                        }
-                    }
-                    
                     Section("Pricing") {
                         Toggle("Ticket Price", isOn: $showPriceInput)
                         if showPriceInput {
@@ -108,10 +88,36 @@ struct EventCreateView: View {
                       TextField("Capacity (optional)", text: $capacity)
                         .keyboardType(.numberPad)
                     }
-                    
+
+                    // Request talent section
+                    Section("Request Talent") {
+                        Button {
+                            showTalentBrowser = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "person.2.fill")
+                                    .foregroundColor(.sioreeIcyBlue)
+                                Text("Browse & Request Talent")
+                                    .foregroundColor(.sioreeIcyBlue)
+                                    .font(.sioreeBody)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .foregroundColor(.sioreeIcyBlue.opacity(0.7))
+                                    .font(.system(size: 14))
+                            }
+                        }
+                        .buttonStyle(.plain)
+
+                        Text("Select specific talent to send direct requests to work your event.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+
                     // Looking for talent section
                     Section("Looking For Talent") {
-                        Text("Choose roles you still need. Talent can browse these and opt in.")
+                        Text(isRequestingTalent ?
+                            "Specify the talent roles you need. Your event will be highlighted to matching talent." :
+                            "Specify the talent roles you need. Talent can browse and find your event.")
                             .font(.caption)
                             .foregroundColor(.secondary)
                         
@@ -148,6 +154,9 @@ struct EventCreateView: View {
                         if let notes = lookingForNotesPayload, !notes.isEmpty {
                             tagChip("Notes: \(notes)", color: .sioreeLightGrey)
                         }
+                        if isRequestingTalent {
+                            tagChip("🎯 Actively Requesting Talent", color: .green.opacity(0.8))
+                        }
                     }
                 }
             }
@@ -173,7 +182,7 @@ struct EventCreateView: View {
                             images: [],
                             ticketPrice: ticketPrice,
                             capacity: capacityValue,
-                            talentIds: selectedTalentIds,
+                            talentIds: [],
                             lookingForRoles: lookingForRolesPayload,
                             lookingForNotes: lookingForNotesPayload,
                             lookingForTalentType: lookingForTalentTypePayload
@@ -204,8 +213,13 @@ struct EventCreateView: View {
             .fullScreenCover(isPresented: $showMap) {
                 EventLocationMapView(selectedLocation: $selectedCoordinate, selectedAddress: $selectedAddress, initialUserLocation: currentUserLocation)
             }
-            .sheet(isPresented: $showTalentPicker) {
-                TalentSelectionView(selectedTalentIds: $selectedTalentIds)
+            .fullScreenCover(isPresented: $showTalentBrowser) {
+                TalentBrowserView(event: nil, onTalentRequested: { talent in
+                    // Handle talent request callback
+                    print("Requested talent: \(talent.name)")
+                    // In a real implementation, this would create a booking request
+                    // and send a notification to the talent
+                })
             }
             .alert("Event Publish Failed", isPresented: $showError) {
                 Button("OK", role: .cancel) { }
@@ -268,56 +282,6 @@ struct EventCreateView: View {
     
 }
 
-// Talent Selection View
-struct TalentSelectionView: View {
-    @Environment(\.dismiss) var dismiss
-    @Binding var selectedTalentIds: [String]
-    @StateObject private var talentViewModel = TalentViewModel()
-    @State private var searchText = ""
-    
-    var body: some View {
-        NavigationStack {
-            List {
-                ForEach(talentViewModel.talent) { talent in
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text(talent.name)
-                                .font(.headline)
-                            Text(talent.category.rawValue)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        Spacer()
-                        if selectedTalentIds.contains(talent.id) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.blue)
-                        }
-                    }
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        if selectedTalentIds.contains(talent.id) {
-                            selectedTalentIds.removeAll { $0 == talent.id }
-                        } else {
-                            selectedTalentIds.append(talent.id)
-                        }
-                    }
-                }
-            }
-            .navigationTitle("Select Talent")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                }
-            }
-            .onAppear {
-                talentViewModel.loadTalent()
-            }
-        }
-    }
-}
 
 // Talent Type Picker View
 struct TalentTypePickerView: View {

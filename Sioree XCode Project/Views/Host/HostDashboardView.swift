@@ -151,9 +151,17 @@ struct BookingRow: View {
         switch status {
         case .confirmed:
             return Color.sioreeSuccess
-        case .pending:
+        case .requested:
             return Color.sioreeWarning
-        case .cancelled:
+        case .accepted:
+            return Color(hex: "007AFF") // Blue for accepted
+        case .awaiting_payment:
+            return Color.sioreeWarning
+        case .declined:
+            return Color.sioreeError
+        case .expired:
+            return Color.gray
+        case .canceled:
             return Color.sioreeError
         case .completed:
             return Color.sioreeInfo

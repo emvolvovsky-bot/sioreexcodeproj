@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Combine
+import UIKit
 
 enum GigStatus: String {
     case requested = "Requested"
@@ -48,18 +49,30 @@ struct TalentGigsView: View {
     ]
     @State private var showFindEvents = false
     @State private var selectedTalentType = "DJ"
-    @State private var selectedTab = 0 // 0 = My Gigs, 1 = Find Events
+    @State private var selectedTab = 0 // 0 = My Gigs, 1 = Browse Events
+    @State private var selectedSegment = 0 // 0 = Pending, 1 = Upcoming, 2 = Past
     @State private var eventsLookingForTalent: [Event] = []
     @State private var isLoadingEvents = false
     @State private var eventsError: String?
+    @State private var selectedGigForMessaging: Gig?
+    @State private var showMessageView = false
+    @State private var showWithdrawConfirmation = false
+    @State private var gigToWithdraw: Gig?
+    @State private var selectedEventId: String?
+    @State private var showEventDetail = false
     private let networkService = NetworkService()
+    private let messagingService = MessagingService()
     
-    var upcomingGigs: [Gig] {
-        myGigs.filter { $0.date >= Date() }
+    var pendingBookings: [Gig] {
+        myGigs.filter { $0.status == .requested }
     }
-    
-    var pastGigs: [Gig] {
-        myGigs.filter { $0.date < Date() }
+
+    var upcomingBookings: [Gig] {
+        myGigs.filter { ($0.status == .confirmed || $0.status == .paid) && $0.date >= Date() }
+    }
+
+    var pastBookings: [Gig] {
+        myGigs.filter { $0.status == .completed || $0.date < Date() }
     }
     
     var body: some View {
@@ -76,76 +89,68 @@ struct TalentGigsView: View {
                 VStack(spacing: 0) {
                     // Tab Selector
                     Picker("", selection: $selectedTab) {
-                        Text("My Gigs").tag(0)
-                        Text("Find Events").tag(1)
+                        Text("My Bookings").tag(0)
+                        Text("Browse Events").tag(1)
                     }
                     .pickerStyle(.segmented)
                     .padding(.horizontal, Theme.Spacing.m)
                     .padding(.top, Theme.Spacing.m)
                     
                     if selectedTab == 0 {
-                        // My Gigs Tab
-                        ScrollView {
-                            VStack(spacing: Theme.Spacing.m) {
-                                // Upcoming Section
-                                if !upcomingGigs.isEmpty {
-                                    VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                                        Text("Upcoming")
-                                            .font(.sioreeH4)
-                                            .foregroundColor(.sioreeWhite)
-                                            .padding(.horizontal, Theme.Spacing.m)
-                                        
-                                        ForEach(upcomingGigs) { gig in
-                                            NavigationLink(destination: GigDetailView(gig: gig)) {
-                                                GigRow(gig: gig)
-                                            }
-                                            .buttonStyle(PlainButtonStyle())
-                                            .padding(.horizontal, Theme.Spacing.m)
-                                        }
-                                    }
-                                    .padding(.top, Theme.Spacing.m)
-                                }
-                                
-                                // Completed Section
-                                if !pastGigs.isEmpty {
-                                    VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                                        Text("Completed")
-                                            .font(.sioreeH4)
-                                            .foregroundColor(.sioreeWhite)
-                                            .padding(.horizontal, Theme.Spacing.m)
-                                        
-                                        ForEach(pastGigs) { gig in
-                                            NavigationLink(destination: GigDetailView(gig: gig)) {
-                                                GigRow(gig: gig)
-                                            }
-                                            .buttonStyle(PlainButtonStyle())
-                                            .padding(.horizontal, Theme.Spacing.m)
-                                        }
-                                    }
-                                    .padding(.top, Theme.Spacing.m)
-                                }
-                                
-                                if myGigs.isEmpty {
-                                    VStack(spacing: Theme.Spacing.m) {
-                                        Image(systemName: "calendar.badge.plus")
-                                            .font(.system(size: 50))
-                                            .foregroundColor(.sioreeLightGrey.opacity(0.5))
-                                        
-                                        Text("No gigs yet")
-                                            .font(.sioreeH4)
-                                            .foregroundColor(.sioreeWhite)
-                                        
-                                        Text("Switch to 'Find Events' to discover opportunities")
-                                            .font(.sioreeBody)
-                                            .foregroundColor(.sioreeLightGrey)
-                                            .multilineTextAlignment(.center)
-                                    }
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, Theme.Spacing.xl)
-                                    .padding(.horizontal, Theme.Spacing.m)
-                                }
+                        // My Bookings Tab
+                        VStack(spacing: 0) {
+                            // Segment Picker
+                            Picker("", selection: $selectedSegment) {
+                                Text("Pending").tag(0)
+                                Text("Upcoming").tag(1)
+                                Text("Past").tag(2)
                             }
-                            .padding(.bottom, Theme.Spacing.m)
+                            .pickerStyle(.segmented)
+                            .padding(.horizontal, Theme.Spacing.m)
+                            .padding(.vertical, Theme.Spacing.s)
+
+                            // Content based on selected segment
+                            ScrollView {
+                                VStack(spacing: Theme.Spacing.m) {
+                                    let currentBookings = selectedSegment == 0 ? pendingBookings :
+                                                         selectedSegment == 1 ? upcomingBookings : pastBookings
+                                    let sectionTitle = selectedSegment == 0 ? "Pending" :
+                                                      selectedSegment == 1 ? "Upcoming" : "Past"
+
+                                    if !currentBookings.isEmpty {
+                                        ForEach(currentBookings) { booking in
+                                            TalentBookingRow(booking: booking, segment: selectedSegment, onAction: {
+                                                handleBookingAction(for: booking, segment: selectedSegment)
+                                            }, onWithdraw: selectedSegment == 0 ? {
+                                                withdrawApplication(for: booking)
+                                            } : nil)
+                                            .padding(.horizontal, Theme.Spacing.m)
+                                        }
+                                    } else {
+                                        VStack(spacing: Theme.Spacing.m) {
+                                            Image(systemName: selectedSegment == 0 ? "clock" :
+                                                                 selectedSegment == 1 ? "calendar" : "checkmark.circle")
+                                                .font(.system(size: 50))
+                                                .foregroundColor(.sioreeLightGrey.opacity(0.5))
+
+                                            Text("No \(sectionTitle.lowercased()) bookings")
+                                                .font(.sioreeH4)
+                                                .foregroundColor(.sioreeWhite)
+
+                                            if selectedSegment == 0 {
+                                                Text("Apply to events to see pending bookings here")
+                                                    .font(.sioreeBody)
+                                                    .foregroundColor(.sioreeLightGrey.opacity(0.7))
+                                                    .multilineTextAlignment(.center)
+                                                    .padding(.horizontal, Theme.Spacing.l)
+                                            }
+                                        }
+                                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                        .padding(.top, Theme.Spacing.xl)
+                                    }
+                                }
+                                .padding(.bottom, Theme.Spacing.xl)
+                            }
                         }
                     } else {
                         // Find Events Tab
@@ -196,6 +201,26 @@ struct TalentGigsView: View {
             .onChange(of: selectedTalentType) { oldValue, newValue in
                 loadEventsForTalentType()
             }
+            .sheet(isPresented: $showMessageView) {
+                if let gig = selectedGigForMessaging {
+                    TalentMessageHostView(gig: gig, authViewModel: authViewModel)
+                }
+            }
+            .sheet(isPresented: $showEventDetail) {
+                if let eventId = selectedEventId {
+                    EventDetailView(eventId: eventId, isTalentMapMode: true)
+                }
+            }
+            .alert("Withdraw Application", isPresented: $showWithdrawConfirmation) {
+                Button("Cancel", role: .cancel) { }
+                Button("Withdraw", role: .destructive) {
+                    confirmWithdraw()
+                }
+            } message: {
+                if let gig = gigToWithdraw {
+                    Text("Are you sure you want to withdraw your application for \(gig.eventName)?")
+                }
+            }
             .onAppear {
                 // Get talent type from current user if available
                 if let user = authViewModel.currentUser,
@@ -206,6 +231,58 @@ struct TalentGigsView: View {
             }
         }
     }
+
+    private func handleBookingAction(for booking: Gig, segment: Int) {
+        switch segment {
+        case 0: // Pending - View Details
+            // For now, show an alert since we don't have event ID mapping
+            let alert = UIAlertController(
+                title: "View Details",
+                message: "Event details for \(booking.eventName) would open here.",
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+               let rootViewController = windowScene.windows.first?.rootViewController {
+                rootViewController.present(alert, animated: true)
+            }
+        case 1: // Upcoming - Message Host
+            selectedGigForMessaging = booking
+            showMessageView = true
+        case 2: // Past - Rate & Review
+            let alert = UIAlertController(
+                title: "Rate & Review",
+                message: "Rating and review for \(booking.eventName) would open here.",
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+               let rootViewController = windowScene.windows.first?.rootViewController {
+                rootViewController.present(alert, animated: true)
+            }
+        default:
+            break
+        }
+    }
+
+    private func withdrawApplication(for booking: Gig) {
+        gigToWithdraw = booking
+        showWithdrawConfirmation = true
+    }
+
+    private func confirmWithdraw() {
+        guard let gig = gigToWithdraw else { return }
+
+        // Remove from local gigs array
+        myGigs.removeAll { $0.id == gig.id }
+
+        // In a real app, you'd call an API to withdraw the application
+        // For now, just update the local state
+
+        showWithdrawConfirmation = false
+        gigToWithdraw = nil
+    }
+
     
     private func loadEventsForTalentType() {
         guard !selectedTalentType.isEmpty else { return }
@@ -332,6 +409,135 @@ struct GigRow: View {
             RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
                 .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 2)
         )
+    }
+}
+
+struct TalentBookingRow: View {
+    let booking: Gig
+    let segment: Int // 0 = Pending, 1 = Upcoming, 2 = Past
+    let onAction: () -> Void
+    let onWithdraw: (() -> Void)?
+
+    private var actionButtonTitle: String {
+        switch segment {
+        case 0: // Pending
+            return "View Details"
+        case 1: // Upcoming
+            return "Message Host"
+        case 2: // Past
+            return "Rate & Review"
+        default:
+            return "View"
+        }
+    }
+
+    private var canDismiss: Bool {
+        segment == 2 // Only past bookings can be dismissed
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            HStack(spacing: Theme.Spacing.m) {
+                // Event Image placeholder
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.sioreeCharcoal.opacity(0.3))
+                        .frame(width: 50, height: 50)
+
+                    Image(systemName: "calendar")
+                        .foregroundColor(.sioreeIcyBlue)
+                        .font(.system(size: 20))
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(booking.eventName)
+                        .font(.sioreeH4)
+                        .foregroundColor(.white)
+
+                    Text(booking.hostName)
+                        .font(.sioreeCaption)
+                        .foregroundColor(.white)
+
+                    HStack(spacing: Theme.Spacing.xs) {
+                        Image(systemName: "calendar")
+                            .foregroundColor(.white.opacity(0.8))
+                            .font(.system(size: 12))
+
+                        Text(booking.date.formatted(date: .abbreviated, time: .shortened))
+                            .font(.sioreeCaption)
+                            .foregroundColor(.white)
+                    }
+                }
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(booking.rate)
+                        .font(.sioreeH4)
+                        .foregroundColor(.sioreeWarning)
+
+                    // Status badge for pending/upcoming
+                    if segment < 2 {
+                        Text(booking.status.rawValue)
+                            .font(.sioreeCaption)
+                            .foregroundColor(.sioreeWhite)
+                            .padding(.horizontal, Theme.Spacing.xs)
+                            .padding(.vertical, 2)
+                            .background(statusColor(for: booking.status))
+                            .clipShape(Capsule())
+                    }
+                }
+            }
+
+            // Action buttons
+            HStack(spacing: Theme.Spacing.s) {
+                CustomButton(
+                    title: actionButtonTitle,
+                    variant: .primary,
+                    size: .small
+                ) {
+                    onAction()
+                }
+
+                if segment == 0 {
+                    // Pending bookings can be withdrawn
+                    CustomButton(
+                        title: "Withdraw",
+                        variant: .secondary,
+                        size: .small
+                    ) {
+                        onWithdraw?()
+                    }
+                } else if segment == 2 && canDismiss {
+                    // Past bookings can be dismissed
+                    CustomButton(
+                        title: "Dismiss",
+                        variant: .secondary,
+                        size: .small
+                    ) {
+                        // Handle dismiss action
+                    }
+                }
+
+                Spacer()
+            }
+        }
+        .padding(Theme.Spacing.m)
+        .background(Color.sioreeCharcoal.opacity(0.2))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func statusColor(for status: GigStatus) -> Color {
+        switch status {
+        case .requested:
+            return .sioreeWarning
+        case .confirmed:
+            return .green
+        case .paid:
+            return .sioreeIcyBlue
+        case .completed:
+            return .gray
+        }
     }
 }
 

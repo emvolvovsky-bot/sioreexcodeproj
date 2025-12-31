@@ -15,9 +15,10 @@ struct PartierMapView: View {
     @Environment(\.dismiss) var dismiss
 
     @State private var region = MKCoordinateRegion(
-        center: CLLocationCoordinate2D(latitude: 34.0522, longitude: -118.2437), // Default to LA
+        center: CLLocationCoordinate2D(latitude: 34.0522, longitude: -118.2437), // Default to LA, will be updated to user location
         span: MKCoordinateSpan(latitudeDelta: 0.1, longitudeDelta: 0.1)
     )
+    @State private var hasCenteredOnUserLocation = false
     @State private var selectedEvent: Event?
     @State private var selectedDate: Date? = nil
     @State private var showDatePicker = false
@@ -58,87 +59,44 @@ struct PartierMapView: View {
                 .ignoresSafeArea()
                 .onAppear {
                     requestLocationPermission()
-                    centerOnEventsIfNeeded()
+                    // Small delay to allow location permission and initial location fetch
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                        centerOnUserLocationInitially()
+                    }
                 }
                 .onReceive(locationManager.$location.compactMap { $0 }) { location in
-                    if selectedDate == nil { // Only auto-center if no date filter is active
+                    // Only update region if we haven't centered on user location yet
+                    if !hasCenteredOnUserLocation && selectedDate == nil {
                         withAnimation {
                             region.center = location
                             region.span = MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
                         }
+                        hasCenteredOnUserLocation = true
                     }
                 }
 
-                // Top overlay with controls
+                // Calendar filter button (top right)
                 VStack {
                     HStack {
-                        Button(action: { dismiss() }) {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(Color.sioreeWhite)
-                                .frame(width: 32, height: 32)
-                                .background(Color.sioreeBlack.opacity(0.7))
-                                .cornerRadius(Theme.CornerRadius.medium)
-                        }
-
                         Spacer()
+                        Button(action: {
+                            showDatePicker = true
+                        }) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.sioreeBlack.opacity(0.8))
+                                    .frame(width: 50, height: 50)
 
-                        // Date filter button
-                        Button(action: { showDatePicker = true }) {
-                            HStack(spacing: 6) {
                                 Image(systemName: "calendar")
-                                    .font(.system(size: 14))
-                                Text(selectedDate?.formatted(date: .abbreviated, time: .omitted) ?? "All Dates")
-                                    .font(.sioreeCaption)
+                                    .foregroundColor(.sioreeIcyBlue)
+                                    .font(.system(size: 20, weight: .medium))
                             }
-                            .foregroundColor(Color.sioreeWhite)
-                            .padding(.horizontal, Theme.Spacing.s)
-                            .padding(.vertical, Theme.Spacing.xs)
-                            .background(Color.sioreeBlack.opacity(0.7))
-                            .cornerRadius(Theme.CornerRadius.medium)
+                            .shadow(radius: 4)
                         }
-
-                        if selectedDate != nil {
-                            Button(action: { clearDateFilter() }) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(Color.sioreeLightGrey)
-                            }
-                        }
-                    }
-                    .padding(.horizontal, Theme.Spacing.m)
-                    .padding(.top, Theme.Spacing.m)
-
-                    Spacer()
-
-                    // Bottom controls
-                    HStack {
-                        Spacer()
-
-                        VStack(spacing: Theme.Spacing.s) {
-                            // Location button
-                            Button(action: { centerOnUserLocation() }) {
-                                Image(systemName: "location.fill")
-                                    .font(.system(size: 20))
-                                    .foregroundColor(Color.sioreeWhite)
-                                    .frame(width: 44, height: 44)
-                                    .background(Color.sioreeIcyBlue)
-                                    .cornerRadius(Theme.CornerRadius.medium)
-                            }
-
-                            // Center on events button
-                            Button(action: { centerOnEvents() }) {
-                                Image(systemName: "mappin.and.ellipse")
-                                    .font(.system(size: 20))
-                                    .foregroundColor(Color.sioreeWhite)
-                                    .frame(width: 44, height: 44)
-                                    .background(Color.sioreeWarmGlow)
-                                    .cornerRadius(Theme.CornerRadius.medium)
-                            }
-                        }
+                        .padding(.top, Theme.Spacing.m)
                         .padding(.trailing, Theme.Spacing.m)
-                        .padding(.bottom, Theme.Spacing.m)
                     }
+                    Spacer()
                 }
             }
             .navigationBarHidden(true)
@@ -146,24 +104,60 @@ struct PartierMapView: View {
                 EventDetailView(eventId: event.id)
             }
             .sheet(isPresented: $showDatePicker) {
-                DateFilterView(selectedDate: $selectedDate) {
-                    applyDateFilter()
+                ZStack {
+                    Color.sioreeBlack.ignoresSafeArea()
+
+                    VStack(spacing: Theme.Spacing.xl) {
+                        HStack {
+                            Spacer()
+                            Button(action: { showDatePicker = false }) {
+                                Image(systemName: "xmark")
+                                    .foregroundColor(.white)
+                                    .font(.system(size: 20, weight: .medium))
+                            }
+                        }
+                        .padding(.top, Theme.Spacing.m)
+                        .padding(.trailing, Theme.Spacing.m)
+
+                        DatePicker(
+                            "Select Date",
+                            selection: Binding(
+                                get: { selectedDate ?? Date() },
+                                set: { selectedDate = $0 }
+                            ),
+                            displayedComponents: .date
+                        )
+                        .datePickerStyle(.graphical)
+                        .colorScheme(.dark)
+                        .accentColor(.sioreeIcyBlue)
+                        .padding(.horizontal, Theme.Spacing.m)
+
+                        Spacer()
+                    }
                 }
+                .presentationDetents([.medium])
             }
         }
     }
 
     private func coordinateForEvent(_ event: Event) -> CLLocationCoordinate2D {
-        // Generate coordinates based on event location string
+        // Generate stable coordinates based on event location string hash
+        // Use a fixed reference point to ensure events don't move when map scrolls
         let hash = abs(event.location.hashValue)
-        let baseLat = region.center.latitude
-        let baseLon = region.center.longitude
 
-        // Spread events around the center with some randomness
-        let latOffset = Double(hash % 100) / 10000.0 - 0.005
-        let lonOffset = Double((hash / 100) % 100) / 10000.0 - 0.005
+        // Use user location as base if available, otherwise use default LA coordinates
+        let baseCoordinate = locationManager.location ??
+                            CLLocationCoordinate2D(latitude: 34.0522, longitude: -118.2437)
 
-        return CLLocationCoordinate2D(latitude: baseLat + latOffset, longitude: baseLon + lonOffset)
+        // Create a deterministic but spread-out distribution around the base coordinate
+        // This ensures events stay in the same location regardless of map scrolling
+        let latOffset = Double((hash % 200) - 100) / 10000.0  // +/- 0.01 degrees latitude
+        let lonOffset = Double(((hash / 200) % 200) - 100) / 10000.0  // +/- 0.01 degrees longitude
+
+        let latitude = baseCoordinate.latitude + latOffset
+        let longitude = baseCoordinate.longitude + lonOffset
+
+        return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
 
     private func requestLocationPermission() {
@@ -179,60 +173,16 @@ struct PartierMapView: View {
         }
     }
 
-    private func centerOnEvents() {
-        guard !filteredEvents.isEmpty else { return }
-
-        let coordinates = filteredEvents.map { coordinateForEvent($0) }
-        let minLat = coordinates.map { $0.latitude }.min() ?? region.center.latitude
-        let maxLat = coordinates.map { $0.latitude }.max() ?? region.center.latitude
-        let minLon = coordinates.map { $0.longitude }.min() ?? region.center.longitude
-        let maxLon = coordinates.map { $0.longitude }.max() ?? region.center.longitude
-
-        let center = CLLocationCoordinate2D(
-            latitude: (minLat + maxLat) / 2,
-            longitude: (minLon + maxLon) / 2
-        )
-
-        let latDelta = abs(maxLat - minLat) * 1.2 + 0.01 // Add some padding
-        let lonDelta = abs(maxLon - minLon) * 1.2 + 0.01
-
-        withAnimation {
-            region.center = center
-            region.span = MKCoordinateSpan(
-                latitudeDelta: max(latDelta, 0.01),
-                longitudeDelta: max(lonDelta, 0.01)
-            )
-        }
-    }
-
-    private func centerOnEventsIfNeeded() {
-        if !filteredEvents.isEmpty && selectedDate == nil {
-            // Small delay to ensure map is loaded
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                centerOnEvents()
+    private func centerOnUserLocationInitially() {
+        if let location = locationManager.location {
+            withAnimation {
+                region.center = location
+                region.span = MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
             }
+            hasCenteredOnUserLocation = true
         }
     }
 
-    private func applyDateFilter() {
-        // Re-center on filtered events if we have a date filter
-        if selectedDate != nil && !filteredEvents.isEmpty {
-            centerOnEvents()
-        } else if selectedDate == nil {
-            // Clear filter - center on user location if available
-            if let location = locationManager.location {
-                withAnimation {
-                    region.center = location
-                    region.span = MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
-                }
-            }
-        }
-    }
-
-    private func clearDateFilter() {
-        selectedDate = nil
-        applyDateFilter()
-    }
 }
 
 struct EventDetailMapPinView: View {
@@ -299,3 +249,4 @@ struct EventDetailMapPinView: View {
 #Preview {
     PartierMapView(viewModel: HomeViewModel(), locationManager: LocationManager())
 }
+

@@ -17,9 +17,9 @@ router.get('/conversations', async (req, res) => {
     const offset = (page - 1) * limit;
     
     const result = await query(
-      `SELECT 
+      `SELECT
         c.id,
-        CASE 
+        CASE
           WHEN c.participant1_id = $1 THEN c.participant2_id
           ELSE c.participant1_id
         END as participant_id,
@@ -27,16 +27,22 @@ router.get('/conversations', async (req, res) => {
         u.avatar_url as participant_avatar,
         c.last_message,
         c.last_message_time,
-        CASE 
+        CASE
           WHEN c.participant1_id = $1 THEN c.participant1_unread_count
           ELSE c.participant2_unread_count
         END as unread_count,
-        c.is_active
+        c.is_active,
+        c.event_id,
+        c.booking_id,
+        c.title as conversation_title,
+        e.title as event_title,
+        e.event_date as event_date
       FROM conversations c
       JOIN users u ON (
         (c.participant1_id = $1 AND u.id = c.participant2_id) OR
         (c.participant2_id = $1 AND u.id = c.participant1_id)
       )
+      LEFT JOIN events e ON c.event_id = e.id
       WHERE (c.participant1_id = $1 OR c.participant2_id = $1)
         AND c.is_active = true
       ORDER BY c.last_message_time DESC
@@ -59,6 +65,11 @@ router.get('/conversations', async (req, res) => {
       lastMessageTime: row.last_message_time,
       unreadCount: parseInt(row.unread_count) || 0,
       isActive: row.is_active,
+      eventId: row.event_id,
+      bookingId: row.booking_id,
+      conversationTitle: row.conversation_title,
+      eventTitle: row.event_title,
+      eventDate: row.event_date,
     }));
     
     res.json({
@@ -209,30 +220,64 @@ router.post('/conversation', [
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
-    
-    const { userId } = req.body;
+
+    const { userId, eventId, bookingId } = req.body;
     const currentUserId = req.user.id;
-    
-    // Check if conversation exists
-    const existingConv = await query(
-      `SELECT id FROM conversations 
-       WHERE (participant1_id = $1 AND participant2_id = $2)
-          OR (participant1_id = $2 AND participant2_id = $1)`,
-      [currentUserId, userId]
-    );
-    
+
+    // If bookingId is provided, check if conversation already exists for this booking
+    let existingConv;
+    if (bookingId) {
+      existingConv = await query(
+        `SELECT id FROM conversations WHERE booking_id = $1`,
+        [bookingId]
+      );
+    } else {
+      // Check if conversation exists between these users
+      existingConv = await query(
+        `SELECT id FROM conversations
+         WHERE (participant1_id = $1 AND participant2_id = $2)
+            OR (participant1_id = $2 AND participant2_id = $1)`,
+        [currentUserId, userId]
+      );
+    }
+
     let conversationId;
     let conversation;
-    
+
     if (existingConv.rows.length > 0) {
       conversationId = existingConv.rows[0].id;
+
+      // Update conversation with event/booking info if not already set
+      if (eventId || bookingId) {
+        await query(
+          `UPDATE conversations
+           SET event_id = COALESCE(event_id, $2), booking_id = COALESCE(booking_id, $3)
+           WHERE id = $1`,
+          [conversationId, eventId, bookingId]
+        );
+      }
     } else {
-      // Create new conversation
+      // Create new conversation with event/booking context
+      let title = null;
+      if (bookingId) {
+        // Get event title for conversation title
+        const bookingResult = await query(
+          `SELECT e.title as event_title
+           FROM bookings b
+           JOIN events e ON b.event_id = e.id
+           WHERE b.id = $1`,
+          [bookingId]
+        );
+        if (bookingResult.rows.length > 0) {
+          title = bookingResult.rows[0].event_title;
+        }
+      }
+
       const newConv = await query(
-        `INSERT INTO conversations (participant1_id, participant2_id, created_at, updated_at)
-         VALUES ($1, $2, NOW(), NOW())
+        `INSERT INTO conversations (participant1_id, participant2_id, event_id, booking_id, title, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
          RETURNING id`,
-        [currentUserId, userId]
+        [currentUserId, userId, eventId, bookingId, title]
       );
       conversationId = newConv.rows[0].id;
     }

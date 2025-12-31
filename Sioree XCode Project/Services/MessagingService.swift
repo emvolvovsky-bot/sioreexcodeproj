@@ -28,6 +28,44 @@ struct Conversation: Identifiable, Codable {
     let lastMessageTime: Date
     let unreadCount: Int
     let isActive: Bool
+    let eventId: String?
+    let bookingId: String?
+    let conversationTitle: String?
+    let eventTitle: String?
+    let eventDate: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id, participantId, participantName, participantAvatar, lastMessage, lastMessageTime, unreadCount, isActive
+        case eventId, bookingId, conversationTitle, eventTitle, eventDate
+    }
+
+    init(id: String,
+         participantId: String,
+         participantName: String,
+         participantAvatar: String? = nil,
+         lastMessage: String,
+         lastMessageTime: Date,
+         unreadCount: Int,
+         isActive: Bool,
+         eventId: String? = nil,
+         bookingId: String? = nil,
+         conversationTitle: String? = nil,
+         eventTitle: String? = nil,
+         eventDate: Date? = nil) {
+        self.id = id
+        self.participantId = participantId
+        self.participantName = participantName
+        self.participantAvatar = participantAvatar
+        self.lastMessage = lastMessage
+        self.lastMessageTime = lastMessageTime
+        self.unreadCount = unreadCount
+        self.isActive = isActive
+        self.eventId = eventId
+        self.bookingId = bookingId
+        self.conversationTitle = conversationTitle
+        self.eventTitle = eventTitle
+        self.eventDate = eventDate
+    }
 }
 
 struct ConversationResponse: Codable {
@@ -158,10 +196,13 @@ class MessagingService: ObservableObject {
     }
     
     // MARK: - Create or Get Conversation
-    func getOrCreateConversation(with userId: String) -> AnyPublisher<Conversation, Error> {
+    func getOrCreateConversation(with userId: String, eventId: String? = nil, bookingId: String? = nil) -> AnyPublisher<Conversation, Error> {
         let useMockMessaging = false  // ✅ Using real backend
-        
-        let body: [String: Any] = ["userId": userId]
+
+        var body: [String: Any] = ["userId": userId]
+        if let eventId = eventId { body["eventId"] = eventId }
+        if let bookingId = bookingId { body["bookingId"] = bookingId }
+
         guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else {
             return Fail(error: NetworkError.unknown).eraseToAnyPublisher()
         }

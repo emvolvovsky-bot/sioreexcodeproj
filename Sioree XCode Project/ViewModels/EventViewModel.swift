@@ -17,6 +17,8 @@ class EventViewModel: ObservableObject {
     @Published var showPaymentCheckout = false
     @Published var showRSVPSheet = false
     @Published var rsvpQRCode: String?
+    @Published var eventBookings: [Booking] = []
+    @Published var isLoadingBookings = false
     
     private let networkService = NetworkService()
     private var cancellables = Set<AnyCancellable>()
@@ -237,6 +239,28 @@ class EventViewModel: ObservableObject {
                     // RSVP cancelled successfully - keep the optimistic update
                     // Don't reload immediately to avoid flickering
                     print("✅ RSVP cancelled successfully")
+                }
+            )
+            .store(in: &cancellables)
+    }
+
+    func fetchEventBookings() {
+        guard let event = event else { return }
+
+        isLoadingBookings = true
+
+        networkService.fetchEventBookings(eventId: event.id)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { [weak self] completion in
+                    self?.isLoadingBookings = false
+                    if case .failure(let error) = completion {
+                        print("❌ Failed to load event bookings: \(error.localizedDescription)")
+                    }
+                },
+                receiveValue: { [weak self] bookings in
+                    self?.eventBookings = bookings
+                    print("✅ Loaded \(bookings.count) bookings for event")
                 }
             )
             .store(in: &cancellables)

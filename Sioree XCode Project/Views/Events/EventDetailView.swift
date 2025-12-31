@@ -16,6 +16,7 @@ struct EventDetailView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @Environment(\.dismiss) var dismiss
     @State private var showLocationActionSheet = false
+    @State private var showTalentBrowser = false
     // Talent → request-to-help state
     @State private var isRequestingHelp = false
     @State private var requestAlertMessage: String?
@@ -302,10 +303,35 @@ struct EventDetailView: View {
                                         .buttonStyle(PlainButtonStyle())
                                     }
                                 }
-                                
+
+                                // Talent for this Event (Host only)
+                                if isHost && !viewModel.eventBookings.isEmpty {
+                                    Divider()
+
+                                    VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                                        HStack {
+                                            Text("Talent for this Event")
+                                                .font(.sioreeH3)
+                                                .foregroundColor(.sioreeWhite)
+
+                                            Spacer()
+
+                                            Text("\(viewModel.eventBookings.count) booking\(viewModel.eventBookings.count == 1 ? "" : "s")")
+                                                .font(.sioreeCaption)
+                                                .foregroundColor(.sioreeCharcoal.opacity(0.7))
+                                        }
+
+                                        ForEach(viewModel.eventBookings, id: \.id) { booking in
+                                            EventTalentBookingRow(booking: booking) {
+                                                // Handle booking actions here
+                                            }
+                                        }
+                                    }
+                                }
+
                                 if !isTalentMapMode {
                                     Divider()
-                                    
+
                                     // Description
                                     VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                                         Text("About")
@@ -345,12 +371,22 @@ struct EventDetailView: View {
                         VStack(spacing: 0) {
                             Divider()
                             Group {
-                                // Don't show buy/attend button if user is the host
+                                // Host controls
                                 if isHost {
-                                    Text("You are the host of this event")
-                                        .font(.sioreeBody)
-                                        .foregroundColor(.sioreeCharcoal.opacity(0.7))
-                                        .padding(.vertical, Theme.Spacing.m)
+                                    VStack(spacing: Theme.Spacing.s) {
+                                        Text("You are the host of this event")
+                                            .font(.sioreeBody)
+                                            .foregroundColor(.sioreeCharcoal.opacity(0.7))
+
+                                        CustomButton(
+                                            title: "Request Talent",
+                                            variant: .primary,
+                                            size: .medium
+                                        ) {
+                                            showTalentBrowser = true
+                                        }
+                                    }
+                                    .padding(.vertical, Theme.Spacing.m)
                                 } else if authViewModel.currentUser?.userType == .talent {
                                     CustomButton(
                                         title: isRequestingHelp ? "Sending..." : (isTalentMapMode ? "Request to Work" : "Request to Help"),
@@ -466,6 +502,11 @@ struct EventDetailView: View {
                 if let event = viewModel.event, event.isFeatured {
                     viewModel.trackImpression()
                 }
+
+                // Fetch bookings for hosts
+                if isHost {
+                    viewModel.fetchEventBookings()
+                }
             }
             .confirmationDialog("Open Location", isPresented: $showLocationActionSheet, titleVisibility: .visible) {
                 if let event = viewModel.event {
@@ -485,6 +526,15 @@ struct EventDetailView: View {
                 ) {
                     viewModel.showRSVPSheet = false
                 }
+            }
+            .sheet(isPresented: $showTalentBrowser) {
+                TalentBrowserView(event: viewModel.event, onTalentRequested: { talent in
+                    // Handle talent request callback
+                    print("Requested talent: \(talent.name)")
+                    // In a real implementation, this would create a booking request
+                    // and send a notification to the talent
+                    showTalentBrowser = false
+                })
             }
             .alert(isPresented: Binding(
                 get: { requestAlertMessage != nil },

@@ -17,6 +17,7 @@ const eventRoutes = require('./routes/events');
 const paymentRoutes = require('./routes/payments');
 const postRoutes = require('./routes/posts');
 const followRoutes = require('./routes/follow');
+const bookingRoutes = require('./routes/bookings');
 
 const { authenticateSocket } = require('./middleware/socketAuth');
 const { initializeSocketHandlers } = require('./socket/handlers');
@@ -66,6 +67,7 @@ app.use('/api/events', eventRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/posts', postRoutes);
 app.use('/api/follow', followRoutes);
+app.use('/api/bookings', bookingRoutes);
 
 // Socket.io authentication
 io.use(authenticateSocket);

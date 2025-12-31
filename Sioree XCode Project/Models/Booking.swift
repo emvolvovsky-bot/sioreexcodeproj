@@ -8,9 +8,13 @@
 import Foundation
 
 enum BookingStatus: String, Codable {
-    case pending
+    case requested
+    case accepted
+    case awaiting_payment
     case confirmed
-    case cancelled
+    case declined
+    case expired
+    case canceled
     case completed
 }
 
@@ -34,6 +38,7 @@ struct Booking: Identifiable, Codable {
     var paymentStatus: PaymentStatus
     var notes: String?
     var createdAt: Date
+    var talent: Talent?
     
     init(id: String = UUID().uuidString,
          eventId: String? = nil,
@@ -42,11 +47,12 @@ struct Booking: Identifiable, Codable {
          date: Date,
          time: Date,
          duration: Int = 4,
-         status: BookingStatus = .pending,
+         status: BookingStatus = .requested,
          price: Double,
          paymentStatus: PaymentStatus = .pending,
          notes: String? = nil,
-         createdAt: Date = Date()) {
+         createdAt: Date = Date(),
+         talent: Talent? = nil) {
         self.id = id
         self.eventId = eventId
         self.talentId = talentId
@@ -59,6 +65,7 @@ struct Booking: Identifiable, Codable {
         self.paymentStatus = paymentStatus
         self.notes = notes
         self.createdAt = createdAt
+        self.talent = talent
     }
 }
 

@@ -245,6 +245,15 @@ class NetworkService {
     func fetchEvent(eventId: String) -> AnyPublisher<Event, Error> {
         return request("/api/events/\(eventId)")
     }
+
+    func fetchEventBookings(eventId: String) -> AnyPublisher<[Booking], Error> {
+        struct Response: Codable {
+            let bookings: [Booking]
+        }
+        return request("/api/bookings/event/\(eventId)")
+            .map { (response: Response) in response.bookings }
+            .eraseToAnyPublisher()
+    }
     
     func fetchEventsLookingForTalent(talentType: String) -> AnyPublisher<[Event], Error> {
         struct Response: Codable {

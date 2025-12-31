@@ -46,7 +46,7 @@ struct RoleRootView: View {
         case .partier:
             return [
                 ("Home", "house.fill", AnyView(PartierHomeView())),
-                ("Map", "map.fill", AnyView(MapViewPlaceholder())),
+                ("Map", "map.fill", AnyView(PartierMapView(viewModel: HomeViewModel(), locationManager: LocationManager()))),
                 ("Tickets", "ticket.fill", AnyView(TicketsView())),
                 ("Inbox", "envelope.fill", AnyView(PartierInboxView())),
                 ("Profile", "person.fill", AnyView(PartierProfileView()))
@@ -54,7 +54,7 @@ struct RoleRootView: View {
         case .talent:
             return [
                 ("Gigs", "briefcase.fill", AnyView(TalentGigsView())),
-                ("Map", "map.fill", AnyView(EventsMapView())),
+                ("Map", "map.fill", AnyView(TalentEventsMapView())),
                 ("Inbox", "envelope.fill", AnyView(TalentInboxView())),
                 ("Profile", "person.fill", AnyView(TalentProfileView().environmentObject(authViewModel)))
             ]

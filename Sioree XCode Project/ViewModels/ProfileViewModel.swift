@@ -32,7 +32,7 @@ class ProfileViewModel: ObservableObject {
     var upcomingEvents: [Event] {
         events.filter { event in
             event.date >= Date() && event.status != .completed
-        }
+        }.sorted { $0.date < $1.date } // Soonest first
     }
 
     var filteredEvents: [Event] {
@@ -81,6 +81,30 @@ class ProfileViewModel: ObservableObject {
                    let currentUserId = StorageService.shared.getUserId(),
                    postUserId == currentUserId || self?.userId == postUserId {
                     self?.loadUserContent()
+                }
+            }
+            .store(in: &cancellables)
+
+        // Listen for event creation to add event immediately
+        NotificationCenter.default.publisher(for: NSNotification.Name("EventCreated"))
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                if let event = notification.userInfo?["event"] as? Event {
+                    print("📡 ProfileViewModel received EventCreated notification: \(event.title)")
+                    print("📡 Event hostId: '\(event.hostId)', current userId: \(StorageService.shared.getUserId() ?? "nil")")
+
+                    // Add the event if it's the current user's profile (userId is nil) or if hostId matches
+                    let shouldAdd = self?.userId == nil || // Current user's profile
+                                    (self?.userId != nil && event.hostId == self?.userId) || // Specific user's profile
+                                    (event.hostId == StorageService.shared.getUserId()) // Event belongs to current user
+
+                    if shouldAdd {
+                        // Add the event to the beginning of the events array
+                        self?.events.insert(event, at: 0)
+                        print("✅ Added new event to ProfileViewModel: \(event.title)")
+                    } else {
+                        print("⚠️ Event not added - doesn't belong to this profile")
+                    }
                 }
             }
             .store(in: &cancellables)
@@ -153,8 +177,12 @@ class ProfileViewModel: ObservableObject {
         .receive(on: DispatchQueue.main)
         .sink(
             receiveCompletion: { _ in },
-            receiveValue: { [weak self] events in
-                self?.events = events
+            receiveValue: { [weak self] serverEvents in
+                // Merge server events with locally created events that might not be in server response yet
+                let serverEventIds = Set(serverEvents.map { $0.id })
+                let existingLocalEvents = self?.events.filter { !serverEventIds.contains($0.id) } ?? []
+                self?.events = serverEvents + existingLocalEvents
+                print("✅ ProfileViewModel loaded \(serverEvents.count) events from server, kept \(existingLocalEvents.count) local events. Total: \(self?.events.count ?? 0)")
             }
         )
         .store(in: &cancellables)

@@ -12,41 +12,20 @@ import Combine
 
 struct MyEventsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
-    @StateObject private var homeViewModel = HomeViewModel()
+    @StateObject private var profileViewModel = ProfileViewModel(userId: nil, useAttendedEvents: false)
     @State private var showNewEvent = false
     @State private var showQRScanner = false
     @State private var selectedEventId: String?
     @State private var eventToDelete: String?
     @State private var showDeleteConfirmation = false
-    @State private var selectedSegment: EventSegment = .upcoming
+    @State private var selectedSegment: ProfileViewModel.HostProfileTab = .upcoming
     
-    @State private var localEvents: [Event] = []
-    
-    private var events: [Event] {
-        // Use local events if available, otherwise filter from homeViewModel
-        if !localEvents.isEmpty {
-            return localEvents
-        }
-        // Combine nearby and featured events, then filter by host
-        let nearby = homeViewModel.nearbyEvents
-        let featured = homeViewModel.featuredEvents
-        let allEvents = nearby + featured
-        let currentUserId = authViewModel.currentUser?.id
-        return allEvents.filter { event in
-            event.hostId == currentUserId
-        }
-    }
-
     private var upcomingEvents: [Event] {
-        events
-            .filter { $0.date >= Date() }
-            .sorted { $0.date < $1.date }
+        profileViewModel.upcomingEvents
     }
 
     private var pastEvents: [Event] {
-        events
-            .filter { $0.date < Date() }
-            .sorted { $0.date > $1.date }
+        profileViewModel.hostedEvents
     }
 
     private var visibleEvents: [Event] {
@@ -69,7 +48,7 @@ struct MyEventsView: View {
             Text(selectedSegment == .upcoming ? "No upcoming events" : "No past events")
                 .font(.sioreeH3)
                 .foregroundColor(Color.sioreeWhite)
-            Text(selectedSegment == .upcoming ? "Create an event to get started" : "Completed events will appear here")
+            Text(selectedSegment == .upcoming ? "Create your next event!" : "Completed events will appear here")
                 .font(.sioreeBody)
                 .foregroundColor(Color.sioreeLightGrey.opacity(0.7))
         }
@@ -161,7 +140,7 @@ struct MyEventsView: View {
     
     private var segmentPicker: some View {
         Picker("Event Filter", selection: $selectedSegment) {
-            ForEach(EventSegment.allCases, id: \.self) { segment in
+            ForEach(ProfileViewModel.HostProfileTab.allCases, id: \.self) { segment in
                 Text(segment.rawValue)
                     .tag(segment)
             }
@@ -175,11 +154,11 @@ struct MyEventsView: View {
             LazyVStack(spacing: Theme.Spacing.m) {
                 segmentPicker
 
-                if homeViewModel.isLoading && !homeViewModel.hasLoaded {
+                if profileViewModel.isLoading {
                     ProgressView()
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, Theme.Spacing.xxl)
-                } else if visibleEvents.isEmpty && homeViewModel.hasLoaded {
+                } else if visibleEvents.isEmpty {
                     emptyStateView
                 } else {
                     eventsGridView
@@ -199,17 +178,12 @@ struct MyEventsView: View {
                 contentView
             }
             .onAppear {
-                if !homeViewModel.hasLoaded {
-                    homeViewModel.loadNearbyEvents()
-                }
-                // Update local events when homeViewModel events change
-                updateLocalEvents()
+                profileViewModel.setAuthViewModel(authViewModel)
+                profileViewModel.loadProfile()
             }
-            .onReceive(homeViewModel.$nearbyEvents) { _ in
-                updateLocalEvents()
-            }
-            .onReceive(homeViewModel.$featuredEvents) { _ in
-                updateLocalEvents()
+            .onChange(of: authViewModel.currentUser?.id) { _ in
+                profileViewModel.setAuthViewModel(authViewModel)
+                profileViewModel.loadProfile()
             }
             .navigationTitle("My Events")
             .navigationBarTitleDisplayMode(.large)
@@ -226,16 +200,10 @@ struct MyEventsView: View {
                 }
                 .padding(Theme.Spacing.m)
             }
-            .sheet(isPresented: $showNewEvent, onDismiss: {
-                // Reload events after creation
-                homeViewModel.loadNearbyEvents()
-            }) {
+            .sheet(isPresented: $showNewEvent) {
                 EventCreateView(onEventCreated: { event in
-                    // Insert newly created event locally so it appears immediately
-                    withAnimation {
-                        localEvents.insert(event, at: 0)
-                        homeViewModel.nearbyEvents.insert(event, at: 0)
-                    }
+                    // Event will be added via EventCreated notification to ProfileViewModel
+                    print("📡 MyEventsView received event creation callback: \(event.title)")
                 }, currentUserLocation: authViewModel.currentUser?.location)
                 .environmentObject(authViewModel)
             }
@@ -268,22 +236,10 @@ struct MyEventsView: View {
         }
     }
     
-    private func updateLocalEvents() {
-        // Combine nearby and featured events, then filter by host
-        let allEvents = homeViewModel.nearbyEvents + homeViewModel.featuredEvents
-        localEvents = allEvents.filter { $0.hostId == authViewModel.currentUser?.id }
-    }
     
     private func deleteEvent(eventId: String) {
         print("🗑️ Deleting event: \(eventId)")
-        
-        // Animate removal from UI
-        withAnimation(.easeInOut(duration: 0.3)) {
-            localEvents.removeAll { $0.id == eventId }
-            homeViewModel.nearbyEvents.removeAll { $0.id == eventId }
-            homeViewModel.featuredEvents.removeAll { $0.id == eventId }
-        }
-        
+
         let networkService = NetworkService()
         networkService.deleteEvent(eventId: eventId)
             .receive(on: DispatchQueue.main)
@@ -291,10 +247,8 @@ struct MyEventsView: View {
                 receiveCompletion: { completion in
                     if case .failure(let error) = completion {
                         print("❌ Failed to delete event: \(error.localizedDescription)")
-                        // Reload on failure to restore if delete failed
-                        withAnimation {
-                            homeViewModel.loadNearbyEvents()
-                        }
+                        // Reload on failure
+                        profileViewModel.loadProfile()
                     } else {
                         print("✅ Delete request completed")
                     }
@@ -308,16 +262,12 @@ struct MyEventsView: View {
                             object: nil,
                             userInfo: ["eventId": eventId]
                         )
-                        // Event already removed optimistically, just reload to sync
-                        withAnimation {
-                            homeViewModel.loadNearbyEvents()
-                        }
+                        // Remove from local ProfileViewModel
+                        profileViewModel.events.removeAll { $0.id == eventId }
+                        print("✅ Removed event from ProfileViewModel")
                     } else {
-                        print("⚠️ Delete returned false - reloading to restore")
-                        // Reload to restore if delete failed
-                        withAnimation {
-                            homeViewModel.loadNearbyEvents()
-                        }
+                        print("⚠️ Delete returned false - reloading")
+                        profileViewModel.loadProfile()
                     }
                 }
             )
@@ -327,10 +277,6 @@ struct MyEventsView: View {
     @State private var cancellables = Set<AnyCancellable>()
 }
 
-private enum EventSegment: String, CaseIterable {
-    case upcoming = "Upcoming"
-    case past = "Past"
-}
 
 
 struct NewEventPlaceholderView: View {
@@ -569,9 +515,11 @@ struct NewEventPlaceholderView: View {
                 isCreating = false
                 print("✅ Event created successfully: \(event.title)")
                 print("✅ Event ID: \(event.id)")
-                print("✅ Event hostId: \(event.hostId)")
+                print("✅ Event hostId: '\(event.hostId)'")
                 print("✅ Event hostName: \(event.hostName)")
-                
+                print("✅ Event date: \(event.date)")
+                print("✅ Current user ID: \(String(describing: StorageService.shared.getUserId()))")
+
                 // Generate QR code for the event if it doesn't have one
                 if event.qrCode == nil {
                     let qrCode = Event.generateEventQRCode(eventId: event.id)
@@ -579,7 +527,14 @@ struct NewEventPlaceholderView: View {
                     // TODO: Send QR code to backend to store with event
                     // For now, it's generated locally and can be used immediately
                 }
-                
+
+                // Post notification so HomeViewModel and ProfileViewModel can add the event
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("EventCreated"),
+                    object: nil,
+                    userInfo: ["event": event]
+                )
+
                 // Reload events list and dismiss
                 onEventCreated()
                 dismiss()

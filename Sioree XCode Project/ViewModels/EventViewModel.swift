@@ -113,15 +113,13 @@ class EventViewModel: ObservableObject {
                 },
                 receiveValue: { [weak self] event in
                     self?.event = event
-                    // If event is in the future and has a QR code, notify that it should appear in tickets
-                    if event.date > Date(), event.qrCode != nil {
-                        // Post notification so TicketsViewModel can refresh
-                        NotificationCenter.default.post(
-                            name: NSNotification.Name("EventCreated"),
-                            object: nil,
-                            userInfo: ["event": event]
-                        )
-                    }
+                    // Always post notification when event is created so it appears on home screen
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("EventCreated"),
+                        object: nil,
+                        userInfo: ["event": event]
+                    )
+                    // If event is in the future and has a QR code, it will also appear in tickets
                     completion?(.success(event))
                 }
             )

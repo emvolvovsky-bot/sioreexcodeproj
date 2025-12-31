@@ -537,9 +537,15 @@ struct EventCardZStack: View {
 }
 
 struct EventsAttendedView: View {
-    @StateObject private var viewModel = ProfileViewModel(userId: nil, useAttendedEvents: true)
+    @EnvironmentObject var authViewModel: AuthViewModel
+    @StateObject private var viewModel = ProfileViewModel(userId: nil, useAttendedEvents: false)
     @State private var selectedEvent: Event? = nil
     @State private var showPhotoViewer = false
+    @State private var showQRScanner = false
+    @State private var selectedEventId: String?
+    @State private var eventToDelete: String?
+    @State private var showDeleteConfirmation = false
+    @State private var selectedEventForPhotos: Event? = nil
 
     var body: some View {
         NavigationStack {
@@ -557,61 +563,126 @@ struct EventsAttendedView: View {
                 } else {
                     ScrollView {
                         VStack(spacing: Theme.Spacing.l) {
-                            Text("Event History")
+                            Text("My Events")
                                 .font(.sioreeH2)
                                 .foregroundColor(Color.sioreeWhite)
                                 .padding(.top, Theme.Spacing.m)
 
-                            if viewModel.events.isEmpty {
-                                VStack(spacing: Theme.Spacing.m) {
-                                    Image(systemName: "calendar.badge.exclamationmark")
-                                        .font(.system(size: 60))
-                                        .foregroundColor(Color.sioreeLightGrey.opacity(0.5))
-                                    Text("No events attended yet")
-                                        .font(.sioreeH3)
-                                        .foregroundColor(Color.sioreeWhite)
-                                    Text("Your attended events and photos will appear here")
-                                        .font(.sioreeBody)
-                                        .foregroundColor(Color.sioreeLightGrey.opacity(0.7))
-                                        .multilineTextAlignment(.center)
+                            // Tab Picker for Events (same as HostProfileView)
+                            Picker("Event Type", selection: $viewModel.selectedHostTab) {
+                                ForEach(ProfileViewModel.HostProfileTab.allCases, id: \.self) { tab in
+                                    Text(tab.rawValue).tag(tab)
                                 }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, Theme.Spacing.xxl)
-                            } else {
-                                // ZStack of events attended
-                                ZStack {
-                                    ForEach(Array(viewModel.events.enumerated()), id: \.element.id) { index, event in
-                                        EventCardZStack(
-                                            event: event,
-                                            index: index,
-                                            total: viewModel.events.count
-                                        )
-                                        .onTapGesture {
-                                            selectedEvent = event
-                                            showPhotoViewer = true
+                            }
+                            .pickerStyle(.segmented)
+                            .padding(.horizontal, Theme.Spacing.m)
+                            .padding(.top, Theme.Spacing.m)
+
+                            // Events Section (same as HostProfileView)
+                            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                                Text(viewModel.selectedHostTab.rawValue)
+                                    .font(.sioreeH3)
+                                    .foregroundColor(.sioreeWhite)
+                                    .padding(.horizontal, Theme.Spacing.m)
+
+                                if viewModel.filteredEvents.isEmpty {
+                                    Text(viewModel.selectedHostTab == .hosted ?
+                                         "No past events yet. Host your first event!" :
+                                         "No upcoming events. Create your next event!")
+                                        .font(.sioreeBody)
+                                        .foregroundColor(.sioreeLightGrey)
+                                        .padding(.horizontal, Theme.Spacing.m)
+                                        .padding(.bottom, Theme.Spacing.m)
+                                } else {
+                                    LazyVGrid(
+                                        columns: [
+                                            GridItem(.flexible(), spacing: Theme.Spacing.m),
+                                            GridItem(.flexible(), spacing: Theme.Spacing.m)
+                                        ],
+                                        spacing: Theme.Spacing.m
+                                    ) {
+                                        ForEach(viewModel.filteredEvents) { event in
+                                            HostEventCardGrid(event: event)
+                                                .onTapGesture {
+                                                    selectedEventForPhotos = event
+                                                }
                                         }
                                     }
+                                    .padding(.horizontal, Theme.Spacing.m)
+                                    .padding(.bottom, Theme.Spacing.m)
                                 }
-                                .frame(height: 450)
-                                .padding(.horizontal, Theme.Spacing.m)
                             }
+                            .padding(.top, Theme.Spacing.m)
                         }
                         .padding(.vertical, Theme.Spacing.m)
                     }
                 }
             }
-            .navigationTitle("Event History")
+            .navigationTitle("My Events")
             .navigationBarTitleDisplayMode(.large)
             .sheet(isPresented: $showPhotoViewer) {
                 if let event = selectedEvent {
                     EventPhotosViewer(event: event)
                 }
             }
+            .sheet(isPresented: $showQRScanner) {
+                if let eventId = selectedEventId {
+                    QRCodeScannerView(eventId: eventId)
+                }
+            }
+            .alert("Delete Event", isPresented: $showDeleteConfirmation) {
+                Button("Cancel", role: .cancel) { }
+                Button("Delete", role: .destructive) {
+                    if let eventId = eventToDelete {
+                        deleteEvent(eventId)
+                    }
+                }
+            } message: {
+                Text("Are you sure you want to delete this event? This action cannot be undone.")
+            }
+            .sheet(item: $selectedEventForPhotos) { event in
+                EventPhotosViewer(event: event)
+                    .environmentObject(authViewModel)
+            }
             .onAppear {
+                viewModel.setAuthViewModel(authViewModel)
+                viewModel.loadProfile()
+            }
+            .onChange(of: authViewModel.currentUser?.id) { _ in
+                viewModel.setAuthViewModel(authViewModel)
+                viewModel.loadProfile()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("EventCreated"))) { notification in
+                // Refresh events when a new event is created
                 viewModel.loadProfile()
             }
         }
     }
+
+    private func deleteEvent(_ eventId: String) {
+        print("🗑️ Deleting event: \(eventId)")
+
+        let networkService = NetworkService()
+        networkService.deleteEvent(eventId: eventId)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    switch completion {
+                    case .finished:
+                        print("✅ Event deleted successfully")
+                        // Refresh events after deletion
+                        viewModel.loadProfile()
+                    case .failure(let error):
+                        print("❌ Failed to delete event: \(error.localizedDescription)")
+                        // Could show error alert here if needed
+                    }
+                },
+                receiveValue: { _ in }
+            )
+            .store(in: &cancellables)
+    }
+
+    @State private var cancellables = Set<AnyCancellable>()
 }
 
 

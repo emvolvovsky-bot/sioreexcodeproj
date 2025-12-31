@@ -33,6 +33,7 @@ struct Talent: Identifiable, Codable {
     var availability: [Date]
     var verified: Bool
     var location: String?
+    var isAvailable: Bool
     var createdAt: Date
     
     init(id: String = UUID().uuidString,
@@ -48,6 +49,7 @@ struct Talent: Identifiable, Codable {
          availability: [Date] = [],
          verified: Bool = false,
          location: String? = nil,
+         isAvailable: Bool = false,
          createdAt: Date = Date()) {
         self.id = id
         self.userId = userId
@@ -62,6 +64,7 @@ struct Talent: Identifiable, Codable {
         self.availability = availability
         self.verified = verified
         self.location = location
+        self.isAvailable = isAvailable
         self.createdAt = createdAt
     }
 }

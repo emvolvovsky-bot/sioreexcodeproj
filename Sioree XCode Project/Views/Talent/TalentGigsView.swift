@@ -41,6 +41,7 @@ struct Gig: Identifiable {
 
 struct TalentGigsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
+    @EnvironmentObject var talentViewModel: TalentViewModel
     @State private var myGigs: [Gig] = [
         Gig(eventName: "Halloween Mansion Party", hostName: "LindaFlora", date: Calendar.current.date(byAdding: .day, value: 5, to: Date()) ?? Date(), rate: "$500", status: .confirmed),
         Gig(eventName: "Rooftop Sunset Sessions", hostName: "Skyline Events", date: Calendar.current.date(byAdding: .day, value: 3, to: Date()) ?? Date(), rate: "$750", status: .requested),
@@ -60,6 +61,9 @@ struct TalentGigsView: View {
     @State private var gigToWithdraw: Gig?
     @State private var selectedEventId: String?
     @State private var showEventDetail = false
+    @State private var currentTalent: Talent?
+    @State private var isTalentAvailable: Bool = false
+    @State private var showTalentTypeSelector = false
     private let networkService = NetworkService()
     private let messagingService = MessagingService()
     
@@ -195,8 +199,44 @@ struct TalentGigsView: View {
             }
             .navigationTitle("Gigs")
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: {
+                        showTalentTypeSelector = true
+                    }) {
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(isTalentAvailable ? Color.green : Color.gray.opacity(0.5))
+                                .frame(width: 8, height: 8)
+                            Text(isTalentAvailable ? "On Market as \(selectedTalentType)" : "Go On Market")
+                                .font(.sioreeCaption)
+                                .foregroundColor(.sioreeWhite)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 12))
+                                .foregroundColor(.sioreeWhite)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.sioreeCharcoal.opacity(0.8))
+                        .cornerRadius(16)
+                    }
+                }
+            }
             .sheet(isPresented: $showFindEvents) {
                 FindEventsForTalentView(selectedTalentType: $selectedTalentType)
+            }
+            .sheet(isPresented: $showTalentTypeSelector) {
+                TalentTypeSelectorView(
+                    selectedTalentType: $selectedTalentType,
+                    isTalentAvailable: $isTalentAvailable,
+                    onSave: {
+                        // Save the talent type and availability
+                        if let talent = currentTalent {
+                            talentViewModel.updateAvailability(talentId: talent.id, isAvailable: isTalentAvailable)
+                        }
+                        showTalentTypeSelector = false
+                    }
+                )
             }
             .onChange(of: selectedTalentType) { oldValue, newValue in
                 loadEventsForTalentType()
@@ -227,6 +267,7 @@ struct TalentGigsView: View {
                    let talentCategory = getTalentCategoryFromUser(user) {
                     selectedTalentType = talentCategory.rawValue
                 }
+                loadCurrentTalent()
                 loadEventsForTalentType()
             }
         }
@@ -312,6 +353,34 @@ struct TalentGigsView: View {
         // TODO: Get talent category from user profile
         // For now, return nil and let user select
         return nil
+    }
+
+    private func loadCurrentTalent() {
+        guard let userId = authViewModel.currentUser?.id else { return }
+
+        networkService.fetchTalentProfile(talentId: userId)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    if case .failure(let error) = completion {
+                        print("Failed to load talent profile: \(error)")
+                    }
+                },
+                receiveValue: { talent in
+                    currentTalent = talent
+                    isTalentAvailable = talent.isAvailable
+                    selectedTalentType = talent.category.rawValue
+                }
+            )
+            .store(in: &cancellables)
+    }
+
+    private func toggleAvailability() {
+        guard let talent = currentTalent else { return }
+
+        let newAvailability = !isTalentAvailable
+        isTalentAvailable = newAvailability
+        talentViewModel.updateAvailability(talentId: talent.id, isAvailable: newAvailability)
     }
     
     @State private var cancellables = Set<AnyCancellable>()
@@ -537,6 +606,129 @@ struct TalentBookingRow: View {
             return .sioreeIcyBlue
         case .completed:
             return .gray
+        }
+    }
+}
+
+struct TalentTypeSelectorView: View {
+    @Environment(\.dismiss) var dismiss
+    @Binding var selectedTalentType: String
+    @Binding var isTalentAvailable: Bool
+
+    let onSave: () -> Void
+
+    private var talentTypes: [String] {
+        TalentCategory.allCases.map { $0.rawValue }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                LinearGradient(
+                    colors: [Color.sioreeBlack, Color.sioreeBlack.opacity(0.95), Color.sioreeCharcoal.opacity(0.1)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
+
+                VStack(spacing: Theme.Spacing.xl) {
+                    Text("Set Up Your Talent Profile")
+                        .font(.sioreeH3)
+                        .foregroundColor(.sioreeWhite)
+                        .padding(.top, Theme.Spacing.m)
+
+                    Text("Choose your talent type and availability")
+                        .font(.sioreeBody)
+                        .foregroundColor(.sioreeLightGrey)
+                        .multilineTextAlignment(.center)
+
+                    VStack(spacing: Theme.Spacing.m) {
+                        Text("Talent Type")
+                            .font(.sioreeH4)
+                            .foregroundColor(.sioreeWhite)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        ForEach(talentTypes, id: \.self) { type in
+                            Button(action: {
+                                selectedTalentType = type
+                            }) {
+                                HStack {
+                                    Text(type)
+                                        .font(.sioreeBody)
+                                        .foregroundColor(.sioreeWhite)
+
+                                    Spacer()
+
+                                    if selectedTalentType == type {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundColor(.sioreeIcyBlue)
+                                            .font(.system(size: 20))
+                                    }
+                                }
+                                .padding(Theme.Spacing.m)
+                                .background(Color.sioreeCharcoal.opacity(selectedTalentType == type ? 0.6 : 0.3))
+                                .cornerRadius(Theme.CornerRadius.medium)
+                            }
+                        }
+                    }
+
+                    VStack(spacing: Theme.Spacing.m) {
+                        Text("Availability")
+                            .font(.sioreeH4)
+                            .foregroundColor(.sioreeWhite)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        Button(action: {
+                            isTalentAvailable.toggle()
+                        }) {
+                            HStack {
+                                Text(isTalentAvailable ? "On Market" : "Off Market")
+                                    .font(.sioreeBody)
+                                    .foregroundColor(.sioreeWhite)
+
+                                Spacer()
+
+                                Circle()
+                                    .fill(isTalentAvailable ? Color.green : Color.gray.opacity(0.5))
+                                    .frame(width: 20, height: 20)
+                                    .overlay(
+                                        Image(systemName: isTalentAvailable ? "checkmark" : "xmark")
+                                            .font(.system(size: 12, weight: .bold))
+                                            .foregroundColor(.white)
+                                    )
+                            }
+                            .padding(Theme.Spacing.m)
+                            .background(Color.sioreeCharcoal.opacity(0.3))
+                            .cornerRadius(Theme.CornerRadius.medium)
+                        }
+                    }
+
+                    Spacer()
+
+                    CustomButton(
+                        title: "Save & Continue",
+                        variant: .primary,
+                        size: .large
+                    ) {
+                        onSave()
+                    }
+                    .padding(.horizontal, Theme.Spacing.m)
+                    .padding(.bottom, Theme.Spacing.xl)
+                }
+                .padding(.horizontal, Theme.Spacing.m)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: {
+                        dismiss()
+                    }) {
+                        Image(systemName: "xmark")
+                            .foregroundColor(.sioreeWhite)
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                }
+            }
         }
     }
 }

@@ -9,6 +9,7 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
+    @EnvironmentObject var talentViewModel: TalentViewModel
     @AppStorage("selectedUserRole") private var selectedRoleRaw: String = ""
     @AppStorage("hasCompletedRoleSelection") private var hasCompletedRoleSelection: Bool = false
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding: Bool = false
@@ -48,6 +49,7 @@ struct ContentView: View {
                     } else if let role = selectedRole, hasCompletedRoleSelection {
                         RoleRootView(role: role, onRoleChange: {})
                             .environmentObject(authViewModel)
+                            .environmentObject(talentViewModel)
                             .transition(.opacity.combined(with: .move(edge: .bottom)))
                     } else {
                         RoleSelectionView(selectedRole: $selectedRole, isChangingRole: false)

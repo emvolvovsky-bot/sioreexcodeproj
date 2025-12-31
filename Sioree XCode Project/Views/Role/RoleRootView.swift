@@ -13,6 +13,7 @@ struct RoleRootView: View {
     @State private var selectedTab = 0
     @AppStorage("selectedUserRole") private var selectedRoleRaw: String = ""
     @EnvironmentObject var authViewModel: AuthViewModel
+    @EnvironmentObject var talentViewModel: TalentViewModel
     
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -53,7 +54,7 @@ struct RoleRootView: View {
             ]
         case .talent:
             return [
-                ("Gigs", "briefcase.fill", AnyView(TalentGigsView())),
+                ("Gigs", "briefcase.fill", AnyView(TalentGigsView().environmentObject(talentViewModel))),
                 ("Map", "map.fill", AnyView(TalentEventsMapView())),
                 ("Inbox", "envelope.fill", AnyView(TalentInboxView())),
                 ("Profile", "person.fill", AnyView(TalentProfileView().environmentObject(authViewModel)))

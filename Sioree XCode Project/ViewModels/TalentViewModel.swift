@@ -24,11 +24,11 @@ class TalentViewModel: ObservableObject {
         loadTalent()
     }
     
-    func loadTalent() {
+    func loadTalent(availableOnly: Bool = true) {
         isLoading = true
         errorMessage = nil
-        
-        networkService.fetchTalent(category: selectedCategory, searchQuery: searchQuery.isEmpty ? nil : searchQuery)
+
+        networkService.fetchTalent(category: selectedCategory, searchQuery: searchQuery.isEmpty ? nil : searchQuery, availableOnly: availableOnly)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { [weak self] completion in
@@ -71,6 +71,32 @@ class TalentViewModel: ObservableObject {
     func search(_ query: String) {
         searchQuery = query
         loadTalent()
+    }
+
+    func updateAvailability(talentId: String, isAvailable: Bool) {
+        // Update local talent data
+        if let index = talent.firstIndex(where: { $0.id == talentId }) {
+            talent[index].isAvailable = isAvailable
+        }
+
+        // Call API to update availability status
+        networkService.updateTalentAvailability(talentId: talentId, isAvailable: isAvailable)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    if case .failure(let error) = completion {
+                        print("Failed to update availability: \(error)")
+                        // Revert local change on failure
+                        if let index = self.talent.firstIndex(where: { $0.id == talentId }) {
+                            self.talent[index].isAvailable = !isAvailable
+                        }
+                    }
+                },
+                receiveValue: { _ in
+                    print("Successfully updated availability for talent \(talentId)")
+                }
+            )
+            .store(in: &cancellables)
     }
 }
 

@@ -807,21 +807,24 @@ class NetworkService {
     }
     
     // MARK: - Talent
-    func fetchTalent(category: TalentCategory?, searchQuery: String?) -> AnyPublisher<[Talent], Error> {
+    func fetchTalent(category: TalentCategory?, searchQuery: String?, availableOnly: Bool = true) -> AnyPublisher<[Talent], Error> {
         var endpoint = "/api/talent"
         var queryParams: [String] = []
-        
+
         if let category = category {
             queryParams.append("category=\(category.rawValue)")
         }
         if let query = searchQuery {
             queryParams.append("search=\(query)")
         }
-        
+        if availableOnly {
+            queryParams.append("available=true")
+        }
+
         if !queryParams.isEmpty {
             endpoint += "?" + queryParams.joined(separator: "&")
         }
-        
+
         return request(endpoint)
     }
     
@@ -1063,6 +1066,21 @@ class NetworkService {
         }
         return request("/api/earnings/withdraw", method: "POST", body: jsonData)
             .map { (response: WithdrawResponse) in response.success }
+            .eraseToAnyPublisher()
+    }
+
+    func updateTalentAvailability(talentId: String, isAvailable: Bool) -> AnyPublisher<Bool, Error> {
+        struct AvailabilityResponse: Codable {
+            let success: Bool
+        }
+        let body: [String: Any] = [
+            "isAvailable": isAvailable
+        ]
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else {
+            return Fail(error: NetworkError.unknown).eraseToAnyPublisher()
+        }
+        return request("/api/talent/\(talentId)/availability", method: "PUT", body: jsonData)
+            .map { (response: AvailabilityResponse) in response.success }
             .eraseToAnyPublisher()
     }
 }

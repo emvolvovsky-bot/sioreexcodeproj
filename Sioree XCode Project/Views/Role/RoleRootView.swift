@@ -40,7 +40,7 @@ struct RoleRootView: View {
             return [
                 ("Home", "house.fill", AnyView(HostHomeView())),
                 ("My Events", "calendar", AnyView(MyEventsView())),
-                ("Marketplace", "bag.fill", AnyView(HostMarketplaceView())),
+                ("Talent Requests", "person.2.circle.fill", AnyView(HostTalentRequestsView())),
                 ("Inbox", "envelope.fill", AnyView(HostInboxView())),
                 ("Profile", "person.fill", AnyView(HostProfileView()))
             ]

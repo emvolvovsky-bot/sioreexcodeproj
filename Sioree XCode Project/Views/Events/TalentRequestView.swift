@@ -18,6 +18,7 @@ struct TalentRequestView: View {
     @State private var proposedRate: String = ""
     @State private var isSending = false
     @State private var errorMessage: String?
+    @State private var cancellables = Set<AnyCancellable>()
 
     private let networkService = NetworkService()
 
@@ -307,15 +308,39 @@ struct TalentRequestView: View {
         isSending = true
         errorMessage = nil
 
-        // For now, simulate sending the request
-        // In a real implementation, this would call an API to create a talent request
-        // The request would be stored and the talent would receive a notification
+        // Create the talent request
+        let proposedRateValue = Double(proposedRate) ?? nil
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            isSending = false
-            onTalentRequested?(talent)
-            // Success feedback could be added here
-        }
+        let request = TalentRequest(
+            hostId: "currentHostId", // TODO: Get from auth view model when available
+            talentId: talent.userId,
+            eventId: event?.id,
+            eventTitle: event?.title,
+            message: messageText.trimmingCharacters(in: .whitespacesAndNewlines),
+            proposedRate: proposedRateValue,
+            status: .pending
+        )
+
+        // In a real implementation, this would call an API to store the request
+        // For now, we'll simulate the API call
+        networkService.sendTalentRequest(request)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    self.isSending = false
+                    switch completion {
+                    case .finished:
+                        self.onTalentRequested?(self.talent)
+                        // Success - dismiss the view
+                    case .failure(let error):
+                        self.errorMessage = "Failed to send request: \(error.localizedDescription)"
+                    }
+                },
+                receiveValue: { _ in
+                    // Request sent successfully
+                }
+            )
+            .store(in: &cancellables)
     }
 }
 

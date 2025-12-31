@@ -18,7 +18,7 @@ class ProfileViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var isFollowing = false
     @Published var selectedTab: ProfileTab = .events
-    @Published var selectedHostTab: HostProfileTab = .hosted
+    @Published var selectedHostTab: HostProfileTab = .upcoming
     @Published var followerCount: Int = 0
     @Published var followingCount: Int = 0
 
@@ -51,8 +51,8 @@ class ProfileViewModel: ObservableObject {
     }
 
     enum HostProfileTab: String, CaseIterable {
-        case hosted = "Events Hosted"
         case upcoming = "Upcoming Events"
+        case hosted = "Events Hosted"
     }
 
     private let networkService = NetworkService()

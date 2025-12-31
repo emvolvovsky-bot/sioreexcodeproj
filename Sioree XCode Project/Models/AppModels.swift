@@ -99,6 +99,59 @@ struct TalentListing: Identifiable {
     }
 }
 
+// MARK: - Talent Request
+enum TalentRequestStatus: String, Codable {
+    case pending
+    case accepted
+    case rejected
+    case withdrawn
+}
+
+struct TalentRequest: Identifiable, Codable {
+    let id: String
+    let hostId: String
+    let talentId: String
+    let eventId: String?
+    let eventTitle: String?
+    let message: String
+    let proposedRate: Double?
+    let status: TalentRequestStatus
+    let createdAt: Date
+    let updatedAt: Date
+
+    // Related data (populated from joins)
+    var hostName: String?
+    var hostAvatar: String?
+    var talentName: String?
+    var talentAvatar: String?
+    var talentCategory: TalentCategory?
+    var eventDate: Date?
+
+    init(
+        id: String = UUID().uuidString,
+        hostId: String,
+        talentId: String,
+        eventId: String?,
+        eventTitle: String?,
+        message: String,
+        proposedRate: Double?,
+        status: TalentRequestStatus = .pending,
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.hostId = hostId
+        self.talentId = talentId
+        self.eventId = eventId
+        self.eventTitle = eventTitle
+        self.message = message
+        self.proposedRate = proposedRate
+        self.status = status
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
 // MARK: - BrandCampaign
 struct BrandCampaign: Identifiable {
     let id: String

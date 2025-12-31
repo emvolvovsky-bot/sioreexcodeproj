@@ -1083,6 +1083,30 @@ class NetworkService {
             .map { (response: AvailabilityResponse) in response.success }
             .eraseToAnyPublisher()
     }
+
+    func sendTalentRequest(_ request: TalentRequest) -> AnyPublisher<TalentRequest, Error> {
+        struct TalentRequestResponse: Codable {
+            let request: TalentRequest
+        }
+
+        guard let jsonData = try? JSONEncoder().encode(request) else {
+            return Fail(error: NetworkError.unknown).eraseToAnyPublisher()
+        }
+
+        return self.request("/api/talent-requests", method: "POST", body: jsonData)
+            .map { (response: TalentRequestResponse) in response.request }
+            .eraseToAnyPublisher()
+    }
+
+    func fetchTalentRequests(for hostId: String) -> AnyPublisher<[TalentRequest], Error> {
+        struct TalentRequestsResponse: Codable {
+            let requests: [TalentRequest]
+        }
+
+        return request("/api/talent-requests/host/\(hostId)", method: "GET")
+            .map { (response: TalentRequestsResponse) in response.requests }
+            .eraseToAnyPublisher()
+    }
 }
 
 // MARK: - Earnings Models

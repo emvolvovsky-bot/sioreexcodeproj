@@ -18,9 +18,14 @@ struct HostProfileView: View {
     @State private var showFollowingList = false
     @State private var selectedEventForPost: Event?
     @State private var selectedEventForPhotos: Event? = nil
+    @State private var selectedEventForDetail: Event? = nil
     
     private var currentUser: User? {
         authViewModel.currentUser
+    }
+
+    private func isEventPast(_ event: Event) -> Bool {
+        return event.date < Date() || event.status == .completed
     }
     
     var body: some View {
@@ -97,7 +102,13 @@ struct HostProfileView: View {
                                             ForEach(viewModel.filteredEvents) { event in
                                                 HostEventCardGrid(event: event)
                                                     .onTapGesture {
-                                                        selectedEventForPhotos = event
+                                                        if isEventPast(event) {
+                                                            // Past event - show photo collage
+                                                            selectedEventForPhotos = event
+                                                        } else {
+                                                            // Upcoming event - show event detail
+                                                            selectedEventForDetail = event
+                                                        }
                                                     }
                                             }
                                         }
@@ -260,6 +271,9 @@ struct HostProfileView: View {
             .sheet(item: $selectedEventForPhotos) { event in
                 EventPhotosViewer(event: event)
                     .environmentObject(authViewModel)
+            }
+            .sheet(item: $selectedEventForDetail) { event in
+                EventDetailPlaceholderView(event: event)
             }
             .onAppear {
                 viewModel.setAuthViewModel(authViewModel)

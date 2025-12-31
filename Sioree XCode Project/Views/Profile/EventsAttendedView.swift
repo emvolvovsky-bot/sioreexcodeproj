@@ -602,10 +602,9 @@ struct EventsAttendedView: View {
                                         spacing: Theme.Spacing.m
                                     ) {
                                         ForEach(viewModel.filteredEvents) { event in
-                                            HostEventCardGrid(event: event)
-                                                .onTapGesture {
-                                                    selectedEventForPhotos = event
-                                                }
+                                            HostEventCardGrid(event: event) {
+                                                selectedEventForPhotos = event
+                                            }
                                         }
                                     }
                                     .padding(.horizontal, Theme.Spacing.m)

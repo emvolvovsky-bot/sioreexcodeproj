@@ -100,16 +100,15 @@ struct HostProfileView: View {
                                             spacing: Theme.Spacing.m
                                         ) {
                                             ForEach(viewModel.filteredEvents) { event in
-                                                HostEventCardGrid(event: event)
-                                                    .onTapGesture {
-                                                        if isEventPast(event) {
-                                                            // Past event - show photo collage
-                                                            selectedEventForPhotos = event
-                                                        } else {
-                                                            // Upcoming event - show event detail
-                                                            selectedEventForDetail = event
-                                                        }
+                                                HostEventCardGrid(event: event) {
+                                                    if isEventPast(event) {
+                                                        // Past event - show photo collage
+                                                        selectedEventForPhotos = event
+                                                    } else {
+                                                        // Upcoming event - show event detail
+                                                        selectedEventForDetail = event
                                                     }
+                                                }
                                             }
                                         }
                                         .padding(.horizontal, Theme.Spacing.m)

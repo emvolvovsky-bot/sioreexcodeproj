@@ -96,6 +96,7 @@ struct HostEventCard: View {
 
 struct HostEventCardGrid: View {
     let event: Event
+    let onTap: () -> Void
     @State private var attendeePhotos: [String] = []
     @State private var isLoadingPhotos = true
 
@@ -217,7 +218,7 @@ struct HostEventCardGrid: View {
             .padding(Theme.Spacing.s)
         }
         .onTapGesture {
-            // Handle tap - could navigate to event detail or photo viewer
+            onTap()
         }
         .onAppear {
             loadAttendeePhotos()
@@ -336,7 +337,8 @@ struct HostEventCardGrid: View {
             time: Date(),
             location: "Sample Location",
             ticketPrice: 25.0
-        )
+        ),
+        onTap: {}
     )
     .frame(width: 180, height: 220)
     .padding()

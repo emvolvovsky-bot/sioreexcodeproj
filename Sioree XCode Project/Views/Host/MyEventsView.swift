@@ -66,11 +66,13 @@ struct MyEventsView: View {
             spacing: Theme.Spacing.m
         ) {
             ForEach(visibleEvents) { event in
-                HostEventCardGrid(event: event)
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .scale(scale: 0.95)),
-                        removal: .opacity.combined(with: .scale(scale: 0.95))
-                    ))
+                HostEventCardGrid(event: event) {
+                    selectedEventForDetail = event
+                }
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .scale(scale: 0.95)),
+                    removal: .opacity.combined(with: .scale(scale: 0.95))
+                ))
             }
         }
         .padding(.horizontal, Theme.Spacing.m)
@@ -230,6 +232,9 @@ struct MyEventsView: View {
                 if let eventId = selectedEventId {
                     QRCodeScannerView(eventId: eventId)
                 }
+            }
+            .sheet(item: $selectedEventForDetail) { event in
+                EventDetailPlaceholderView(event: event)
             }
             .alert("Delete Event", isPresented: $showDeleteConfirmation) {
                 Button("Cancel", role: .cancel) {

@@ -19,6 +19,7 @@ struct MyEventsView: View {
     @State private var eventToDelete: String?
     @State private var showDeleteConfirmation = false
     @State private var selectedSegment: ProfileViewModel.HostProfileTab = .upcoming
+    @State private var selectedEventForDetail: Event? = nil
     
     private var upcomingEvents: [Event] {
         profileViewModel.upcomingEvents
@@ -77,15 +78,23 @@ struct MyEventsView: View {
     
     private func eventRowView(for event: Event) -> some View {
         VStack(spacing: Theme.Spacing.s) {
-            HostEventCard(
-                event: event,
-                status: eventStatusString(for: event),
-                onTap: {
-                    // Navigate to event detail
-                }
-            )
-            
-            eventActionButtons(for: event)
+            Button(action: {
+                selectedEventForDetail = event
+            }) {
+                HostEventCard(
+                    event: event,
+                    status: eventStatusString(for: event),
+                    onTap: {
+                        selectedEventForDetail = event
+                    }
+                )
+            }
+            .buttonStyle(.plain)
+
+            // Only show action buttons for upcoming events
+            if event.date > Date() {
+                eventActionButtons(for: event)
+            }
         }
         .padding(.horizontal, Theme.Spacing.m)
     }
@@ -161,7 +170,17 @@ struct MyEventsView: View {
                 } else if visibleEvents.isEmpty {
                     emptyStateView
                 } else {
-                    eventsGridView
+                    // Vertical stack layout for My Events
+                    VStack(spacing: Theme.Spacing.m) {
+                        ForEach(visibleEvents) { event in
+                            eventRowView(for: event)
+                                .transition(.asymmetric(
+                                    insertion: .opacity.combined(with: .scale(scale: 0.95)),
+                                    removal: .opacity.combined(with: .scale(scale: 0.95))
+                                ))
+                        }
+                    }
+                    .padding(.horizontal, Theme.Spacing.m)
                 }
             }
             .padding(.top, Theme.Spacing.s)
@@ -224,6 +243,10 @@ struct MyEventsView: View {
                 }
             } message: {
                 Text("This action is not recoverable. Are you sure you want to delete this event? It will be permanently removed and cannot be undone.")
+            }
+            .navigationDestination(item: $selectedEventForDetail) { event in
+                EventDetailView(eventId: event.id, isTalentMapMode: false)
+                    .environmentObject(authViewModel)
             }
         }
     }

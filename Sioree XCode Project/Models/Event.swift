@@ -14,7 +14,7 @@ enum EventStatus: String, Codable {
     case completed
 }
 
-struct Event: Identifiable, Codable {
+struct Event: Identifiable, Codable, Hashable {
     let id: String
     var title: String
     var description: String
@@ -253,6 +253,15 @@ struct Event: Identifiable, Codable {
         // Create a unique QR code string for the event
         let qrData = "sioree:event:\(eventId):\(UUID().uuidString)"
         return qrData
+    }
+
+    // Hashable conformance
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+
+    static func == (lhs: Event, rhs: Event) -> Bool {
+        lhs.id == rhs.id
     }
 }
 

@@ -16,6 +16,7 @@ struct EventPhoto {
 
 struct EventPhotosViewer: View {
     let event: Event
+    let viewUserId: String? // If provided, show photos by this user only; if nil, show current user's photos
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var authViewModel: AuthViewModel
     @State private var currentPhotoIndex = 0
@@ -27,9 +28,10 @@ struct EventPhotosViewer: View {
     @State private var showDeleteConfirmation = false
     @State private var postToDelete: String? = nil
 
-    init(event: Event) {
-        print("🎬 EventPhotosViewer initialized for event: \(event.title) (ID: \(event.id))")
+    init(event: Event, viewUserId: String? = nil) {
+        print("🎬 EventPhotosViewer initialized for event: \(event.title) (ID: \(event.id)), viewUserId: \(viewUserId ?? "nil")")
         self.event = event
+        self.viewUserId = viewUserId
     }
 
     private let postCreatedNotification = NotificationCenter.default.publisher(for: NSNotification.Name("PostCreated"))
@@ -43,7 +45,9 @@ struct EventPhotosViewer: View {
     }
 
     private var emptyStateTitle: String {
-        if isHost {
+        if viewUserId != nil {
+            return "No photos from this event yet"
+        } else if isHost {
             return "No photos from this event yet"
         } else {
             return "You haven't added photos to this event yet"
@@ -51,7 +55,9 @@ struct EventPhotosViewer: View {
     }
 
     private var emptyStateSubtitle: String {
-        if isHost {
+        if viewUserId != nil {
+            return "Photos will appear here when available"
+        } else if isHost {
             return "Photos from attendees will appear here"
         } else {
             return "Add your photos to share memories from this event"
@@ -62,7 +68,12 @@ struct EventPhotosViewer: View {
         let currentUserId = authViewModel.currentUser?.id
         let isHost = authViewModel.currentUser?.userType == .host
 
-        if isHost {
+        if let viewUserId = viewUserId {
+            // When viewing another user's profile, show only their posts
+            return posts.filter { post in
+                post.userId == viewUserId
+            }
+        } else if isHost {
             // Hosts see all posts for events they hosted
             return posts
         } else {
@@ -106,8 +117,8 @@ struct EventPhotosViewer: View {
 
                     Spacer()
 
-                    // Add Photos button
-                    if isOwnProfile {
+                    // Add Photos button - only show when viewing own profile
+                    if isOwnProfile && viewUserId == nil {
                         Button(action: {
                             showAddPhotos = true
                         }) {

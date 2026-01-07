@@ -16,7 +16,6 @@ struct RealMessageView: View {
     @State private var messageText = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
-    @AppStorage("selectedUserRole") private var selectedRoleRaw: String = ""
     
     var body: some View {
         NavigationStack {

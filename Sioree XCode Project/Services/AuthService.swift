@@ -13,6 +13,10 @@ struct AuthResponse: Codable {
     let user: User
 }
 
+struct EmailCheckResponse: Codable {
+    let exists: Bool
+}
+
 class AuthService {
     private let networkService = NetworkService()
     private let useMockAuth = false // ✅ Now using real backend authentication
@@ -57,6 +61,23 @@ class AuthService {
         }
         
         return networkService.request("/api/auth/signup", method: "POST", body: jsonData)
+    }
+    
+    func checkEmailExists(email: String) -> AnyPublisher<Bool, Error> {
+        if useMockAuth {
+            return Just(false)
+                .setFailureType(to: Error.self)
+                .eraseToAnyPublisher()
+        }
+        
+        guard let encodedEmail = email.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
+            return Fail(error: NetworkError.unknown).eraseToAnyPublisher()
+        }
+        
+        let endpoint = "/api/auth/check-email?email=\(encodedEmail)"
+        return networkService.request(endpoint)
+            .map { (response: EmailCheckResponse) in response.exists }
+            .eraseToAnyPublisher()
     }
     
     func getCurrentUser() -> AnyPublisher<User, Error> {

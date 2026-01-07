@@ -7,6 +7,26 @@ const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 
+// GET /api/auth/check-email
+router.get('/check-email', async (req, res) => {
+  try {
+    const { email } = req.query;
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    const result = await query(
+      'SELECT id FROM users WHERE email = $1',
+      [email]
+    );
+
+    res.json({ exists: result.rows.length > 0 });
+  } catch (error) {
+    console.error('Check email error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // POST /api/auth/signup
 router.post('/signup', [
   body('email').isEmail().normalizeEmail(),

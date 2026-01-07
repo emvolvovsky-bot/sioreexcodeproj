@@ -17,7 +17,6 @@ struct UserProfileView: View {
     @State private var cancellables = Set<AnyCancellable>()
     @State private var showFollowersList = false
     @State private var showFollowingList = false
-    @AppStorage("selectedUserRole") private var selectedRoleRaw: String = ""
     @State private var selectedEventForPhotos: Event? = nil
     @State private var selectedEventForDetail: Event? = nil
     @State private var talentEvents: [Event] = []
@@ -185,15 +184,7 @@ struct UserProfileView: View {
     }
     
     private func getUserTypeFromRole() -> UserType? {
-        guard let role = UserRole(rawValue: selectedRoleRaw) else { 
-            // If no role selected, try to get from current user
-            return authViewModel.currentUser?.userType
-        }
-        switch role {
-        case .partier: return .partier
-        case .host: return .host
-        case .talent: return .talent
-        }
+        return viewModel.user?.userType ?? authViewModel.currentUser?.userType
     }
 
     private func partierContent(user: User) -> some View {

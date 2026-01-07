@@ -10,77 +10,245 @@ import Combine
 
 struct HostHomeView: View {
     @StateObject private var viewModel = HomeViewModel()
-    @State private var recommendedTalent = Array(MockData.sampleTalent.prefix(5))
     @State private var recentSignups: [EventSignup] = []
     @State private var isLoadingSignups = false
     @State private var signupsError: String?
+    @State private var lastUpdated: Date?
+    @State private var cancellables = Set<AnyCancellable>()
     private let networkService = NetworkService()
     
     var body: some View {
         NavigationStack {
             ZStack {
-                // Subtle gradient on black background
                 LinearGradient(
-                    colors: [Color.sioreeBlack, Color.sioreeBlack.opacity(0.95), Color.sioreeCharcoal.opacity(0.1)],
+                    gradient: Gradient(stops: [
+                        .init(color: Color(red: 0.05, green: 0.08, blue: 0.15), location: 0.0),
+                        .init(color: Color.sioreeBlack.opacity(0.92), location: 0.45),
+                        .init(color: Color.sioreeBlack.opacity(0.98), location: 1.0)
+                    ]),
                     startPoint: .top,
                     endPoint: .bottom
+                )
+                .overlay(
+                    RadialGradient(
+                        gradient: Gradient(colors: [
+                            Color.white.opacity(0.08),
+                            Color.clear
+                        ]),
+                        center: .center,
+                        startRadius: 60,
+                        endRadius: 420
+                    )
+                    .blendMode(.screen)
+                )
+                .overlay(
+                    LinearGradient(
+                        colors: [
+                            Color.black.opacity(0.35),
+                            Color.clear,
+                            Color.black.opacity(0.5)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
                 )
                 .ignoresSafeArea()
                 
                 ScrollView {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                        // Header
-                        Text("Recent Signups")
-                            .font(.sioreeH2)
-                            .foregroundColor(Color.sioreeWhite)
-                            .padding(.horizontal, Theme.Spacing.m)
-                            .padding(.top, Theme.Spacing.m)
-                        
-                        if isLoadingSignups {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .sioreeIcyBlue))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, Theme.Spacing.xl)
-                        } else {
-                            if recentSignups.isEmpty {
-                                // Show placeholder examples only (no conflicting "no signups" message)
-                                VStack(spacing: Theme.Spacing.s) {
-                                    ForEach(placeholderSignups) { signup in
-                                        NavigationLink(destination: UserProfileView(userId: signup.userId)) {
-                                            RecentSignupRow(signup: signup)
-                                        }
-                                        .buttonStyle(PlainButtonStyle())
-                                        .padding(.horizontal, Theme.Spacing.m)
-                                    }
-                                }
-                                .padding(.top, Theme.Spacing.s)
-                            } else {
-                                // Signups list
-                                VStack(spacing: Theme.Spacing.s) {
-                                    ForEach(recentSignups) { signup in
-                                        NavigationLink(destination: UserProfileView(userId: signup.userId)) {
-                                            RecentSignupRow(signup: signup)
-                                        }
-                                        .buttonStyle(PlainButtonStyle())
-                                        .padding(.horizontal, Theme.Spacing.m)
-                                    }
-                                }
-                                .padding(.top, Theme.Spacing.s)
-                            }
-                        }
+                    VStack(alignment: .leading, spacing: Theme.Spacing.l) {
+                        header
+                        liveQueueSection
+                        recentSignupsSection
                     }
-                    .padding(.vertical, Theme.Spacing.m)
+                    .padding(.horizontal, Theme.Spacing.m)
+                    .padding(.vertical, Theme.Spacing.l)
                 }
             }
-            .navigationTitle("Host Home")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
             .onAppear {
                 if !viewModel.hasLoaded {
                     viewModel.loadNearbyEvents()
                 }
                 loadRecentSignups()
             }
+            .onReceive(refreshTimer) { _ in
+                loadRecentSignups()
+            }
         }
+    }
+    
+    private var header: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            Text("Host Home")
+                .font(.sioreeH1)
+                .foregroundColor(.sioreeWhite)
+                .padding(.top, Theme.Spacing.l)
+            
+            Text("Track your active queue and recent signups.")
+                .font(.sioreeBodySmall)
+                .foregroundColor(.sioreeLightGrey.opacity(0.8))
+        }
+    }
+    
+    private var liveQueueSection: some View {
+        dashboardCard {
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                HStack(spacing: Theme.Spacing.s) {
+                    Text("Queue (active checkouts)")
+                        .font(.sioreeH4)
+                        .foregroundColor(.sioreeWhite)
+                    Spacer()
+                    Text(updatedLabel)
+                        .font(.sioreeCaption)
+                        .foregroundColor(.sioreeLightGrey.opacity(0.85))
+                    Button(action: loadRecentSignups) {
+                        Image(systemName: "arrow.clockwise")
+                            .foregroundColor(.sioreeIcyBlue)
+                            .padding(8)
+                            .background(
+                                Circle()
+                                    .fill(Color.sioreeIcyBlue.opacity(0.12))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+                
+                Group {
+                    if isLoadingSignups {
+                        skeletonList
+                    } else if let signupsError {
+                        InfoBanner(
+                            systemImage: "wifi.exclamationmark",
+                            message: signupsError,
+                            tint: .sioreeWarmGlow
+                        )
+                    } else if queueSignups.isEmpty {
+                        Text("No active checkouts right now.")
+                            .font(.sioreeBodySmall)
+                            .foregroundColor(.sioreeLightGrey)
+                    } else {
+                        LazyVStack(spacing: Theme.Spacing.s) {
+                            ForEach(queueSignups) { signup in
+                                NavigationLink(destination: UserProfileView(userId: signup.userId)) {
+                                    RecentSignupRow(signup: signup)
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    private var recentSignupsSection: some View {
+        dashboardCard {
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                HStack {
+                    Text("Recent signups")
+                        .font(.sioreeH4)
+                        .foregroundColor(.sioreeWhite)
+                    Spacer()
+                }
+                
+                Group {
+                    if isLoadingSignups {
+                        skeletonList
+                    } else if let signupsError {
+                        InfoBanner(
+                            systemImage: "wifi.exclamationmark",
+                            message: signupsError,
+                            tint: .sioreeWarmGlow
+                        )
+                    } else if recentSignupsWithoutQueue.isEmpty {
+                        Text("No recent signups yet.")
+                            .font(.sioreeBodySmall)
+                            .foregroundColor(.sioreeLightGrey)
+                            .padding(.vertical, Theme.Spacing.s)
+                    } else {
+                        LazyVStack(spacing: Theme.Spacing.s) {
+                            ForEach(recentSignupsWithoutQueue) { signup in
+                                NavigationLink(destination: UserProfileView(userId: signup.userId)) {
+                                    RecentSignupRow(signup: signup)
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    private var updatedLabel: String {
+        if let lastUpdated {
+            return "Updated \(timeAgoString(from: lastUpdated))"
+        }
+        return "Updated just now"
+    }
+    
+    private var queueEventId: String? {
+        let upcoming = recentSignups
+            .filter { $0.eventDate >= Date() }
+            .sorted { $0.eventDate < $1.eventDate }
+            .first?
+            .eventId
+        return upcoming
+    }
+    
+    private var queueSignups: [EventSignup] {
+        guard let eventId = queueEventId else { return [] }
+        return recentSignups
+            .filter { $0.eventId == eventId }
+            .sorted { $0.signedUpAt > $1.signedUpAt }
+    }
+    
+    private var recentSignupsWithoutQueue: [EventSignup] {
+        recentSignups
+            .filter { $0.eventId != queueEventId }
+            .sorted { $0.signedUpAt > $1.signedUpAt }
+    }
+    
+    private func dashboardCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .padding(Theme.Spacing.m)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                    .fill(
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                Color.sioreeCharcoal.opacity(0.7),
+                                Color.sioreeBlack.opacity(0.75),
+                                Color.sioreeCharcoal.opacity(0.55)
+                            ]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .overlay(
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                Color.white.opacity(0.08),
+                                Color.clear
+                            ]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                        .blendMode(.screen)
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                    .stroke(Color.sioreeIcyBlue.opacity(0.45), lineWidth: 1.2)
+            )
+            .shadow(color: Color.black.opacity(0.35), radius: 18, x: 0, y: 14)
+            .shadow(color: Color.sioreeIcyBlue.opacity(0.2), radius: 22, x: 0, y: 10)
+    }
+    
+    private var refreshTimer: Publishers.Autoconnect<Timer.TimerPublisher> {
+        Timer.publish(every: 20, on: .main, in: .common).autoconnect()
     }
     
     private func loadRecentSignups() {
@@ -100,50 +268,53 @@ struct HostHomeView: View {
                 receiveValue: { signups in
                     isLoadingSignups = false
                     recentSignups = signups
+                    lastUpdated = Date()
                     print("✅ Loaded \(signups.count) recent signups")
                 }
             )
             .store(in: &cancellables)
     }
     
-    @State private var cancellables = Set<AnyCancellable>()
+    private var skeletonList: some View {
+        VStack(spacing: Theme.Spacing.s) {
+            ForEach(0..<3) { _ in ShimmerRow() }
+        }
+    }
     
-    private var placeholderSignups: [EventSignup] {
-        [
-            EventSignup(
-                id: "demo-1",
-                signedUpAt: Date().addingTimeInterval(-300),
-                eventId: "demo-event-1",
-                eventTitle: "Sunset Rooftop Social",
-                eventDate: Date().addingTimeInterval(86_400),
-                userId: "user-demo-1",
-                userName: "Alex Rivera",
-                userUsername: "@alex",
-                userAvatar: nil
-            ),
-            EventSignup(
-                id: "demo-2",
-                signedUpAt: Date().addingTimeInterval(-1800),
-                eventId: "demo-event-2",
-                eventTitle: "Downtown Afterparty",
-                eventDate: Date().addingTimeInterval(172_800),
-                userId: "user-demo-2",
-                userName: "Jamie Lee",
-                userUsername: "@jamie",
-                userAvatar: nil
-            ),
-            EventSignup(
-                id: "demo-3",
-                signedUpAt: Date().addingTimeInterval(-7_200),
-                eventId: "demo-event-3",
-                eventTitle: "Creators & Cocktails",
-                eventDate: Date().addingTimeInterval(259_200),
-                userId: "user-demo-3",
-                userName: "Taylor Morgan",
-                userUsername: "@taylor",
-                userAvatar: nil
-            )
-        ]
+    private var emptyState: some View {
+        VStack(spacing: Theme.Spacing.s) {
+            Image(systemName: "person.3.sequence.fill")
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundColor(.sioreeLightGrey)
+            Text("No one in the queue right now")
+                .font(.sioreeBody)
+                .foregroundColor(.sioreeWhite)
+            Text("As soon as people sign up, they’ll appear here.")
+                .font(.sioreeCaption)
+                .foregroundColor(.sioreeLightGrey)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(Theme.Spacing.l)
+        .background(.ultraThinMaterial.opacity(0.35))
+        .cornerRadius(Theme.CornerRadius.large)
+    }
+    
+    private var queueEmptyState: some View {
+        VStack(spacing: Theme.Spacing.s) {
+            Image(systemName: "hourglass.circle")
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundColor(.sioreeLightGrey)
+            Text("No active checkouts")
+                .font(.sioreeBody)
+                .foregroundColor(.sioreeWhite)
+            Text("When guests are grabbing tickets, they’ll show here first.")
+                .font(.sioreeCaption)
+                .foregroundColor(.sioreeLightGrey)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(Theme.Spacing.l)
+        .background(.ultraThinMaterial.opacity(0.35))
+        .cornerRadius(Theme.CornerRadius.large)
     }
 }
 
@@ -155,58 +326,128 @@ struct RecentSignupRow: View {
             AvatarView(imageURL: signup.userAvatar, size: .medium)
             
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                HStack(spacing: Theme.Spacing.xs) {
+                HStack(alignment: .firstTextBaseline) {
                     Text(signup.userName)
                         .font(.sioreeBody)
                         .fontWeight(.semibold)
                         .foregroundColor(.sioreeWhite)
-                    
-                    Text("signed up for")
-                        .font(.sioreeBodySmall)
+                    Spacer()
+                    Text(timeAgoString(from: signup.signedUpAt))
+                        .font(.sioreeCaption)
                         .foregroundColor(.sioreeLightGrey)
                 }
                 
                 Text(signup.eventTitle)
                     .font(.sioreeBodySmall)
                     .foregroundColor(.sioreeIcyBlue)
+                    .lineLimit(1)
                 
-                Text(timeAgoString(from: signup.signedUpAt))
-                    .font(.sioreeCaption)
-                    .foregroundColor(.sioreeLightGrey.opacity(0.7))
+                HStack(spacing: Theme.Spacing.xs) {
+                    Label(signup.userUsername, systemImage: "at")
+                        .font(.sioreeCaption)
+                        .foregroundColor(.sioreeLightGrey)
+                    
+                    Text("•")
+                        .foregroundColor(.sioreeLightGrey.opacity(0.6))
+                    
+                    Label(formattedEventDate(signup.eventDate), systemImage: "calendar")
+                        .font(.sioreeCaption)
+                        .foregroundColor(.sioreeLightGrey)
+                }
             }
             
-            Spacer()
-            
             Image(systemName: "chevron.right")
-                .font(.system(size: 14))
+                .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(.sioreeLightGrey)
         }
-        .padding(Theme.Spacing.m)
-        .background(Color.sioreeLightGrey.opacity(0.1))
-        .cornerRadius(Theme.CornerRadius.medium)
+        .padding(.vertical, Theme.Spacing.m)
+        .padding(.horizontal, Theme.Spacing.m)
+        .background(.ultraThinMaterial.opacity(0.35))
         .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 1)
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+                .stroke(Color.sioreeLightGrey.opacity(0.15), lineWidth: 1)
         )
+        .cornerRadius(Theme.CornerRadius.large)
     }
+}
+
+struct InfoBanner: View {
+    let systemImage: String
+    let message: String
+    let tint: Color
     
-    private func timeAgoString(from date: Date) -> String {
-        let now = Date()
-        let timeInterval = now.timeIntervalSince(date)
-        
-        if timeInterval < 60 {
-            return "Just now"
-        } else if timeInterval < 3600 {
-            let minutes = Int(timeInterval / 60)
-            return "\(minutes)m ago"
-        } else if timeInterval < 86400 {
-            let hours = Int(timeInterval / 3600)
-            return "\(hours)h ago"
-        } else {
-            let days = Int(timeInterval / 86400)
-            return "\(days)d ago"
+    var body: some View {
+        HStack(spacing: Theme.Spacing.xs) {
+            Image(systemName: systemImage)
+                .foregroundColor(tint)
+            Text(message)
+                .font(.sioreeBodySmall)
+                .foregroundColor(tint)
+            Spacer()
         }
+        .padding()
+        .background(tint.opacity(0.12))
+        .cornerRadius(Theme.CornerRadius.medium)
     }
+}
+
+struct ShimmerRow: View {
+    @State private var phase: CGFloat = -120
+    
+    var body: some View {
+        RoundedRectangle(cornerRadius: Theme.CornerRadius.large)
+            .fill(Color.sioreeCharcoal.opacity(0.35))
+            .frame(height: 72)
+            .overlay(
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        Color.white.opacity(0.0),
+                        Color.white.opacity(0.12),
+                        Color.white.opacity(0.0)
+                    ]),
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .rotationEffect(.degrees(18))
+                .offset(x: phase)
+            )
+            .onAppear {
+                withAnimation(.linear(duration: 1.3).repeatForever(autoreverses: false)) {
+                    phase = 180
+                }
+            }
+    }
+}
+
+private func formattedEventDate(_ date: Date) -> String {
+    let formatter = HostHomeDateFormatter.event
+    return formatter.string(from: date)
+}
+
+private func timeAgoString(from date: Date) -> String {
+    let now = Date()
+    let timeInterval = now.timeIntervalSince(date)
+    
+    if timeInterval < 60 {
+        return "Just now"
+    } else if timeInterval < 3600 {
+        let minutes = Int(timeInterval / 60)
+        return "\(minutes)m ago"
+    } else if timeInterval < 86400 {
+        let hours = Int(timeInterval / 3600)
+        return "\(hours)h ago"
+    } else {
+        let days = Int(timeInterval / 86400)
+        return "\(days)d ago"
+    }
+}
+
+private enum HostHomeDateFormatter {
+    static let event: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "E, MMM d"
+        return formatter
+    }()
 }
 
 #Preview {

@@ -10,9 +10,7 @@ import Combine
 
 struct PartierProfileView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
-    @AppStorage("selectedUserRole") private var selectedRoleRaw: String = ""
     @StateObject private var viewModel = ProfileViewModel(useAttendedEvents: true)
-    @State private var showRoleSelection = false
     @State private var showSettings = false
     @State private var showEditProfile = false
     @State private var showFollowersList = false
@@ -178,15 +176,9 @@ struct PartierProfileView: View {
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     if let user = currentUser {
-                        Button(action: { showRoleSelection = true }) {
-                            HStack(spacing: 6) {
-                                Text(user.username)
-                                    .font(.system(size: 18, weight: .semibold))
-                                Image(systemName: "chevron.down")
-                                    .font(.system(size: 14, weight: .medium))
-                            }
+                        Text(user.username)
+                            .font(.system(size: 18, weight: .semibold))
                             .foregroundColor(.sioreeWhite)
-                        }
                     }
                 }
 
@@ -207,16 +199,6 @@ struct PartierProfileView: View {
             .sheet(isPresented: $showEditProfile) {
                 ProfileEditView(user: currentUser)
                     .environmentObject(authViewModel)
-            }
-            .sheet(isPresented: $showRoleSelection) {
-                RoleSelectionView(selectedRole: Binding(
-                    get: { UserRole(rawValue: selectedRoleRaw) },
-                    set: { newValue in
-                        if let role = newValue {
-                            selectedRoleRaw = role.rawValue
-                        }
-                    }
-                ), isChangingRole: true)
             }
             .sheet(isPresented: $showFollowersList) {
                 if let userId = currentUser?.id {

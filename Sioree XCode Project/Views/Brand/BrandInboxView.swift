@@ -15,7 +15,6 @@ struct BrandInboxView: View {
     @State private var errorMessage: String?
     @State private var showCreateGroup = false
     @State private var cancellables = Set<AnyCancellable>()
-    @AppStorage("selectedUserRole") private var selectedRoleRaw: String = ""
     
     var body: some View {
         NavigationStack {

@@ -39,6 +39,7 @@ struct User: Identifiable, Codable, Equatable {
         case bio
         case avatar
         case userType
+        case role
         case location
         case verified
         case createdAt
@@ -71,6 +72,9 @@ struct User: Identifiable, Codable, Equatable {
         // Handle userType as string
         if let userTypeString = try? container.decode(String.self, forKey: .userType),
            let type = UserType(rawValue: userTypeString) {
+            userType = type
+        } else if let roleString = try? container.decode(String.self, forKey: .role),
+                  let type = UserType(rawValue: roleString) {
             userType = type
         } else {
             userType = .partier
@@ -150,6 +154,29 @@ struct User: Identifiable, Codable, Equatable {
                lhs.averageRating == rhs.averageRating &&
                lhs.reviewCount == rhs.reviewCount &&
                lhs.badges == rhs.badges
+    }
+    
+    // MARK: - Encodable
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(email, forKey: .email)
+        try container.encode(username, forKey: .username)
+        try container.encode(name, forKey: .name)
+        try container.encodeIfPresent(bio, forKey: .bio)
+        try container.encodeIfPresent(avatar, forKey: .avatar)
+        // Persist userType under both keys for backend compatibility
+        try container.encode(userType.rawValue, forKey: .userType)
+        try container.encode(userType.rawValue, forKey: .role)
+        try container.encodeIfPresent(location, forKey: .location)
+        try container.encode(verified, forKey: .verified)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(followerCount, forKey: .followerCount)
+        try container.encode(followingCount, forKey: .followingCount)
+        try container.encode(eventCount, forKey: .eventCount)
+        try container.encodeIfPresent(averageRating, forKey: .averageRating)
+        try container.encode(reviewCount, forKey: .reviewCount)
+        try container.encode(badges, forKey: .badges)
     }
 }
 

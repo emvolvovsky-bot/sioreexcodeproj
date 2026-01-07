@@ -24,6 +24,25 @@ function generateToken(userId) {
   SIGNUP
 ---------------------------------------
 */
+router.get("/check-email", async (req, res) => {
+  try {
+    const { email } = req.query;
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+
+    const result = await db.query(
+      `SELECT id FROM users WHERE email = $1`,
+      [email]
+    );
+
+    return res.json({ exists: result.rows.length > 0 });
+  } catch (err) {
+    console.error("❌ Check email error:", err);
+    return res.status(500).json({ error: "Server error during email check" });
+  }
+});
+
 router.post("/signup", async (req, res) => {
   try {
     const { email, password, username, name, userType, location } = req.body;

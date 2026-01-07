@@ -16,7 +16,6 @@ struct PartierInboxView: View {
     @State private var showSearch = false
     @State private var showCreateGroup = false
     @State private var cancellables = Set<AnyCancellable>()
-    @AppStorage("selectedUserRole") private var selectedRoleRaw: String = ""
     
     var body: some View {
         NavigationStack {

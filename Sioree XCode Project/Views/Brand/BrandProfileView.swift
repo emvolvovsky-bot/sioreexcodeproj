@@ -10,12 +10,10 @@ import Combine
 
 struct BrandProfileView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
-    @AppStorage("selectedUserRole") private var selectedRoleRaw: String = ""
     @StateObject private var viewModel = ProfileViewModel()
     @State private var campaigns = MockData.sampleCampaigns
     @State private var promotedCount = 0
     @State private var cancellables = Set<AnyCancellable>()
-    @State private var showRoleSelection = false
     @State private var showSettings = false
     @State private var showEditProfile = false
     @State private var showEventsList = false
@@ -62,15 +60,9 @@ struct BrandProfileView: View {
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     if let user = currentUser {
-                        Button(action: { showRoleSelection = true }) {
-                            HStack(spacing: 6) {
-                                Text(user.username)
-                                    .font(.system(size: 18, weight: .semibold))
-                                Image(systemName: "chevron.down")
-                                    .font(.system(size: 14, weight: .semibold))
-                            }
+                        Text(user.username)
+                            .font(.system(size: 18, weight: .semibold))
                             .foregroundColor(.sioreeWhite)
-                        }
                     }
                 }
                 
@@ -91,16 +83,6 @@ struct BrandProfileView: View {
             .sheet(isPresented: $showEditProfile) {
                 ProfileEditView(user: currentUser)
                     .environmentObject(authViewModel)
-            }
-            .sheet(isPresented: $showRoleSelection) {
-                RoleSelectionView(selectedRole: Binding(
-                    get: { UserRole(rawValue: selectedRoleRaw) },
-                    set: { newValue in
-                        if let role = newValue {
-                            selectedRoleRaw = role.rawValue
-                        }
-                    }
-                ), isChangingRole: true)
             }
             .sheet(isPresented: $showEventsList) {
                 if let userId = currentUser?.id {

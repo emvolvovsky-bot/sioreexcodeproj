@@ -39,7 +39,6 @@ struct HostInboxView: View {
     @State private var errorMessage: String?
     @State private var showSearch = false
     @State private var showCreateGroup = false
-    @AppStorage("selectedUserRole") private var selectedRoleRaw: String = ""
     
     var body: some View {
         NavigationStack {

@@ -13,11 +13,9 @@ struct TalentMarketplaceProfileView: View {
     @State private var totalGigs = 45
     @State private var avgRating = 4.8
     @State private var showSettings = false
-    @State private var showRoleSelection = false
     @State private var showClipsView = false
     @State private var showPortfolioView = false
     @State private var showEditAbout = false
-    @AppStorage("selectedUserRole") private var selectedRoleRaw: String = ""
     
     private var currentUser: User? {
         authViewModel.currentUser
@@ -200,15 +198,9 @@ struct TalentMarketplaceProfileView: View {
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     if let user = currentUser {
-                        Button(action: { showRoleSelection = true }) {
-                            HStack(spacing: 6) {
-                                Text(user.username)
-                                    .font(.system(size: 18, weight: .semibold))
-                                Image(systemName: "chevron.down")
-                                    .font(.system(size: 14, weight: .semibold))
-                            }
+                        Text(user.username)
+                            .font(.system(size: 18, weight: .semibold))
                             .foregroundColor(.sioreeWhite)
-                        }
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -222,16 +214,6 @@ struct TalentMarketplaceProfileView: View {
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView()
-            }
-            .sheet(isPresented: $showRoleSelection) {
-                RoleSelectionView(selectedRole: Binding(
-                    get: { UserRole(rawValue: selectedRoleRaw) },
-                    set: { newValue in
-                        if let role = newValue {
-                            selectedRoleRaw = role.rawValue
-                        }
-                    }
-                ), isChangingRole: true)
             }
             .sheet(isPresented: $showClipsView) {
                 ClipsView(clips: $clips)

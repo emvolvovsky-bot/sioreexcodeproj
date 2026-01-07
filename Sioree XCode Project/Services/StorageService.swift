@@ -68,6 +68,10 @@ class StorageService {
         }
         return UserType(rawValue: rawValue)
     }
+    
+    func clearUserType() {
+        userDefaults.removeObject(forKey: Constants.UserDefaultsKeys.userType)
+    }
 
     // MARK: - Following Cache
     func saveFollowingIds(_ ids: [String]) {

@@ -8,10 +8,8 @@
 import SwiftUI
 
 struct RoleRootView: View {
-    @State var role: UserRole
-    let onRoleChange: () -> Void
+    let role: UserRole
     @State private var selectedTab = 0
-    @AppStorage("selectedUserRole") private var selectedRoleRaw: String = ""
     @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var talentViewModel: TalentViewModel
     
@@ -26,11 +24,6 @@ struct RoleRootView: View {
             }
         }
         .accentColor(Color.sioreeIcyBlue)
-        .onChange(of: selectedRoleRaw) { newValue in
-            if let newRole = UserRole(rawValue: newValue) {
-                role = newRole
-            }
-        }
         .toolbarBackground(.hidden, for: .tabBar)
     }
     
@@ -64,7 +57,7 @@ struct RoleRootView: View {
 }
 
 #Preview {
-    RoleRootView(role: .host, onRoleChange: {})
+    RoleRootView(role: .host)
         .environmentObject(AuthViewModel())
 }
 

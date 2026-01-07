@@ -65,6 +65,7 @@ class AuthViewModel: ObservableObject {
                     print("✅ Login successful - saving token and user data")
                     StorageService.shared.saveAuthToken(response.token)
                     StorageService.shared.saveUserId(response.user.id)
+                    StorageService.shared.saveUserType(response.user.userType)
                     self?.currentUser = response.user
                     self?.isAuthenticated = true
                     print("✅ isAuthenticated set to: \(self?.isAuthenticated ?? false)")
@@ -114,6 +115,7 @@ class AuthViewModel: ObservableObject {
                     print("✅ Sign up successful - saving token and user data")
                     StorageService.shared.saveAuthToken(response.token)
                     StorageService.shared.saveUserId(response.user.id)
+                    StorageService.shared.saveUserType(response.user.userType)
                     self?.currentUser = response.user
                     self?.isAuthenticated = true
                     print("✅ isAuthenticated set to: \(self?.isAuthenticated ?? false)")
@@ -128,6 +130,7 @@ class AuthViewModel: ObservableObject {
     func logout() {
         StorageService.shared.clearAuthToken()
         StorageService.shared.clearUserId()
+        StorageService.shared.clearUserType()
         currentUser = nil
         isAuthenticated = false
     }
@@ -148,6 +151,7 @@ class AuthViewModel: ObservableObject {
                 receiveValue: { [weak self] user in
                     print("✅ Fetched current user: \(user.email ?? "unknown")")
                     self?.currentUser = user
+                    StorageService.shared.saveUserType(user.userType)
                     self?.isAuthenticated = true
                     print("✅ isAuthenticated after fetch: \(self?.isAuthenticated ?? false)")
                 }

@@ -12,6 +12,7 @@ struct CustomTextField: View {
     @Binding var text: String
     var isSecure: Bool = false
     var keyboardType: UIKeyboardType = .default
+    var onFocusChange: ((Bool) -> Void)? = nil
     @FocusState private var isFocused: Bool
     
     var body: some View {
@@ -19,7 +20,7 @@ struct CustomTextField: View {
             if isSecure {
                 SecureField(placeholder, text: $text)
                     .focused($isFocused)
-                    .foregroundStyle(Color.primary)
+                    .foregroundColor(.sioreeWhite)
                     .accentColor(Color.sioreeIcyBlue)
             } else {
                 TextField(placeholder, text: $text)
@@ -27,18 +28,25 @@ struct CustomTextField: View {
                     .autocapitalization(keyboardType == .emailAddress ? .none : .sentences)
                     .textInputAutocapitalization(keyboardType == .emailAddress ? .never : .sentences)
                     .focused($isFocused)
-                    .foregroundStyle(Color.primary)
+                    .foregroundColor(.sioreeWhite)
                     .accentColor(Color.sioreeIcyBlue)
             }
         }
         .font(.sioreeBody)
-        .padding(Theme.Spacing.m)
-        .background(Color.sioreeLightGrey.opacity(0.3))
+        .padding(.vertical, Theme.Spacing.m + 2)
+        .padding(.horizontal, Theme.Spacing.m)
+        .background(Color.sioreeCharcoal.opacity(0.7))
         .cornerRadius(Theme.CornerRadius.medium)
         .overlay(
             RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .stroke(isFocused ? Color.sioreeIcyBlue : Color.clear, lineWidth: 2)
+                .stroke(isFocused ? Color.sioreeIcyBlue : Color.sioreeLightGrey.opacity(0.22), lineWidth: 1.2)
+                .shadow(color: Color.black.opacity(0.15), radius: 2, x: 0, y: 1)
         )
+        .foregroundColor(.sioreeLightGrey)
+        .accentColor(.sioreeIcyBlue)
+        .onChange(of: isFocused) { _, newValue in
+            onFocusChange?(newValue)
+        }
         .animation(.easeInOut(duration: 0.2), value: isFocused)
     }
 }

@@ -9,11 +9,21 @@ import SwiftUI
 
 struct LoginView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
+    @Environment(\.dismiss) private var dismiss
     @State private var email = ""
     @State private var password = ""
     @State private var showSignUp = false
     @State private var showForgotPassword = false
     @FocusState private var focusedField: Field?
+    
+    private let showsSignUpLink: Bool
+    private let onClose: (() -> Void)?
+    
+    init(initialEmail: String? = nil, showsSignUpLink: Bool = true, onClose: (() -> Void)? = nil) {
+        self._email = State(initialValue: initialEmail ?? "")
+        self.showsSignUpLink = showsSignUpLink
+        self.onClose = onClose
+    }
     
     enum Field {
         case email, password
@@ -24,6 +34,19 @@ struct LoginView: View {
             Color.sioreeBlack.ignoresSafeArea()
             
             VStack(spacing: Theme.Spacing.xl) {
+                if onClose != nil {
+                    HStack {
+                        Button(action: close) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.sioreeWhite)
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal, Theme.Spacing.l)
+                    .padding(.top, Theme.Spacing.m)
+                }
+                
                 Spacer()
                 
                 // Logo/Branding
@@ -78,13 +101,14 @@ struct LoginView: View {
                             .frame(height: 52)
                             .transition(.opacity)
                     } else {
-                        CustomButton(
-                            title: "Login",
-                            variant: .primary,
-                            size: .large
-                        ) {
-                            login()
+                        Button(action: login) {
+                            Text("Log In")
+                                .font(.sioreeBody)
+                                .fontWeight(.semibold)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
                         }
+                        .buttonStyle(GlowingPillButtonStyle())
                         .padding(.top, Theme.Spacing.s)
                         .transition(.opacity)
                     }
@@ -93,19 +117,21 @@ struct LoginView: View {
                 .animation(.easeInOut(duration: 0.3), value: authViewModel.isLoading)
                 
                 // Sign Up Link
-                HStack {
-                    Text("Don't have an account?")
+                if showsSignUpLink {
+                    HStack {
+                        Text("Don't have an account?")
+                            .font(.sioreeBody)
+                            .foregroundColor(Color.sioreeLightGrey)
+                        
+                        Button("Sign Up") {
+                            showSignUp = true
+                        }
                         .font(.sioreeBody)
-                        .foregroundColor(Color.sioreeLightGrey)
-                    
-                    Button("Sign Up") {
-                        showSignUp = true
+                        .fontWeight(.semibold)
+                        .foregroundColor(Color.sioreeIcyBlue)
                     }
-                    .font(.sioreeBody)
-                    .fontWeight(.semibold)
-                    .foregroundColor(Color.sioreeIcyBlue)
+                    .padding(.top, Theme.Spacing.l)
                 }
-                .padding(.top, Theme.Spacing.l)
                 
                 Spacer()
             }
@@ -142,10 +168,31 @@ struct LoginView: View {
         hideKeyboard()
         authViewModel.login(email: email, password: password)
     }
+    
+    private func close() {
+        onClose?()
+        dismiss()
+    }
 }
 
 #Preview {
     LoginView()
         .environmentObject(AuthViewModel())
+}
+
+private struct GlowingPillButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .frame(maxWidth: .infinity)
+            .background(
+                Capsule()
+                    .fill(Color.sioreeIcyBlue)
+                    .shadow(color: Color.sioreeIcyBlue.opacity(0.45), radius: 18, x: 0, y: 10)
+                    .shadow(color: Color.sioreeIcyBlue.opacity(0.28), radius: 28, x: 0, y: 0)
+            )
+            .foregroundColor(.sioreeWhite)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.82), value: configuration.isPressed)
+    }
 }
 

@@ -66,6 +66,74 @@ struct Conversation: Identifiable, Codable {
         self.eventTitle = eventTitle
         self.eventDate = eventDate
     }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        // Decode id as String
+        if let idString = try? container.decode(String.self, forKey: .id) {
+            id = idString
+        } else if let idInt = try? container.decode(Int.self, forKey: .id) {
+            id = String(idInt)
+        } else {
+            throw DecodingError.dataCorruptedError(forKey: .id, in: container, debugDescription: "Cannot decode id")
+        }
+        
+        // Handle participantId - can be null for group chats, but we need a value
+        if let participantIdString = try container.decodeIfPresent(String.self, forKey: .participantId),
+           !participantIdString.isEmpty {
+            participantId = participantIdString
+        } else {
+            // For group chats or missing participantId, use empty string as fallback
+            // This should not happen for 1-on-1 conversations
+            participantId = ""
+        }
+        
+        // Decode participantName with fallback
+        participantName = try container.decodeIfPresent(String.self, forKey: .participantName) ?? "Unknown"
+        participantAvatar = try container.decodeIfPresent(String.self, forKey: .participantAvatar)
+        lastMessage = try container.decodeIfPresent(String.self, forKey: .lastMessage) ?? ""
+        
+        // Handle date decoding
+        if let dateString = try? container.decode(String.self, forKey: .lastMessageTime) {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            lastMessageTime = formatter.date(from: dateString) ?? Date()
+        } else {
+            lastMessageTime = Date()
+        }
+        
+        unreadCount = try container.decodeIfPresent(Int.self, forKey: .unreadCount) ?? 0
+        isActive = try container.decodeIfPresent(Bool.self, forKey: .isActive) ?? true
+        
+        // Optional fields
+        if let eventIdString = try container.decodeIfPresent(String.self, forKey: .eventId),
+           !eventIdString.isEmpty {
+            eventId = eventIdString
+        } else {
+            eventId = nil
+        }
+        
+        if let bookingIdString = try container.decodeIfPresent(String.self, forKey: .bookingId),
+           !bookingIdString.isEmpty {
+            bookingId = bookingIdString
+        } else {
+            bookingId = nil
+        }
+        
+        conversationTitle = try container.decodeIfPresent(String.self, forKey: .conversationTitle)
+        eventTitle = try container.decodeIfPresent(String.self, forKey: .eventTitle)
+        
+        // Handle eventDate
+        if let dateString = try container.decodeIfPresent(String.self, forKey: .eventDate),
+           !dateString.isEmpty {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            eventDate = formatter.date(from: dateString)
+        } else {
+            eventDate = nil
+        }
+    }
 }
 
 struct ConversationResponse: Codable {

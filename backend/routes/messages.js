@@ -424,8 +424,6 @@ router.post('/conversation', [
           WHEN c.participant1_id = $1 THEN c.participant2_id
           ELSE c.participant1_id
         END as participant_id,
-        u.name as participant_name,
-        u.avatar_url as participant_avatar,
         c.last_message,
         c.last_message_time,
         CASE 
@@ -434,25 +432,38 @@ router.post('/conversation', [
         END as unread_count,
         c.is_active
       FROM conversations c
-      JOIN users u ON (
-        (c.participant1_id = $1 AND u.id = c.participant2_id) OR
-        (c.participant2_id = $1 AND u.id = c.participant1_id)
-      )
       WHERE c.id = $2`,
       [currentUserId, conversationId]
     );
     
+    if (convResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+    
     conversation = convResult.rows[0];
+    
+    // Get participant user info separately to ensure we always have it
+    const participantId = conversation.participant_id;
+    if (!participantId) {
+      return res.status(400).json({ error: 'Invalid conversation: missing participant' });
+    }
+    
+    const userResult = await query(
+      'SELECT name, avatar_url FROM users WHERE id = $1',
+      [participantId]
+    );
+    
+    const participantUser = userResult.rows[0] || {};
     
     res.json({
       id: conversation.id.toString(),
-      participantId: conversation.participant_id ? conversation.participant_id.toString() : null,
-      participantName: conversation.participant_name,
-      participantAvatar: conversation.participant_avatar,
+      participantId: participantId.toString(),
+      participantName: participantUser.name || 'Unknown',
+      participantAvatar: participantUser.avatar_url || null,
       lastMessage: conversation.last_message || '',
       lastMessageTime: conversation.last_message_time ? new Date(conversation.last_message_time).toISOString() : new Date().toISOString(),
       unreadCount: parseInt(conversation.unread_count) || 0,
-      isActive: conversation.is_active,
+      isActive: conversation.is_active !== false,
     });
   } catch (error) {
     console.error('Get/create conversation error:', error);

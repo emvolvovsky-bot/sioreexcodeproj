@@ -28,80 +28,105 @@ struct RealMessageView: View {
                 )
                 .ignoresSafeArea()
                 
-                VStack(spacing: 0) {
-                    // Messages
-                    ScrollViewReader { proxy in
-                        ScrollView {
-                            LazyVStack(spacing: Theme.Spacing.m) {
-                                if isLoading && messages.isEmpty {
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .sioreeIcyBlue))
-                                        .padding(.top, Theme.Spacing.xl)
-                                } else if messages.isEmpty {
-                                    VStack(spacing: Theme.Spacing.m) {
-                                        Image(systemName: "message.fill")
-                                            .font(.system(size: 50))
-                                            .foregroundColor(Color.sioreeIcyBlue.opacity(0.5))
-                                        
-                                        Text("Start a conversation")
-                                            .font(.sioreeH3)
-                                            .foregroundColor(Color.sioreeWhite)
-                                        
-                                        Text("Send a message to \(conversation.participantName)")
-                                            .font(.sioreeBody)
-                                            .foregroundColor(Color.sioreeLightGrey)
-                                    }
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.top, Theme.Spacing.xl)
-                                } else {
-                                    ForEach(messages) { message in
-                                        SwipeableMessageBubble(
-                                            message: message,
-                                            onDelete: {
-                                                deleteMessage(message)
-                                            }
-                                        )
-                                        .id(message.id)
-                                        .padding(.horizontal, Theme.Spacing.l)
-                                    }
-                                }
-                            }
-                            .padding(.vertical, Theme.Spacing.m)
-                        }
-                        .onChange(of: messages.count) { _ in
-                            if let lastMessage = messages.last {
-                                withAnimation {
-                                    proxy.scrollTo(lastMessage.id, anchor: .bottom)
-                                }
-                            }
-                        }
-                    }
-                    
-                    // Input
-                    HStack(spacing: Theme.Spacing.s) {
-                        TextField("Type a message...", text: $messageText, axis: .vertical)
-                            .font(.sioreeBody)
-                            .foregroundColor(.sioreeWhite)
-                            .padding(Theme.Spacing.m)
-                            .background(Color.sioreeLightGrey.opacity(0.1))
-                            .cornerRadius(Theme.CornerRadius.medium)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                                    .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 2)
-                            )
+                // Validate conversation data
+                if conversation.participantId.isEmpty {
+                    VStack(spacing: Theme.Spacing.m) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 50))
+                            .foregroundColor(.orange)
                         
-                        Button(action: sendMessage) {
-                            Image(systemName: "arrow.up.circle.fill")
-                                .font(.system(size: 32))
-                                .foregroundColor(messageText.isEmpty ? Color.sioreeLightGrey.opacity(0.3) : Color.sioreeIcyBlue)
+                        Text("Invalid Conversation")
+                            .font(.sioreeH3)
+                            .foregroundColor(Color.sioreeWhite)
+                        
+                        Text("Unable to load conversation. Please try again.")
+                            .font(.sioreeBody)
+                            .foregroundColor(Color.sioreeLightGrey)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, Theme.Spacing.xl)
+                        
+                        Button("Close") {
+                            dismiss()
                         }
-                        .disabled(messageText.isEmpty || isLoading)
+                        .padding(.top, Theme.Spacing.m)
+                        .foregroundColor(.sioreeIcyBlue)
                     }
-                    .padding(.horizontal, Theme.Spacing.l)
-                    .padding(.vertical, Theme.Spacing.m)
+                } else {
+                    VStack(spacing: 0) {
+                        // Messages
+                        ScrollViewReader { proxy in
+                            ScrollView {
+                                LazyVStack(spacing: Theme.Spacing.m) {
+                                    if isLoading && messages.isEmpty {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .sioreeIcyBlue))
+                                            .padding(.top, Theme.Spacing.xl)
+                                    } else if messages.isEmpty {
+                                        VStack(spacing: Theme.Spacing.m) {
+                                            Image(systemName: "message.fill")
+                                                .font(.system(size: 50))
+                                                .foregroundColor(Color.sioreeIcyBlue.opacity(0.5))
+                                            
+                                            Text("Start a conversation")
+                                                .font(.sioreeH3)
+                                                .foregroundColor(Color.sioreeWhite)
+                                            
+                                            Text("Send a message to \(conversation.participantName)")
+                                                .font(.sioreeBody)
+                                                .foregroundColor(Color.sioreeLightGrey)
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.top, Theme.Spacing.xl)
+                                    } else {
+                                        ForEach(messages) { message in
+                                            SwipeableMessageBubble(
+                                                message: message,
+                                                onDelete: {
+                                                    deleteMessage(message)
+                                                }
+                                            )
+                                            .id(message.id)
+                                            .padding(.horizontal, Theme.Spacing.l)
+                                        }
+                                    }
+                                }
+                                .padding(.vertical, Theme.Spacing.m)
+                            }
+                            .onChange(of: messages.count) { _ in
+                                if let lastMessage = messages.last {
+                                    withAnimation {
+                                        proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Input
+                        HStack(spacing: Theme.Spacing.s) {
+                            TextField("Type a message...", text: $messageText, axis: .vertical)
+                                .font(.sioreeBody)
+                                .foregroundColor(.sioreeWhite)
+                                .padding(Theme.Spacing.m)
+                                .background(Color.sioreeLightGrey.opacity(0.1))
+                                .cornerRadius(Theme.CornerRadius.medium)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                                        .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 2)
+                                )
+                            
+                            Button(action: sendMessage) {
+                                Image(systemName: "arrow.up.circle.fill")
+                                    .font(.system(size: 32))
+                                    .foregroundColor(messageText.isEmpty ? Color.sioreeLightGrey.opacity(0.3) : Color.sioreeIcyBlue)
+                            }
+                            .disabled(messageText.isEmpty || isLoading || conversation.participantId.isEmpty)
+                        }
+                        .padding(.horizontal, Theme.Spacing.l)
+                        .padding(.vertical, Theme.Spacing.m)
+                    }
                 }
             }
-            .navigationTitle(conversation.participantName)
+            .navigationTitle(conversation.participantName.isEmpty ? "Message" : conversation.participantName)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -112,8 +137,13 @@ struct RealMessageView: View {
                 }
             }
             .onAppear {
-                loadMessages()
-                markAsRead()
+                // Only load messages if conversation is valid
+                if !conversation.participantId.isEmpty && !conversation.id.isEmpty {
+                    loadMessages()
+                    markAsRead()
+                } else {
+                    errorMessage = "Invalid conversation data"
+                }
             }
             .onDisappear {
                 // Refresh inbox when leaving message view

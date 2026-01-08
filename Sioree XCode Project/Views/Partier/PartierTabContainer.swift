@@ -84,23 +84,21 @@ struct PartierTabContainer: View {
 
 private struct PartierBottomBar: View {
     @Binding var selectedTab: PartierTab
+    @Namespace private var tabAnimation
     
     var body: some View {
         GeometryReader { geometry in
             let safeAreaBottom = geometry.safeAreaInsets.bottom
             let totalHeight = 70 + safeAreaBottom
+            let tabWidth = (geometry.size.width - 76 - Theme.Spacing.s * 2) / 4 // Account for center notch and padding
             
             ZStack(alignment: .bottom) {
                 HStack(spacing: 0) {
-                    tabButton(.tickets)
-                        .frame(maxWidth: .infinity)
-                    tabButton(.inbox)
-                        .frame(maxWidth: .infinity)
+                    tabButton(.tickets, tabWidth: tabWidth, geometry: geometry)
+                    tabButton(.inbox, tabWidth: tabWidth, geometry: geometry)
                     Spacer().frame(width: 76) // space for center notch
-                    tabButton(.favorites)
-                        .frame(maxWidth: .infinity)
-                    tabButton(.profile)
-                        .frame(maxWidth: .infinity)
+                    tabButton(.favorites, tabWidth: tabWidth, geometry: geometry)
+                    tabButton(.profile, tabWidth: tabWidth, geometry: geometry)
                 }
                 .padding(.horizontal, Theme.Spacing.s)
                 .padding(.top, Theme.Spacing.xs)
@@ -125,6 +123,13 @@ private struct PartierBottomBar: View {
                         )
                         .shadow(color: Color.sioreeIcyBlue.opacity(0.22), radius: 16, x: 0, y: 10)
                 )
+                .overlay(alignment: .top) {
+                    // Sliding indicator for regular tabs - overlay on top of HStack
+                    if selectedTab != .home {
+                        slidingIndicator(tabWidth: tabWidth, geometry: geometry)
+                            .offset(y: 8) // Positioned lower, centered on icons
+                    }
+                }
                 
                 homeButton
                     .offset(y: -14 - safeAreaBottom)
@@ -135,46 +140,119 @@ private struct PartierBottomBar: View {
         .ignoresSafeArea(edges: .bottom)
     }
     
-    private func tabButton(_ tab: PartierTab) -> some View {
-        Button {
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+    private func tabButton(_ tab: PartierTab, tabWidth: CGFloat, geometry: GeometryProxy) -> some View {
+        let isSelected = selectedTab == tab
+        
+        return Button {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
                 selectedTab = tab
             }
         } label: {
-            Image(systemName: tab.systemIcon)
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundColor(.sioreeWhite.opacity(selectedTab == tab ? 0.95 : 0.7))
-                .padding(.vertical, Theme.Spacing.xs)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .shadow(color: Color.sioreeIcyBlue.opacity(selectedTab == tab ? 0.25 : 0.08), radius: selectedTab == tab ? 12 : 4, x: 0, y: 6)
+            ZStack {
+                Image(systemName: tab.systemIcon)
+                    .font(.system(size: isSelected ? 20 : 18, weight: isSelected ? .bold : .semibold))
+                    .foregroundColor(.sioreeWhite.opacity(isSelected ? 1.0 : 0.65))
+                    .scaleEffect(isSelected ? 1.15 : 1.0)
+            }
+            .frame(width: tabWidth, height: 40)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
     
+    private func slidingIndicator(tabWidth: CGFloat, geometry: GeometryProxy) -> some View {
+        let padding = Theme.Spacing.s
+        let centerNotchWidth: CGFloat = 76
+        
+        // Calculate the center X position of the selected tab
+        let centerX: CGFloat = {
+            switch selectedTab {
+            case .tickets:
+                // First tab on left: padding + tabWidth/2
+                return padding + tabWidth / 2
+            case .inbox:
+                // Second tab on left: padding + tabWidth + tabWidth/2
+                return padding + tabWidth * 1.5
+            case .favorites:
+                // First tab on right: padding + 2*tabWidth + centerNotch + tabWidth/2
+                return padding + tabWidth * 2 + centerNotchWidth + tabWidth / 2
+            case .profile:
+                // Second tab on right: padding + 2*tabWidth + centerNotch + tabWidth + tabWidth/2
+                return padding + tabWidth * 2 + centerNotchWidth + tabWidth * 1.5
+            case .home:
+                return geometry.size.width / 2 // Center (shouldn't be used, but fallback)
+            }
+        }()
+        
+        return RoundedRectangle(cornerRadius: 28)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color.sioreeIcyBlue.opacity(0.06),
+                        Color.sioreeIcyBlue.opacity(0.04)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .background(
+                RoundedRectangle(cornerRadius: 28)
+                    .fill(.ultraThinMaterial.opacity(0.3))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 28)
+                    .stroke(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.2),
+                                Color.white.opacity(0.1)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.5
+                    )
+            )
+            .frame(width: 56, height: 48)
+            .offset(x: centerX - geometry.size.width / 2) // Offset from center of screen
+            .matchedGeometryEffect(id: "tabIndicator", in: tabAnimation)
+    }
+    
     private var homeButton: some View {
-        Button {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) {
+        let isSelected = selectedTab == .home
+        
+        return Button {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
                 selectedTab = .home
             }
         } label: {
             Image(systemName: PartierTab.home.systemIcon)
-                .font(.system(size: 22, weight: .bold))
+                .font(.system(size: isSelected ? 24 : 22, weight: .bold))
                 .foregroundColor(.sioreeWhite)
+                .scaleEffect(isSelected ? 1.1 : 1.0)
                 .frame(width: 64, height: 64)
                 .background(
                     Circle()
                         .fill(
                             LinearGradient(
-                                colors: [Color.sioreeIcyBlue.opacity(0.9), Color.sioreeIcyBlue],
+                                colors: [
+                                    Color.sioreeIcyBlue.opacity(isSelected ? 1.0 : 0.9),
+                                    Color.sioreeIcyBlue.opacity(isSelected ? 0.95 : 1.0)
+                                ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
                         )
                 )
-                .shadow(color: Color.sioreeIcyBlue.opacity(0.45), radius: 24, x: 0, y: 10)
+                .shadow(
+                    color: Color.sioreeIcyBlue.opacity(isSelected ? 0.55 : 0.45),
+                    radius: isSelected ? 28 : 24,
+                    x: 0,
+                    y: isSelected ? 12 : 10
+                )
                 .overlay(
                     Circle()
-                        .stroke(Color.white.opacity(0.25), lineWidth: 1)
+                        .stroke(Color.white.opacity(isSelected ? 0.3 : 0.25), lineWidth: isSelected ? 1.5 : 1)
                 )
         }
         .buttonStyle(.plain)

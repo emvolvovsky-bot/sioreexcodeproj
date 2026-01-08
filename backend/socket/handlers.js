@@ -35,26 +35,26 @@ function initializeSocketHandlers(io, socket) {
       
       // Emit to receiver
       io.to(`user:${receiverId}`).emit('new_message', {
-        id: message.id,
-        conversationId: message.conversation_id,
-        senderId: message.sender_id,
-        receiverId: message.receiver_id,
+        id: message.id.toString(),
+        conversationId: message.conversation_id.toString(),
+        senderId: message.sender_id.toString(),
+        receiverId: message.receiver_id.toString(),
         text: message.text,
-        timestamp: message.created_at,
-        isRead: message.is_read,
-        messageType: message.message_type,
+        timestamp: message.created_at ? new Date(message.created_at).toISOString() : new Date().toISOString(),
+        isRead: message.is_read || false,
+        messageType: message.message_type || 'text',
       });
       
       // Confirm to sender
       socket.emit('message_sent', {
-        id: message.id,
-        conversationId: message.conversation_id,
-        senderId: message.sender_id,
-        receiverId: message.receiver_id,
+        id: message.id.toString(),
+        conversationId: message.conversation_id.toString(),
+        senderId: message.sender_id.toString(),
+        receiverId: message.receiver_id.toString(),
         text: message.text,
-        timestamp: message.created_at,
-        isRead: message.is_read,
-        messageType: message.message_type,
+        timestamp: message.created_at ? new Date(message.created_at).toISOString() : new Date().toISOString(),
+        isRead: message.is_read || false,
+        messageType: message.message_type || 'text',
       });
     } catch (error) {
       console.error('Socket send_message error:', error);

@@ -94,6 +94,9 @@ struct TalentInboxView: View {
             .refreshable {
                 loadConversations()
             }
+            .onReceive(NotificationCenter.default.publisher(for: .refreshInbox)) { _ in
+                loadConversations()
+            }
             .sheet(item: $selectedConversation) { conversation in
                 RealMessageView(conversation: conversation)
             }

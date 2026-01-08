@@ -72,6 +72,9 @@ struct BrandInboxView: View {
             .onAppear {
                 loadConversations()
             }
+            .onReceive(NotificationCenter.default.publisher(for: .refreshInbox)) { _ in
+                loadConversations()
+            }
         }
     }
     

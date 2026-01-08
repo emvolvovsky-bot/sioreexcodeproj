@@ -2,7 +2,7 @@
 //  TicketDetailView.swift
 //  Sioree
 //
-//  Detailed view for a ticket with QR code
+//  Detailed view for a ticket
 //
 
 import SwiftUI
@@ -10,114 +10,209 @@ import SwiftUI
 struct TicketDetailView: View {
     let ticket: Ticket
     @Environment(\.dismiss) var dismiss
-    @State private var qrCodeImage: UIImage?
+    @EnvironmentObject var authViewModel: AuthViewModel
     
     var body: some View {
         NavigationStack {
             ZStack {
-                // Subtle gradient on black background
-                LinearGradient(
-                    colors: [Color.sioreeBlack, Color.sioreeBlack.opacity(0.95), Color.sioreeCharcoal.opacity(0.1)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
+                backgroundGlow
                 
-                ScrollView {
+                ScrollView(showsIndicators: false) {
                     VStack(spacing: Theme.Spacing.xl) {
-                        // QR Code
-                        VStack(spacing: Theme.Spacing.m) {
-                            if let qrString = ticket.qrCodeData {
-                                QRCodeView(qrString: qrString, size: 250)
-                            } else {
-                                // Generate QR code if not present
-                                if let qrImage = QRCodeService.shared.generateTicketQRCode(
-                                    ticketId: ticket.id,
-                                    eventId: ticket.eventId,
-                                    userId: ticket.userId
-                                ) {
-                                    Image(uiImage: qrImage)
-                                        .interpolation(.none)
-                                        .resizable()
-                                        .scaledToFit()
-                                        .frame(width: 250, height: 250)
-                                        .background(Color.white)
-                                        .cornerRadius(Theme.CornerRadius.medium)
-                                        .padding(Theme.Spacing.s)
-                                        .background(Color.white)
-                                        .cornerRadius(Theme.CornerRadius.medium)
-                                }
-                            }
+                        // Ticket Display
+                        VStack(spacing: Theme.Spacing.xl) {
+                            // User Name
+                            Text(userName)
+                                .font(.system(size: 32, weight: .bold, design: .rounded))
+                                .foregroundColor(.sioreeWhite)
+                                .padding(.top, Theme.Spacing.xxl)
                             
-                            Text("Show this QR code at the event")
-                                .font(.sioreeBodySmall)
+                            // Cool Graphic
+                            ticketGraphic
+                            
+                            // Instruction Text
+                            Text("Show this to the event host when entering")
+                                .font(.sioreeBody)
                                 .foregroundColor(.sioreeLightGrey)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, Theme.Spacing.l)
                         }
-                        .padding(.top, Theme.Spacing.l)
+                        .padding(.top, Theme.Spacing.xl)
                         
                         // Ticket Info
-                        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                            Text(ticket.eventTitle)
-                                .font(.sioreeH2)
-                                .foregroundColor(.sioreeWhite)
-                            
-                            HStack {
-                                Image(systemName: "calendar")
-                                Text(ticket.eventDate.formatted(date: .long, time: .shortened))
-                                    .font(.sioreeBody)
-                            }
-                            .foregroundColor(.sioreeLightGrey)
-                            
-                            HStack {
-                                Image(systemName: "location.fill")
-                                Text(ticket.eventLocation)
-                                    .font(.sioreeBody)
-                            }
-                            .foregroundColor(.sioreeLightGrey)
-                            
-                            HStack {
-                                Image(systemName: "person.fill")
-                                Text("Host: \(ticket.hostName)")
-                                    .font(.sioreeBody)
-                            }
-                            .foregroundColor(.sioreeLightGrey)
-                            
-                            Divider()
-                                .background(Color.sioreeLightGrey.opacity(0.3))
-                            
-                            HStack {
-                                Text("Ticket #\(ticket.id.prefix(8))")
-                                    .font(.sioreeBodySmall)
-                                    .foregroundColor(.sioreeLightGrey)
-                                
-                                Spacer()
-                                
-                                StatusBadge(status: ticket.status)
-                            }
-                        }
-                        .padding(Theme.Spacing.l)
-                        .background(Color.sioreeLightGrey.opacity(0.1))
-                        .cornerRadius(Theme.CornerRadius.medium)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                                .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 2)
-                        )
-                        .padding(.horizontal, Theme.Spacing.l)
+                        ticketInfoCard
+                            .padding(.horizontal, Theme.Spacing.l)
                     }
                     .padding(.vertical, Theme.Spacing.l)
                 }
             }
-            .navigationTitle("Ticket")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                    .foregroundColor(.sioreeIcyBlue)
-                }
+            .toolbar(.hidden, for: .navigationBar)
+        }
+    }
+    
+    private var userName: String {
+        authViewModel.currentUser?.name ?? "Guest"
+    }
+    
+    private var backgroundGlow: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color.sioreeBlack,
+                    Color.sioreeBlack.opacity(0.98),
+                    Color.sioreeCharcoal.opacity(0.85)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+            
+            Circle()
+                .fill(Color.sioreeIcyBlue.opacity(0.25))
+                .frame(width: 360, height: 360)
+                .blur(radius: 120)
+                .offset(x: -120, y: -320)
+            
+            Circle()
+                .fill(Color.sioreeIcyBlue.opacity(0.2))
+                .frame(width: 420, height: 420)
+                .blur(radius: 140)
+                .offset(x: 160, y: 220)
+        }
+    }
+    
+    private var ticketGraphic: some View {
+        ZStack {
+            // Outer glow circle
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.sioreeIcyBlue.opacity(0.3),
+                            Color.sioreeIcyBlue.opacity(0.1)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 240, height: 240)
+                .blur(radius: 20)
+            
+            // Middle ring
+            Circle()
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            Color.sioreeIcyBlue.opacity(0.6),
+                            Color.sioreeIcyBlue.opacity(0.3)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 3
+                )
+                .frame(width: 200, height: 200)
+            
+            // Inner circle with ticket icon
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.sioreeIcyBlue.opacity(0.2),
+                                Color.sioreeIcyBlue.opacity(0.05)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 160, height: 160)
+                
+                // Ticket icon
+                Image(systemName: "ticket.fill")
+                    .font(.system(size: 64, weight: .semibold))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [
+                                Color.sioreeIcyBlue,
+                                Color.sioreeIcyBlue.opacity(0.7)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .shadow(color: Color.sioreeIcyBlue.opacity(0.5), radius: 12)
+            }
+            
+            // Decorative dots around the circle
+            ForEach(0..<8) { index in
+                Circle()
+                    .fill(Color.sioreeIcyBlue.opacity(0.4))
+                    .frame(width: 8, height: 8)
+                    .offset(
+                        x: cos(Double(index) * .pi / 4) * 110,
+                        y: sin(Double(index) * .pi / 4) * 110
+                    )
             }
         }
+        .frame(height: 240)
+    }
+    
+    private var ticketInfoCard: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+            Text(ticket.eventTitle)
+                .font(.sioreeH3)
+                .foregroundColor(.sioreeWhite)
+            
+            HStack(spacing: Theme.Spacing.s) {
+                Image(systemName: "calendar")
+                    .foregroundColor(.sioreeIcyBlue.opacity(0.8))
+                Text(ticket.eventDate.formatted(date: .long, time: .shortened))
+                    .font(.sioreeBody)
+            }
+            .foregroundColor(.sioreeLightGrey)
+            
+            HStack(spacing: Theme.Spacing.s) {
+                Image(systemName: "mappin.circle.fill")
+                    .foregroundColor(.sioreeIcyBlue.opacity(0.8))
+                Text(ticket.eventLocation)
+                    .font(.sioreeBody)
+            }
+            .foregroundColor(.sioreeLightGrey)
+            
+            HStack(spacing: Theme.Spacing.s) {
+                Image(systemName: "person.fill")
+                    .foregroundColor(.sioreeIcyBlue.opacity(0.8))
+                Text("Host: \(ticket.hostName)")
+                    .font(.sioreeBody)
+            }
+            .foregroundColor(.sioreeLightGrey)
+            
+            Divider()
+                .background(Color.sioreeLightGrey.opacity(0.3))
+            
+            HStack {
+                Text("Ticket #\(ticket.id.prefix(8))")
+                    .font(.sioreeBodySmall)
+                    .foregroundColor(.sioreeLightGrey)
+                
+                Spacer()
+                
+                StatusBadge(status: ticket.status)
+            }
+        }
+        .padding(Theme.Spacing.l)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(Color.white.opacity(0.04))
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(Color.sioreeIcyBlue.opacity(0.2), lineWidth: 1)
+                )
+                .shadow(color: Color.sioreeIcyBlue.opacity(0.16), radius: 24, x: 0, y: 12)
+        )
     }
 }
 
@@ -164,6 +259,7 @@ struct StatusBadge: View {
         hostName: "LindaFlora",
         price: 75.0
     ))
+    .environmentObject(AuthViewModel())
 }
 
 

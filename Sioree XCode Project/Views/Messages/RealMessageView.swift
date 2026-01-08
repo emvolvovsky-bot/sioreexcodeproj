@@ -62,7 +62,7 @@ struct RealMessageView: View {
                                             }
                                         )
                                         .id(message.id)
-                                        .padding(.horizontal, Theme.Spacing.m)
+                                        .padding(.horizontal, Theme.Spacing.l)
                                     }
                                 }
                             }
@@ -97,7 +97,8 @@ struct RealMessageView: View {
                         }
                         .disabled(messageText.isEmpty || isLoading)
                     }
-                    .padding(Theme.Spacing.m)
+                    .padding(.horizontal, Theme.Spacing.l)
+                    .padding(.vertical, Theme.Spacing.m)
                 }
             }
             .navigationTitle(conversation.participantName)
@@ -113,6 +114,10 @@ struct RealMessageView: View {
             .onAppear {
                 loadMessages()
                 markAsRead()
+            }
+            .onDisappear {
+                // Refresh inbox when leaving message view
+                NotificationCenter.default.post(name: .refreshInbox, object: nil)
             }
             .alert("Error", isPresented: .constant(errorMessage != nil)) {
                 Button("OK") {
@@ -169,6 +174,8 @@ struct RealMessageView: View {
             receiveValue: { message in
                     messages.append(message)
                     messages.sort { $0.timestamp < $1.timestamp }
+                    // Notify inbox views to refresh
+                    NotificationCenter.default.post(name: .refreshInbox, object: nil)
             }
         )
         .store(in: &cancellables)

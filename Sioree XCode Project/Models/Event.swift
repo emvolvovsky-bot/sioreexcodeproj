@@ -44,6 +44,8 @@ struct Event: Identifiable, Codable, Hashable {
     var isRSVPed: Bool // Whether the current user has RSVPed to this event
     var qrCode: String? // Unique QR code for the event
     var lookingForTalentType: String? // Type of talent the host is looking for (e.g., "DJ", "Bartender")
+    var isPrivate: Bool // Whether the event requires an access code
+    var accessCode: String? // Access code required for private events
     
     enum CodingKeys: String, CodingKey {
         case id, title, description, location, images, capacity, likes
@@ -69,6 +71,10 @@ struct Event: Identifiable, Codable, Hashable {
         case lookingForRolesSnake = "looking_for_roles"
         case lookingForNotes = "lookingForNotes"
         case lookingForNotesSnake = "looking_for_notes"
+        case isPrivate = "isPrivate"
+        case isPrivateSnake = "is_private"
+        case accessCode = "accessCode"
+        case accessCodeSnake = "access_code"
     }
     
     init(from decoder: Decoder) throws {
@@ -113,6 +119,12 @@ struct Event: Identifiable, Codable, Hashable {
         isFeatured = try container.decodeIfPresent(Bool.self, forKey: .isFeatured) ?? false
         isRSVPed = try container.decodeIfPresent(Bool.self, forKey: .isRSVPed) ?? false
         qrCode = try container.decodeIfPresent(String.self, forKey: .qrCode)
+        let camelCaseIsPrivate = try container.decodeIfPresent(Bool.self, forKey: .isPrivate)
+        let snakeCaseIsPrivate = try container.decodeIfPresent(Bool.self, forKey: .isPrivateSnake)
+        isPrivate = camelCaseIsPrivate ?? snakeCaseIsPrivate ?? false
+        let camelCaseAccessCode = try container.decodeIfPresent(String.self, forKey: .accessCode)
+        let snakeCaseAccessCode = try container.decodeIfPresent(String.self, forKey: .accessCodeSnake)
+        accessCode = camelCaseAccessCode ?? snakeCaseAccessCode
         let camelCaseLookingFor = try container.decodeIfPresent(String.self, forKey: .lookingForTalentType)
         let snakeCaseLookingFor = try container.decodeIfPresent(String.self, forKey: .lookingForTalentTypeSnake)
         let talentNeeded = try container.decodeIfPresent(String.self, forKey: .talentNeeded)
@@ -147,9 +159,11 @@ struct Event: Identifiable, Codable, Hashable {
          isLiked: Bool = false,
          isSaved: Bool = false,
          isFeatured: Bool = false,
-         isRSVPed: Bool = false,
-         qrCode: String? = nil,
-         lookingForTalentType: String? = nil) {
+        isRSVPed: Bool = false,
+        qrCode: String? = nil,
+        lookingForTalentType: String? = nil,
+        isPrivate: Bool = false,
+        accessCode: String? = nil) {
         self.id = id
         self.title = title
         self.description = description
@@ -175,6 +189,8 @@ struct Event: Identifiable, Codable, Hashable {
         self.isFeatured = isFeatured
         self.isRSVPed = isRSVPed
         self.qrCode = qrCode
+        self.isPrivate = isPrivate
+        self.accessCode = accessCode
         self.lookingForTalentType = Event.resolveLookingForSummary(
             roles: lookingForRoles,
             label: lookingForTalentType,
@@ -214,6 +230,12 @@ struct Event: Identifiable, Codable, Hashable {
         try container.encode(isFeatured, forKey: .isFeatured)
         try container.encode(isRSVPed, forKey: .isRSVPed)
         try container.encodeIfPresent(qrCode, forKey: .qrCode)
+        try container.encode(isPrivate, forKey: .isPrivate)
+        try container.encode(isPrivate, forKey: .isPrivateSnake)
+        if let code = accessCode, !code.isEmpty {
+            try container.encode(code, forKey: .accessCode)
+            try container.encode(code, forKey: .accessCodeSnake)
+        }
         
         // Write the looking-for field using multiple key shapes for compatibility
         if let lookingFor = lookingForSummary, !lookingFor.isEmpty {

@@ -23,8 +23,19 @@ struct AddPostFromEventView: View {
     @State private var showError = false
     @State private var errorMessage = ""
     @State private var cancellables = Set<AnyCancellable>()
+    @State private var existingPhotoCount = 0
     private let photoService = PhotoService()
     private let networkService = NetworkService()
+    
+    private let maxEventHistoryPhotos = 7
+    private var maxPhotosAllowed: Int {
+        // For event history, limit to 7 total photos
+        if event != nil {
+            return max(1, maxEventHistoryPhotos - existingPhotoCount)
+        }
+        // For regular posts, use standard limit
+        return Constants.Limits.maxPostImages
+    }
 
     var body: some View {
         NavigationView {
@@ -135,21 +146,29 @@ struct AddPostFromEventView: View {
                                 .disabled(isUploading)
                                 .opacity(isUploading ? 0.6 : 1.0)
 
-                                // Add more photos button (limit to 5 photos)
-                                if selectedImages.count < Constants.Limits.maxPostImages {
+                                // Add more photos button
+                                if selectedImages.count < maxPhotosAllowed {
                                     Button(action: {
                                         showImagePicker = true
                                     }) {
-                                        Text("Add More Photos (\(selectedImages.count)/\(Constants.Limits.maxPostImages))")
+                                        Text("Add More Photos (\(selectedImages.count)/\(maxPhotosAllowed))")
                                             .font(.sioreeBodySmall)
                                             .foregroundColor(.sioreeIcyBlue)
                                     }
                                     .padding(.top, Theme.Spacing.s)
                                 } else {
-                                    Text("Maximum \(Constants.Limits.maxPostImages) photos reached")
+                                    Text("Maximum \(maxPhotosAllowed) photos reached")
                                         .font(.sioreeBodySmall)
                                         .foregroundColor(.sioreeLightGrey)
                                         .padding(.top, Theme.Spacing.s)
+                                }
+                                
+                                // Show warning if approaching event history limit
+                                if let event = event, existingPhotoCount + selectedImages.count >= maxEventHistoryPhotos {
+                                    Text("Note: Event history shows max \(maxEventHistoryPhotos) photos")
+                                        .font(.sioreeCaption)
+                                        .foregroundColor(.sioreeLightGrey.opacity(0.7))
+                                        .padding(.top, Theme.Spacing.xs)
                                 }
                             }
                         }
@@ -170,7 +189,12 @@ struct AddPostFromEventView: View {
                 }
             }
             .sheet(isPresented: $showImagePicker) {
-                MultiplePhotoPicker(selectedImages: $selectedImages, limit: 5)
+                MultiplePhotoPicker(selectedImages: $selectedImages, limit: maxPhotosAllowed)
+            }
+            .onAppear {
+                if let event = event {
+                    loadExistingPhotoCount(for: event.id)
+                }
             }
             .overlay {
                 if isUploading {
@@ -223,6 +247,11 @@ struct AddPostFromEventView: View {
     }
 
     private func savePhotosToServer(_ uploadedUrls: [String]) {
+        // If this is the first photo and event has no cover, set first photo as cover
+        if let event = event, event.images.isEmpty, let firstPhotoUrl = uploadedUrls.first {
+            setEventCoverImage(firstPhotoUrl, for: event.id)
+        }
+        
         networkService.createPost(
             caption: nil, // Simple photo upload - no caption
             mediaUrls: uploadedUrls,
@@ -271,6 +300,11 @@ struct AddPostFromEventView: View {
 
     private func savePhotosLocally(_ photoUrls: [String]) {
         guard let eventId = event?.id, let userId = authViewModel.currentUser?.id else { return }
+        
+        // If this is the first photo and event has no cover, set first photo as cover
+        if let event = event, event.images.isEmpty, let firstPhotoUrl = photoUrls.first {
+            setEventCoverImage(firstPhotoUrl, for: eventId)
+        }
 
         // Create a local photo record
         let photoRecord: [String: Any] = [
@@ -293,6 +327,60 @@ struct AddPostFromEventView: View {
         print("💾 Saved \(photoUrls.count) photos locally for event \(eventId)")
         print("💾 Storage key: \(storageKey)")
         print("💾 Total photos for event: \(eventPhotos.count)")
+    }
+    
+    private func setEventCoverImage(_ imageUrl: String, for eventId: String) {
+        // Store the cover image URL for this event
+        let coverKey = "event_cover_\(eventId)"
+        UserDefaults.standard.set(imageUrl, forKey: coverKey)
+        print("📸 Set first photo as event cover: \(imageUrl)")
+        
+        // Also update the event in local cache if it exists
+        // This will be picked up when events are loaded
+        NotificationCenter.default.post(
+            name: NSNotification.Name("EventCoverUpdated"),
+            object: nil,
+            userInfo: [
+                "eventId": eventId,
+                "coverImageUrl": imageUrl
+            ]
+        )
+    }
+    
+    private func loadExistingPhotoCount(for eventId: String) {
+        guard let userId = authViewModel.currentUser?.id else { return }
+        
+        // Try API first
+        networkService.fetchPostsForEvent(eventId: eventId)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    if case .failure = completion {
+                        // Fallback to local storage
+                        self.loadExistingPhotoCountFromLocalStorage(for: eventId, userId: userId)
+                    }
+                },
+                receiveValue: { posts in
+                    // Count photos from user's posts for this event
+                    let userPosts = posts.filter { $0.userId == userId }
+                    self.existingPhotoCount = userPosts.reduce(0) { $0 + $1.images.count }
+                }
+            )
+            .store(in: &cancellables)
+    }
+    
+    private func loadExistingPhotoCountFromLocalStorage(for eventId: String, userId: String) {
+        let storageKey = "event_photos_\(eventId)"
+        let storedPhotos = UserDefaults.standard.array(forKey: storageKey) as? [[String: Any]] ?? []
+        
+        let userPhotos = storedPhotos.filter { photoData in
+            (photoData["userId"] as? String) == userId
+        }
+        
+        self.existingPhotoCount = userPhotos.reduce(0) { count, photoData in
+            let images = photoData["images"] as? [String] ?? []
+            return count + images.count
+        }
     }
 }
 

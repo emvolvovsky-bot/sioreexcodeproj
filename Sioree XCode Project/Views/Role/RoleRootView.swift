@@ -14,17 +14,23 @@ struct RoleRootView: View {
     @EnvironmentObject var talentViewModel: TalentViewModel
     
     var body: some View {
-        TabView(selection: $selectedTab) {
-            ForEach(Array(tabs.enumerated()), id: \.offset) { index, tab in
-                tab.view
-                    .tabItem {
-                        Label(tab.title, systemImage: tab.icon)
+        Group {
+            if role == .partier {
+                PartierTabContainer()
+            } else {
+                TabView(selection: $selectedTab) {
+                    ForEach(Array(tabs.enumerated()), id: \.offset) { index, tab in
+                        tab.view
+                            .tabItem {
+                                Label(tab.title, systemImage: tab.icon)
+                            }
+                            .tag(index)
                     }
-                    .tag(index)
+                }
+                .accentColor(Color.sioreeIcyBlue)
+                .toolbarBackground(.hidden, for: .tabBar)
             }
         }
-        .accentColor(Color.sioreeIcyBlue)
-        .toolbarBackground(.hidden, for: .tabBar)
     }
     
     private var tabs: [(title: String, icon: String, view: AnyView)] {
@@ -39,7 +45,7 @@ struct RoleRootView: View {
             ]
         case .partier:
             return [
-                ("Home", "house.fill", AnyView(PartierHomeView())),
+                ("Home", "house.fill", AnyView(PartierTabContainer())),
                 ("Map", "map.fill", AnyView(PartierMapView(viewModel: HomeViewModel(), locationManager: LocationManager()))),
                 ("Tickets", "ticket.fill", AnyView(TicketsView())),
                 ("Inbox", "envelope.fill", AnyView(PartierInboxView())),

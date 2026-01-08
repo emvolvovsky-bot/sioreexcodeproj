@@ -210,8 +210,8 @@ struct PartierProfileView: View {
                     UserListListView(userId: userId, listType: .following, userType: .partier)
                 }
             }
-            .sheet(item: $selectedEventForPhotos) { event in
-                EventPhotosViewer(event: event)
+            .fullScreenCover(item: $selectedEventForPhotos) { event in
+                EventStoryViewer(event: event)
                     .environmentObject(authViewModel)
             }
             .sheet(item: $selectedEventForPost) { event in
@@ -232,12 +232,22 @@ struct PartierProfileView: View {
 
 struct EventCardGridItem: View {
     let event: Event
+    
+    private var coverImageUrl: String? {
+        // Check for stored cover image first (from first photo upload)
+        let coverKey = "event_cover_\(event.id)"
+        if let storedCover = UserDefaults.standard.string(forKey: coverKey), !storedCover.isEmpty {
+            return storedCover
+        }
+        // Fallback to event's first image
+        return event.images.first
+    }
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             // Event image/thumbnail
             ZStack {
-                if let imageUrl = event.images.first, let url = URL(string: imageUrl) {
+                if let imageUrl = coverImageUrl, let url = URL(string: imageUrl) {
                     AsyncImage(url: url) { phase in
                         switch phase {
                         case .empty:

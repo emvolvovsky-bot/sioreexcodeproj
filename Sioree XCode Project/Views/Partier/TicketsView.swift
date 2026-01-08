@@ -14,51 +14,32 @@ struct TicketsView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // Subtle gradient on black background
-                LinearGradient(
-                    colors: [Color.sioreeBlack, Color.sioreeBlack.opacity(0.95), Color.sioreeCharcoal.opacity(0.1)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
+                backgroundGlow
                 
                 VStack(spacing: 0) {
-                    // Segmented Control
-                    Picker("", selection: $selectedSegment) {
-                        Text("Upcoming").tag(0)
-                        Text("Past").tag(1)
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(Theme.Spacing.m)
+                    // Custom Segmented Control
+                    customSegmentedControl
+                        .padding(.horizontal, Theme.Spacing.l)
+                        .padding(.top, Theme.Spacing.m)
+                        .padding(.bottom, Theme.Spacing.s)
                     
                     // Content
-                    ScrollView {
+                    ScrollView(showsIndicators: false) {
                         LazyVStack(spacing: Theme.Spacing.m) {
                             if viewModel.isLoading && selectedSegment == 1 {
                                 ProgressView()
+                                    .tint(.sioreeIcyBlue)
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, Theme.Spacing.xxl)
                             } else {
                                 let events = selectedSegment == 0 ? viewModel.upcomingEvents : viewModel.pastEvents
                                 
                                 if events.isEmpty {
-                                    VStack(spacing: Theme.Spacing.m) {
-                                        Image(systemName: selectedSegment == 0 ? "ticket" : "ticket.fill")
-                                            .font(.system(size: 60))
-                                            .foregroundColor(Color.sioreeLightGrey.opacity(0.5))
-                                        Text(selectedSegment == 0 ? "No upcoming tickets" : "No past tickets")
-                                            .font(.sioreeH3)
-                                            .foregroundColor(Color.sioreeWhite)
-                                        Text(selectedSegment == 0 ? "RSVP to events to see them here" : "Attend events to see them here")
-                                            .font(.sioreeBody)
-                                            .foregroundColor(Color.sioreeLightGrey.opacity(0.7))
-                                    }
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, Theme.Spacing.xxl)
+                                    emptyStateView
                                 } else {
                                     ForEach(events) { event in
                                         TicketCard(event: event, isPast: selectedSegment == 1)
-                                            .padding(.horizontal, Theme.Spacing.m)
+                                            .padding(.horizontal, Theme.Spacing.l)
                                     }
                                 }
                             }
@@ -67,12 +48,110 @@ struct TicketsView: View {
                     }
                 }
             }
-            .navigationTitle("Tickets")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.hidden, for: .navigationBar)
             .onAppear {
                 viewModel.loadTickets()
             }
         }
+    }
+    
+    private var backgroundGlow: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color.sioreeBlack,
+                    Color.sioreeBlack.opacity(0.98),
+                    Color.sioreeCharcoal.opacity(0.85)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+            
+            Circle()
+                .fill(Color.sioreeIcyBlue.opacity(0.25))
+                .frame(width: 360, height: 360)
+                .blur(radius: 120)
+                .offset(x: -120, y: -320)
+            
+            Circle()
+                .fill(Color.sioreeIcyBlue.opacity(0.2))
+                .frame(width: 420, height: 420)
+                .blur(radius: 140)
+                .offset(x: 160, y: 220)
+        }
+    }
+    
+    private var customSegmentedControl: some View {
+        HStack(spacing: Theme.Spacing.xs) {
+            segmentButton(title: "Upcoming", isSelected: selectedSegment == 0) {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    selectedSegment = 0
+                }
+            }
+            
+            segmentButton(title: "Past", isSelected: selectedSegment == 1) {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    selectedSegment = 1
+                }
+            }
+        }
+        .padding(4)
+        .background(
+            Capsule(style: .continuous)
+                .fill(Color.white.opacity(0.06))
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                )
+        )
+    }
+    
+    private func segmentButton(title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.sioreeBody)
+                .fontWeight(.semibold)
+                .foregroundColor(.sioreeWhite)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, Theme.Spacing.s)
+                .background(
+                    Group {
+                        if isSelected {
+                            Capsule(style: .continuous)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color.sioreeIcyBlue.opacity(0.9), Color.sioreeIcyBlue],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .shadow(color: Color.sioreeIcyBlue.opacity(0.35), radius: 12, x: 0, y: 6)
+                        }
+                    }
+                )
+        }
+        .buttonStyle(.plain)
+    }
+    
+    private var emptyStateView: some View {
+        VStack(spacing: Theme.Spacing.m) {
+            Image(systemName: selectedSegment == 0 ? "ticket" : "ticket.fill")
+                .font(.system(size: 64))
+                .foregroundColor(Color.sioreeIcyBlue.opacity(0.5))
+                .shadow(color: Color.sioreeIcyBlue.opacity(0.3), radius: 16)
+            
+            Text(selectedSegment == 0 ? "No upcoming tickets" : "No past tickets")
+                .font(.sioreeH3)
+                .foregroundColor(Color.sioreeWhite)
+            
+            Text(selectedSegment == 0 ? "RSVP to events to see them here" : "Attend events to see them here")
+                .font(.sioreeBody)
+                .foregroundColor(Color.sioreeLightGrey.opacity(0.7))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, Theme.Spacing.xxl)
     }
 }
 
@@ -96,146 +175,215 @@ struct TicketCard: View {
     }
     
     var body: some View {
-        VStack(spacing: Theme.Spacing.s) {
+        VStack(spacing: Theme.Spacing.m) {
             // Main Ticket Card
             Button(action: {
                 if !isPast {
                     showTicketDetail = true
                 }
             }) {
-                HStack(spacing: Theme.Spacing.m) {
-                    // QR Code or Invalid Badge
-                    if isPast {
-                        ZStack {
-                            Rectangle()
-                                .fill(Color.red.opacity(0.2))
-                                .frame(width: 80, height: 80)
+                ZStack {
+                    // Glass morphism background
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .fill(Color.white.opacity(0.04))
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                                .stroke(isPast ? Color.red.opacity(0.3) : Color.sioreeIcyBlue.opacity(0.2), lineWidth: 1)
+                        )
+                        .shadow(color: isPast ? Color.red.opacity(0.1) : Color.sioreeIcyBlue.opacity(0.16), radius: 24, x: 0, y: 12)
+                    
+                    HStack(spacing: Theme.Spacing.m) {
+                        // Ticket Icon Badge
+                        ticketIconSection
+                        
+                        // Event Info
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                            Text(event.title)
+                                .font(.sioreeH4)
+                                .foregroundColor(.sioreeWhite)
+                                .lineLimit(2)
                             
-                            VStack(spacing: 4) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 30))
-                                    .foregroundColor(.red)
-                                Text("EXPIRED")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundColor(.red)
+                            HStack(spacing: 6) {
+                                Image(systemName: "person.fill")
+                                    .font(.caption2)
+                                    .foregroundColor(.sioreeIcyBlue.opacity(0.8))
+                                Text(event.hostName)
+                                    .font(.sioreeBodySmall)
+                                    .foregroundColor(.sioreeLightGrey)
+                            }
+                            
+                            HStack(spacing: 6) {
+                                Image(systemName: "mappin.circle.fill")
+                                    .font(.caption2)
+                                    .foregroundColor(.sioreeIcyBlue.opacity(0.8))
+                                Text(event.location)
+                                    .font(.sioreeCaption)
+                                    .foregroundColor(.sioreeLightGrey)
+                                    .lineLimit(1)
+                            }
+                            
+                            HStack(spacing: 6) {
+                                Image(systemName: "calendar")
+                                    .font(.caption2)
+                                    .foregroundColor(.sioreeIcyBlue.opacity(0.8))
+                                Text(event.date.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.sioreeCaption)
+                                    .foregroundColor(.sioreeLightGrey)
+                            }
+                            
+                            if isPast {
+                                HStack(spacing: 4) {
+                                    Circle()
+                                        .fill(Color.red.opacity(0.8))
+                                        .frame(width: 6, height: 6)
+                                    Text("Event Ended")
+                                        .font(.sioreeCaption)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.red.opacity(0.9))
+                                }
+                                .padding(.top, 2)
                             }
                         }
-                        .cornerRadius(Theme.CornerRadius.small)
-                    } else if let qrImage = QRCodeService.shared.generateTicketQRCode(
-                        ticketId: ticket.id,
-                        eventId: ticket.eventId,
-                        userId: ticket.userId
-                    ) {
-                        Image(uiImage: qrImage)
-                            .interpolation(.none)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 80, height: 80)
-                            .background(Color.white)
-                            .cornerRadius(Theme.CornerRadius.small)
-                    } else {
-                        ZStack {
-                            Rectangle()
-                                .fill(Color.sioreeLightGrey.opacity(0.3))
-                                .frame(width: 80, height: 80)
-                            
-                            Image(systemName: "qrcode")
-                                .font(.system(size: 40))
-                                .foregroundColor(Color.sioreeIcyBlue.opacity(0.5))
+                        
+                        Spacer()
+                        
+                        if !isPast {
+                            Image(systemName: "chevron.right")
+                                .font(.body.weight(.semibold))
+                                .foregroundColor(.sioreeIcyBlue.opacity(0.7))
                         }
                     }
-                    
-                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                        Text(event.title)
-                            .font(.sioreeH4)
-                            .foregroundColor(Color.sioreeWhite)
-                        
-                        Text(event.hostName)
-                            .font(.sioreeBodySmall)
-                            .foregroundColor(Color.sioreeLightGrey)
-                        
-                        Text(event.date.formatted(date: .abbreviated, time: .shortened))
-                            .font(.sioreeCaption)
-                            .foregroundColor(Color.sioreeLightGrey)
-                        
-                        if isPast {
-                            Text("Event Ended")
-                                .font(.sioreeCaption)
-                                .foregroundColor(.red)
-                        }
-                    }
-                    
-                    Spacer()
-                    
-                    if !isPast {
-                        Image(systemName: "chevron.right")
-                            .foregroundColor(.sioreeLightGrey)
-                    }
+                    .padding(Theme.Spacing.m)
                 }
-                .padding(Theme.Spacing.m)
-                .background(isPast ? Color.sioreeLightGrey.opacity(0.05) : Color.sioreeLightGrey.opacity(0.1))
-                .cornerRadius(Theme.CornerRadius.medium)
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                        .stroke(isPast ? Color.red.opacity(0.5) : Color.sioreeIcyBlue.opacity(0.3), lineWidth: 2)
-                )
             }
             .disabled(isPast)
             
             // Review Section (only for past events)
             if isPast {
-                VStack(spacing: Theme.Spacing.s) {
-                    // Host Review Button - goes to host profile
-                    NavigationLink(destination: UserProfileView(userId: event.hostId)) {
-                        HStack(spacing: Theme.Spacing.s) {
-                            Image(systemName: "star.fill")
-                                .font(.system(size: 14))
-                                .foregroundColor(.sioreeWarmGlow)
-                            Text("Review Host: \(event.hostName)")
-                                .font(.sioreeBodySmall)
-                                .foregroundColor(.sioreeIcyBlue)
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 12))
-                                .foregroundColor(.sioreeIcyBlue)
-                        }
-                        .padding(.horizontal, Theme.Spacing.m)
-                        .padding(.vertical, Theme.Spacing.s)
-                        .background(Color.sioreeIcyBlue.opacity(0.1))
-                        .cornerRadius(Theme.CornerRadius.small)
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                    
-                    // Talent Review Buttons (only if talents exist) - goes to talent profile
-                    if !event.talentIds.isEmpty {
-                        ForEach(Array(event.talentIds.enumerated()), id: \.element) { index, talentId in
-                            NavigationLink(destination: UserProfileView(userId: talentId)) {
-                                HStack(spacing: Theme.Spacing.s) {
-                                    Image(systemName: "star.fill")
-                                        .font(.system(size: 12))
-                                        .foregroundColor(.sioreeWarmGlow)
-                                    Text("Review Talent")
-                                        .font(.sioreeCaption)
-                                        .foregroundColor(.sioreeIcyBlue)
-                                    Spacer()
-                                    Image(systemName: "chevron.right")
-                                        .font(.system(size: 10))
-                                        .foregroundColor(.sioreeIcyBlue)
-                                }
-                                .padding(.horizontal, Theme.Spacing.m)
-                                .padding(.vertical, Theme.Spacing.xs)
-                                .background(Color.sioreeIcyBlue.opacity(0.1))
-                                .cornerRadius(Theme.CornerRadius.small)
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                        }
-                    }
-                }
-                .padding(.horizontal, Theme.Spacing.m)
+                reviewSection
             }
         }
         .sheet(isPresented: $showTicketDetail) {
             TicketDetailView(ticket: ticket)
+        }
+    }
+    
+    private var ticketIconSection: some View {
+        ZStack {
+            if isPast {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.red.opacity(0.15))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(Color.red.opacity(0.4), lineWidth: 1)
+                    )
+                    .frame(width: 90, height: 90)
+                
+                VStack(spacing: 6) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 28))
+                        .foregroundColor(.red)
+                    Text("EXPIRED")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(.red)
+                }
+            } else {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.sioreeIcyBlue.opacity(0.2),
+                                Color.sioreeIcyBlue.opacity(0.05)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(Color.sioreeIcyBlue.opacity(0.4), lineWidth: 1.5)
+                    )
+                    .frame(width: 90, height: 90)
+                    .shadow(color: Color.sioreeIcyBlue.opacity(0.2), radius: 12, x: 0, y: 6)
+                
+                Image(systemName: "ticket.fill")
+                    .font(.system(size: 36, weight: .semibold))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [
+                                Color.sioreeIcyBlue,
+                                Color.sioreeIcyBlue.opacity(0.7)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+        }
+    }
+    
+    private var reviewSection: some View {
+        VStack(spacing: Theme.Spacing.s) {
+            // Host Review Button
+            NavigationLink(destination: UserProfileView(userId: event.hostId)) {
+                HStack(spacing: Theme.Spacing.s) {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(.sioreeWarmGlow)
+                    Text("Review Host: \(event.hostName)")
+                        .font(.sioreeBodySmall)
+                        .fontWeight(.medium)
+                        .foregroundColor(.sioreeWhite)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12))
+                        .foregroundColor(.sioreeIcyBlue.opacity(0.7))
+                }
+                .padding(.horizontal, Theme.Spacing.m)
+                .padding(.vertical, Theme.Spacing.s)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.white.opacity(0.04))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 1)
+                        )
+                )
+            }
+            .buttonStyle(.plain)
+            
+            // Talent Review Buttons
+            if !event.talentIds.isEmpty {
+                ForEach(Array(event.talentIds.enumerated()), id: \.element) { index, talentId in
+                    NavigationLink(destination: UserProfileView(userId: talentId)) {
+                        HStack(spacing: Theme.Spacing.s) {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 12))
+                                .foregroundColor(.sioreeWarmGlow)
+                            Text("Review Talent")
+                                .font(.sioreeCaption)
+                                .fontWeight(.medium)
+                                .foregroundColor(.sioreeWhite)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 10))
+                                .foregroundColor(.sioreeIcyBlue.opacity(0.7))
+                        }
+                        .padding(.horizontal, Theme.Spacing.m)
+                        .padding(.vertical, Theme.Spacing.xs)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(Color.white.opacity(0.04))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 1)
+                                )
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
     }
 }

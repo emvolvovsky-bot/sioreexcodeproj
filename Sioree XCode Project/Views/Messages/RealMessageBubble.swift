@@ -34,13 +34,33 @@ struct RealMessageBubble: View {
                         .font(.sioreeBody)
                         .foregroundColor(isFromCurrentUser ? Color.sioreeWhite : Color.sioreeWhite)
                         .padding(Theme.Spacing.m)
-                        .background(isFromCurrentUser ? Color.sioreeIcyBlue : Color.sioreeLightGrey.opacity(0.2))
-                        .cornerRadius(Theme.CornerRadius.medium)
+                        .background(
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .fill(isFromCurrentUser ? Color.sioreeIcyBlue : Color.sioreeLightGrey.opacity(0.15))
+                                .background(
+                                    .ultraThinMaterial.opacity(0.3),
+                                    in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                        .stroke(
+                                            isFromCurrentUser ? Color.sioreeIcyBlue.opacity(0.4) : Color.white.opacity(0.1),
+                                            lineWidth: 1
+                                        )
+                                )
+                                .shadow(
+                                    color: isFromCurrentUser ? Color.sioreeIcyBlue.opacity(0.3) : Color.black.opacity(0.2),
+                                    radius: isFromCurrentUser ? 12 : 8,
+                                    x: 0,
+                                    y: 4
+                                )
+                        )
                 }
                 
                 Text(message.timestamp.formatted(date: .omitted, time: .shortened))
                     .font(.sioreeCaption)
-                    .foregroundColor(Color.sioreeLightGrey)
+                    .foregroundColor(Color.sioreeLightGrey.opacity(0.8))
+                    .padding(.horizontal, 4)
             }
             .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: isFromCurrentUser ? .trailing : .leading)
             

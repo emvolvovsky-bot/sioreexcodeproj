@@ -101,20 +101,20 @@ router.get('/conversations', async (req, res) => {
     );
     
     const conversations = result.rows.map(row => ({
-      id: row.id,
-      isGroup: row.is_group,
+      id: row.id.toString(),
+      isGroup: row.is_group || false,
       participantId: row.participant_id ? row.participant_id.toString() : null,
-      participantName: row.participant_name,
-      participantAvatar: row.participant_avatar,
+      participantName: row.participant_name || '',
+      participantAvatar: row.participant_avatar || null,
       lastMessage: row.last_message || '',
-      lastMessageTime: row.last_message_time,
+      lastMessageTime: row.last_message_time ? new Date(row.last_message_time).toISOString() : new Date().toISOString(),
       unreadCount: parseInt(row.unread_count) || 0,
-      isActive: row.is_active,
-      eventId: row.event_id,
-      bookingId: row.booking_id,
-      conversationTitle: row.conversation_title,
-      eventTitle: row.event_title,
-      eventDate: row.event_date,
+      isActive: row.is_active !== false,
+      eventId: row.event_id ? row.event_id.toString() : null,
+      bookingId: row.booking_id ? row.booking_id.toString() : null,
+      conversationTitle: row.conversation_title || null,
+      eventTitle: row.event_title || null,
+      eventDate: row.event_date ? new Date(row.event_date).toISOString() : null,
     }));
     
     res.json({
@@ -184,14 +184,14 @@ router.get('/:conversationId', async (req, res) => {
     );
     
     const messages = result.rows.map(row => ({
-      id: row.id,
-      conversationId: row.conversation_id,
-      senderId: row.sender_id,
-      receiverId: row.receiver_id,
+      id: row.id.toString(),
+      conversationId: row.conversation_id.toString(),
+      senderId: row.sender_id.toString(),
+      receiverId: row.receiver_id.toString(),
       text: row.text,
-      timestamp: row.created_at,
-      isRead: row.is_read,
-      messageType: row.message_type,
+      timestamp: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+      isRead: row.is_read || false,
+      messageType: row.message_type || 'text',
     }));
     
     res.json({
@@ -330,14 +330,14 @@ router.post('/', [
     }
     
     res.status(201).json({
-      id: message.id,
-      conversationId: message.conversation_id,
-      senderId: message.sender_id,
-      receiverId: message.receiver_id,
+      id: message.id.toString(),
+      conversationId: message.conversation_id.toString(),
+      senderId: message.sender_id.toString(),
+      receiverId: message.receiver_id.toString(),
       text: message.text,
-      timestamp: message.created_at,
-      isRead: message.is_read,
-      messageType: message.message_type,
+      timestamp: message.created_at ? new Date(message.created_at).toISOString() : new Date().toISOString(),
+      isRead: message.is_read || false,
+      messageType: message.message_type || 'text',
     });
   } catch (error) {
     console.error('Send message error:', error);
@@ -445,12 +445,12 @@ router.post('/conversation', [
     conversation = convResult.rows[0];
     
     res.json({
-      id: conversation.id,
-      participantId: conversation.participant_id,
+      id: conversation.id.toString(),
+      participantId: conversation.participant_id ? conversation.participant_id.toString() : null,
       participantName: conversation.participant_name,
       participantAvatar: conversation.participant_avatar,
       lastMessage: conversation.last_message || '',
-      lastMessageTime: conversation.last_message_time,
+      lastMessageTime: conversation.last_message_time ? new Date(conversation.last_message_time).toISOString() : new Date().toISOString(),
       unreadCount: parseInt(conversation.unread_count) || 0,
       isActive: conversation.is_active,
     });

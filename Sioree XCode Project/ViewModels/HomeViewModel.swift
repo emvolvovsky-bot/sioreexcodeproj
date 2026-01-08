@@ -18,6 +18,7 @@ class HomeViewModel: ObservableObject {
     @Published var hasLoaded = false
     @Published var selectedDate: Date? = nil
     @Published var lastKnownCoordinate: CLLocationCoordinate2D?
+    @Published var lastRadiusMiles: Int = 30
     
     // Store all loaded events before filtering
     private var allFeaturedEvents: [Event] = []
@@ -117,13 +118,14 @@ class HomeViewModel: ObservableObject {
         }
     }
     
-    func loadEvents(userLocation: CLLocationCoordinate2D? = nil) {
+    func loadEvents(userLocation: CLLocationCoordinate2D? = nil, radiusMiles: Int = 30) {
         guard !isLoading || userLocation != nil else { return }
         isLoading = true
         errorMessage = nil
         if let userLocation {
             lastKnownCoordinate = userLocation
         }
+        lastRadiusMiles = radiusMiles
         
         let skipNearby = lastKnownCoordinate == nil && userLocation == nil
         
@@ -178,7 +180,7 @@ class HomeViewModel: ObservableObject {
         networkService.fetchNearbyEvents(
             latitude: lastKnownCoordinate?.latitude,
             longitude: lastKnownCoordinate?.longitude,
-            radiusMiles: 30
+            radiusMiles: radiusMiles
         )
         .receive(on: DispatchQueue.main)
         .sink(
@@ -253,11 +255,17 @@ class HomeViewModel: ObservableObject {
             "The most talked-about underground event in Brooklyn."
         ]
         
+        let featuredImages = ["party1", "party2", "party3", "party4", "party5"]
+        
         return (0..<5).map { index in
             let daysFromNow = index + 1
             let eventDate = calendar.date(byAdding: .day, value: daysFromNow, to: now) ?? now
             let hour = 19 + (index % 4) // 7 PM to 10 PM
             let eventDateTime = calendar.date(bySettingHour: hour, minute: 0, second: 0, of: eventDate) ?? eventDate
+            
+            // Make the first event (Summer Music Festival) private with access code
+            let isPrivate = index == 0
+            let accessCode = isPrivate ? "MUSIC2024" : nil
             
             return Event(
                 id: "featured-\(index)",
@@ -270,7 +278,7 @@ class HomeViewModel: ObservableObject {
                 time: eventDateTime,
                 location: featuredLocations[index],
                 locationDetails: nil,
-                images: [],
+                images: [featuredImages[index % featuredImages.count]],
                 ticketPrice: Double.random(in: 25...150),
                 capacity: Int.random(in: 100...500),
                 attendeeCount: Int.random(in: 50...300),
@@ -280,7 +288,9 @@ class HomeViewModel: ObservableObject {
                 likes: Int.random(in: 100...1000),
                 isLiked: false,
                 isSaved: false,
-                isFeatured: true
+                isFeatured: true,
+                isPrivate: isPrivate,
+                accessCode: accessCode
             )
         }
     }
@@ -334,6 +344,8 @@ class HomeViewModel: ObservableObject {
             "Weekend warriors unite for an epic night."
         ]
         
+        let nearbyImages = ["party1", "party2", "party3", "party4", "party5"]
+        
         return (0..<8).map { index in
             let daysFromNow = index + 1
             let eventDate = calendar.date(byAdding: .day, value: daysFromNow, to: now) ?? now
@@ -355,7 +367,7 @@ class HomeViewModel: ObservableObject {
                 time: eventDateTime,
                 location: nearbyLocations[index],
                 locationDetails: nil,
-                images: [],
+                images: [nearbyImages[index % nearbyImages.count]],
                 ticketPrice: ticketPrice,
                 capacity: Int.random(in: 50...200),
                 attendeeCount: Int.random(in: 20...150),

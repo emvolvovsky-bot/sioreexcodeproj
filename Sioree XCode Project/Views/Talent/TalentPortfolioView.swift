@@ -179,22 +179,37 @@ struct AddEventToPortfolioView: View {
                                         selectedEvent = event
                                     }) {
                                         HStack {
-                                            if let firstImage = event.images.first, !firstImage.isEmpty {
-                                                AsyncImage(url: URL(string: firstImage)) { image in
-                                                    image
-                                                        .resizable()
-                                                        .scaledToFill()
-                                                } placeholder: {
-                                                    Color.sioreeLightGrey.opacity(0.2)
+                                            if let coverPhoto = event.images.first, !coverPhoto.isEmpty, let url = URL(string: coverPhoto) {
+                                                AsyncImage(url: url) { phase in
+                                                    switch phase {
+                                                    case .empty:
+                                                        Rectangle()
+                                                            .fill(Color.sioreeLightGrey.opacity(0.05))
+                                                            .frame(width: 60, height: 60)
+                                                    case .success(let image):
+                                                        image
+                                                            .resizable()
+                                                            .scaledToFill()
+                                                            .frame(width: 60, height: 60)
+                                                            .opacity(1.0) // Explicitly full opacity - no dimming
+                                                    case .failure:
+                                                        Rectangle()
+                                                            .fill(Color.sioreeLightGrey.opacity(0.1))
+                                                            .frame(width: 60, height: 60)
+                                                    @unknown default:
+                                                        Rectangle()
+                                                            .fill(Color.sioreeLightGrey.opacity(0.1))
+                                                            .frame(width: 60, height: 60)
+                                                    }
                                                 }
                                                 .frame(width: 60, height: 60)
                                                 .cornerRadius(Theme.CornerRadius.small)
+                                                .clipped()
                                             } else {
-                                                Image(systemName: "photo")
-                                                    .font(.system(size: 30))
-                                                    .foregroundColor(.sioreeIcyBlue)
+                                                // No cover photo - show empty space (bug state)
+                                                Rectangle()
+                                                    .fill(Color.sioreeLightGrey.opacity(0.1))
                                                     .frame(width: 60, height: 60)
-                                                    .background(Color.sioreeLightGrey.opacity(0.1))
                                                     .cornerRadius(Theme.CornerRadius.small)
                                             }
                                             

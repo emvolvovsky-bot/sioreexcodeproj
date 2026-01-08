@@ -506,12 +506,6 @@ struct EventHighlightCircle: View {
     let event: Event
     private let circleSize: CGFloat = 100
     
-    private var coverImageUrl: String? {
-        // Use the host's event image (first image from event.images)
-        // This is the image the host uploaded when creating the event
-        return event.images.first
-    }
-    
     var body: some View {
         ZStack {
             // Glowing icy blue border (outer glow)
@@ -544,20 +538,26 @@ struct EventHighlightCircle: View {
                         .frame(width: circleSize + 6, height: circleSize + 6)
                 )
             
-            // Inner circle with image
-            if let imageUrl = coverImageUrl, let url = URL(string: imageUrl) {
+            // Inner circle with cover photo ONLY, no fallback
+            if let coverPhoto = event.images.first, !coverPhoto.isEmpty, let url = URL(string: coverPhoto) {
                 AsyncImage(url: url) { phase in
                     switch phase {
                     case .empty:
                         Circle()
-                            .fill(Color.sioreeCharcoal)
+                            .fill(Color.sioreeLightGrey.opacity(0.05))
                             .frame(width: circleSize, height: circleSize)
+                            .overlay(
+                                ProgressView()
+                                    .tint(.sioreeIcyBlue)
+                                    .scaleEffect(0.7)
+                            )
                     case .success(let image):
                         image
                             .resizable()
                             .scaledToFill()
                             .frame(width: circleSize, height: circleSize)
                             .clipShape(Circle())
+                            .opacity(1.0) // Explicitly full opacity - no dimming
                             .overlay(
                                 Circle()
                                     .stroke(Color.sioreeBlack, lineWidth: 2)
@@ -565,27 +565,18 @@ struct EventHighlightCircle: View {
                             )
                     case .failure:
                         Circle()
-                            .fill(Color.sioreeCharcoal)
+                            .fill(Color.sioreeLightGrey.opacity(0.1))
                             .frame(width: circleSize, height: circleSize)
                     @unknown default:
                         Circle()
-                            .fill(Color.sioreeCharcoal)
+                            .fill(Color.sioreeLightGrey.opacity(0.1))
                             .frame(width: circleSize, height: circleSize)
                     }
                 }
             } else {
-                // No image - subtle gradient placeholder
+                // No cover photo - show empty space (bug state)
                 Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.sioreeCharcoal.opacity(0.6),
-                                Color.sioreeCharcoal.opacity(0.4)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+                    .fill(Color.sioreeLightGrey.opacity(0.1))
                     .frame(width: circleSize, height: circleSize)
             }
         }

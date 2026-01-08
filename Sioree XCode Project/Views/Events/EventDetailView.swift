@@ -22,6 +22,7 @@ struct EventDetailView: View {
     @State private var requestAlertMessage: String?
     @State private var requestSuccess = false
     @State private var cancellables = Set<AnyCancellable>()
+    @State private var showEditEvent = false
     
     init(eventId: String, isTalentMapMode: Bool = false) {
         self.eventId = eventId
@@ -50,50 +51,9 @@ struct EventDetailView: View {
             if let event = viewModel.event {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 0) {
-                            // Hero Image with real images or placeholder
+                            // Hero Image - Cover photo ONLY, no fallback
                             ZStack {
-                                if let firstImage = event.images.first, !firstImage.isEmpty {
-                                    AsyncImage(url: URL(string: firstImage)) { phase in
-                                        switch phase {
-                                        case .empty:
-                                            Rectangle()
-                                                .fill(Color.sioreeLightGrey.opacity(0.3))
-                                                .frame(height: 300)
-                                        case .success(let image):
-                                            image
-                                                .resizable()
-                                                .aspectRatio(contentMode: .fill)
-                                                .frame(height: 300)
-                                                .clipped()
-                                        case .failure:
-                                            Rectangle()
-                                                .fill(Color.sioreeLightGrey.opacity(0.3))
-                                                .frame(height: 300)
-                                        @unknown default:
-                                            Rectangle()
-                                                .fill(Color.sioreeLightGrey.opacity(0.3))
-                                                .frame(height: 300)
-                                        }
-                                    }
-                                } else {
-                                    // Enhanced placeholder with gradient
-                                    ZStack {
-                                        LinearGradient(
-                                            colors: [
-                                                Color.sioreeIcyBlue.opacity(0.3),
-                                                Color.sioreeWarmGlow.opacity(0.2),
-                                                Color.sioreeIcyBlue.opacity(0.1)
-                                            ],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                        
-                                        Image(systemName: "party.popper.fill")
-                                            .font(.system(size: 60))
-                                            .foregroundColor(Color.sioreeIcyBlue.opacity(0.5))
-                                    }
-                                    .frame(height: 300)
-                                }
+                                CoverPhotoView(imageURL: event.images.first, height: 300)
                                 
                                 // Brand promotion badge overlay (if featured)
                                 if event.isFeatured {
@@ -126,7 +86,7 @@ struct EventDetailView: View {
                                     .font(.sioreeH1)
                                     .foregroundColor(.sioreeWhite)
 
-                                if !isTalentMapMode, let need = event.lookingForSummary ?? event.lookingForTalentType, !need.isEmpty {
+                                if !isTalentMapMode, let need = event.lookingForSummary ?? event.lookingForTalentType, !need.isEmpty, need.lowercased() != "general talent" {
                                     HStack(spacing: Theme.Spacing.s) {
                                         Image(systemName: "person.3.sequence.fill")
                                             .foregroundColor(.sioreeIcyBlue)
@@ -377,6 +337,17 @@ struct EventDetailView: View {
                                         Text("You are the host of this event")
                                             .font(.sioreeBody)
                                             .foregroundColor(.sioreeCharcoal.opacity(0.7))
+                                        
+                                        // Edit button for upcoming events only
+                                        if let event = viewModel.event, event.date >= Date() {
+                                            CustomButton(
+                                                title: "Edit Event",
+                                                variant: .primary,
+                                                size: .medium
+                                            ) {
+                                                showEditEvent = true
+                                            }
+                                        }
 
                                         CustomButton(
                                             title: "Request Talent",
@@ -422,7 +393,9 @@ struct EventDetailView: View {
                                     }
                                 }
                             }
-                            .padding(Theme.Spacing.m)
+                            .padding(.horizontal, Theme.Spacing.m)
+                            .padding(.top, Theme.Spacing.m)
+                            .padding(.bottom, Theme.Spacing.s)
                             .background(Color.sioreeWhite)
                         }
                     }
@@ -442,6 +415,15 @@ struct EventDetailView: View {
                                     }
                                 }
                             )
+                        }
+                    }
+                    .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("EventRSVPSuccess"))) { notification in
+                        // Auto-dismiss after a short delay to show the confirmation
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                            if viewModel.showRSVPSheet {
+                                viewModel.showRSVPSheet = false
+                                dismiss()
+                            }
                         }
                     }
                 } else if viewModel.isLoading {
@@ -525,6 +507,10 @@ struct EventDetailView: View {
                     qrString: viewModel.rsvpQRCode
                 ) {
                     viewModel.showRSVPSheet = false
+                    // Dismiss the event detail view after RSVP - navigate back to home
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        dismiss()
+                    }
                 }
             }
             .sheet(isPresented: $showTalentBrowser) {
@@ -535,6 +521,16 @@ struct EventDetailView: View {
                     // and send a notification to the talent
                     showTalentBrowser = false
                 })
+            }
+            .sheet(isPresented: $showEditEvent) {
+                if let event = viewModel.event {
+                    EventEditView(event: event) {
+                        // Reload event after editing
+                        viewModel.loadEvent()
+                        showEditEvent = false
+                    }
+                    .environmentObject(authViewModel)
+                }
             }
             .alert(isPresented: Binding(
                 get: { requestAlertMessage != nil },
@@ -623,52 +619,25 @@ struct RSVPConfirmationView: View {
     let qrString: String?
     let onClose: () -> Void
     
-    private var qrImage: UIImage? {
-        let content = qrString ?? event?.qrCode ?? (event != nil ? "sioree:event:\(event!.id)" : nil)
-        guard let content else { return nil }
-        return QRCodeService.shared.generateQRCode(from: content, size: CGSize(width: 240, height: 240))
-    }
-    
     var body: some View {
         NavigationStack {
             VStack(spacing: Theme.Spacing.l) {
                 Spacer()
                 
-                VStack(spacing: Theme.Spacing.s) {
-                    Text("You’re in!")
+                VStack(spacing: Theme.Spacing.m) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 80))
+                        .foregroundColor(.sioreeIcyBlue)
+                    
+                    Text("You're in!")
                         .font(.sioreeH2)
                         .foregroundColor(.sioreeWhite)
-                    Text("View your tickets in the Tickets tab.")
+                    
+                    Text("More information in tickets tab.")
                         .font(.sioreeBody)
                         .foregroundColor(.sioreeLightGrey)
                         .multilineTextAlignment(.center)
-                }
-                
-                if let qrImage {
-                    Image(uiImage: qrImage)
-                        .interpolation(.none)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 200, height: 200)
-                        .padding()
-                        .background(Color.white)
-                        .cornerRadius(16)
-                        .shadow(color: Color.black.opacity(0.2), radius: 12, x: 0, y: 6)
-                } else {
-                    Image(systemName: "qrcode")
-                        .font(.system(size: 80))
-                        .foregroundColor(.sioreeIcyBlue)
-                        .padding()
-                        .background(Color.sioreeLightGrey.opacity(0.1))
-                        .cornerRadius(16)
-                }
-                
-                if let title = event?.title {
-                    Text(title)
-                        .font(.sioreeH4)
-                        .foregroundColor(.sioreeWhite)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, Theme.Spacing.m)
+                        .padding(.horizontal, Theme.Spacing.l)
                 }
                 
                 Spacer()

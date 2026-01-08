@@ -27,15 +27,9 @@ struct HostEventCard: View {
             showDetail = true
         }) {
             VStack(alignment: .leading, spacing: 0) {
-                // Image placeholder with status badge
+                // Cover photo ONLY, no fallback
                 ZStack {
-                    Color.sioreeLightGrey.opacity(0.3)
-                        .frame(height: 200)
-                    
-                    // Image icon centered
-                    Image(systemName: "party.popper.fill")
-                        .font(.system(size: 50))
-                        .foregroundColor(Color.sioreeIcyBlue.opacity(0.5))
+                    CoverPhotoView(imageURL: event.images.first, height: 200)
                     
                     // Status badge in top right
                     VStack {
@@ -97,33 +91,14 @@ struct HostEventCard: View {
 struct HostEventCardGrid: View {
     let event: Event
     let onTap: () -> Void
-
+    
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            // Event cover photo (prioritized)
-            ZStack {
-                if let imageUrl = event.images.first, let url = URL(string: imageUrl) {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .empty:
-                            placeholderImage
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        case .failure:
-                            placeholderImage
-                        @unknown default:
-                            placeholderImage
-                        }
-                    }
-                } else {
-                    placeholderImage
-                }
-            }
-            .frame(height: 180)
-            .cornerRadius(Theme.CornerRadius.medium)
-            .shadow(color: Color.black.opacity(0.3), radius: 8, x: 0, y: 4)
+            // Event cover photo ONLY, no fallback
+            CoverPhotoView(imageURL: event.images.first, height: 180)
+                .frame(height: 180)
+                .cornerRadius(Theme.CornerRadius.medium)
+                .shadow(color: Color.black.opacity(0.3), radius: 8, x: 0, y: 4)
 
             // Event info overlay (same style as partier profile)
             VStack(alignment: .leading, spacing: 2) {
@@ -143,28 +118,11 @@ struct HostEventCardGrid: View {
                         .foregroundColor(Color.sioreeLightGrey.opacity(0.9))
                 }
                 .shadow(color: Color.black.opacity(0.8), radius: 2)
-
             }
             .padding(Theme.Spacing.s)
         }
         .onTapGesture {
             onTap()
-        }
-    }
-    
-    private var placeholderImage: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    Color.sioreeIcyBlue.opacity(0.3),
-                    Color.sioreeCharcoal.opacity(0.5)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            Image(systemName: "party.popper.fill")
-                .font(.system(size: 40))
-                .foregroundColor(.sioreeIcyBlue.opacity(0.5))
         }
     }
 }
@@ -175,114 +133,84 @@ struct HostUpcomingEventCard: View {
     @State private var showAttendees = false
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Event cover photo
-            ZStack(alignment: .bottomLeading) {
-                if let coverPhotoUrl = event.images.first, let url = URL(string: coverPhotoUrl) {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .empty:
-                            placeholderImage
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        case .failure:
-                            placeholderImage
-                        @unknown default:
-                            placeholderImage
-                        }
-                    }
-                } else {
-                    placeholderImage
-                }
-                
-                // Event info overlay
-                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                    Spacer()
-                    Text(event.title)
-                        .font(.sioreeH3)
-                        .foregroundColor(.sioreeWhite)
-                        .lineLimit(2)
-                        .shadow(color: Color.black.opacity(0.8), radius: 4, x: 0, y: 2)
+        NavigationLink(destination: EventDetailView(eventId: event.id, isTalentMapMode: false).environmentObject(authViewModel)) {
+            VStack(alignment: .leading, spacing: 0) {
+                // Event cover photo ONLY, no fallback
+                ZStack(alignment: .bottomLeading) {
+                    CoverPhotoView(imageURL: event.images.first, height: 280)
                     
-                    HStack(spacing: Theme.Spacing.s) {
-                        Image(systemName: "calendar")
-                            .font(.system(size: 12))
-                            .foregroundColor(.sioreeLightGrey)
-                        Text(event.date.formatted(date: .abbreviated, time: .omitted))
-                            .font(.sioreeBodySmall)
-                            .foregroundColor(.sioreeLightGrey)
+                    // Event info overlay
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                        Spacer()
+                        Text(event.title)
+                            .font(.sioreeH3)
+                            .foregroundColor(.sioreeWhite)
+                            .lineLimit(2)
+                            .shadow(color: Color.black.opacity(0.8), radius: 4, x: 0, y: 2)
                         
-                        Text("•")
-                            .foregroundColor(.sioreeLightGrey.opacity(0.5))
-                        
-                        Image(systemName: "mappin.circle.fill")
-                            .font(.system(size: 12))
-                            .foregroundColor(.sioreeLightGrey)
-                        Text(event.location)
-                            .font(.sioreeBodySmall)
-                            .foregroundColor(.sioreeLightGrey)
-                            .lineLimit(1)
+                        HStack(spacing: Theme.Spacing.s) {
+                            Image(systemName: "calendar")
+                                .font(.system(size: 12))
+                                .foregroundColor(.sioreeLightGrey)
+                            Text(event.date.formatted(date: .abbreviated, time: .omitted))
+                                .font(.sioreeBodySmall)
+                                .foregroundColor(.sioreeLightGrey)
+                            
+                            Text("•")
+                                .foregroundColor(.sioreeLightGrey.opacity(0.5))
+                            
+                            Image(systemName: "mappin.circle.fill")
+                                .font(.system(size: 12))
+                                .foregroundColor(.sioreeLightGrey)
+                            Text(event.location)
+                                .font(.sioreeBodySmall)
+                                .foregroundColor(.sioreeLightGrey)
+                                .lineLimit(1)
+                        }
+                        .shadow(color: Color.black.opacity(0.8), radius: 4, x: 0, y: 2)
                     }
-                    .shadow(color: Color.black.opacity(0.8), radius: 4, x: 0, y: 2)
+                    .padding(Theme.Spacing.m)
                 }
-                .padding(Theme.Spacing.m)
-            }
-            .frame(height: 280)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
-            
-            // Attendee List Button
-            Button(action: {
-                showAttendees = true
-            }) {
-                HStack {
-                    Image(systemName: "person.3.fill")
-                        .font(.system(size: 16))
-                        .foregroundColor(.sioreeIcyBlue)
-                    Text("Attendee List")
-                        .font(.sioreeBody)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.sioreeIcyBlue)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 14))
-                        .foregroundColor(.sioreeIcyBlue.opacity(0.7))
+                .frame(height: 280)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
+                
+                // Attendee List Button
+                Button(action: {
+                    showAttendees = true
+                }) {
+                    HStack {
+                        Image(systemName: "person.3.fill")
+                            .font(.system(size: 16))
+                            .foregroundColor(.sioreeIcyBlue)
+                        Text("Attendee List")
+                            .font(.sioreeBody)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.sioreeIcyBlue)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 14))
+                            .foregroundColor(.sioreeIcyBlue.opacity(0.7))
+                    }
+                    .padding(Theme.Spacing.m)
+                    .background(Color.sioreeCharcoal.opacity(0.3))
                 }
-                .padding(Theme.Spacing.m)
-                .background(Color.sioreeCharcoal.opacity(0.3))
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
+            .background(
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                    .fill(Color.sioreeCharcoal.opacity(0.2))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                    .stroke(Color.sioreeIcyBlue.opacity(0.2), lineWidth: 1)
+            )
         }
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .fill(Color.sioreeCharcoal.opacity(0.2))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .stroke(Color.sioreeIcyBlue.opacity(0.2), lineWidth: 1)
-        )
+        .buttonStyle(PlainButtonStyle())
         .sheet(isPresented: $showAttendees) {
             NavigationStack {
                 EventAttendeesView(eventId: event.id, eventName: event.title)
                     .environmentObject(authViewModel)
             }
-        }
-    }
-    
-    private var placeholderImage: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    Color.sioreeIcyBlue.opacity(0.3),
-                    Color.sioreeCharcoal.opacity(0.5)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            Image(systemName: "party.popper.fill")
-                .font(.system(size: 60))
-                .foregroundColor(.sioreeIcyBlue.opacity(0.5))
         }
     }
 }

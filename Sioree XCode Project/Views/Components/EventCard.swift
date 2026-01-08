@@ -15,42 +15,9 @@ struct EventCard: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Hero Image with enhanced visual
+            // Hero Image - Cover photo ONLY, no fallback
             ZStack(alignment: .topTrailing) {
-                if let firstImage = event.images.first {
-                    AsyncImage(url: URL(string: firstImage)) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        // Enhanced placeholder with gradient
-                        ZStack {
-                            LinearGradient(
-                                colors: [Color.sioreeIcyBlue.opacity(0.3), Color.sioreeWarmGlow.opacity(0.2)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                            Image(systemName: "party.popper.fill")
-                                .font(.system(size: 60))
-                                .foregroundColor(.sioreeIcyBlue.opacity(0.6))
-                        }
-                    }
-                    .frame(height: 200)
-                    .clipped()
-                } else {
-                    // Enhanced empty state with gradient
-                    ZStack {
-                        LinearGradient(
-                            colors: [Color.sioreeIcyBlue.opacity(0.3), Color.sioreeWarmGlow.opacity(0.2)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                        Image(systemName: "party.popper.fill")
-                            .font(.system(size: 60))
-                            .foregroundColor(.sioreeIcyBlue.opacity(0.6))
-                    }
-                    .frame(height: 200)
-                }
+                CoverPhotoView(imageURL: event.images.first, height: 200)
                 
                 // Action buttons
                 HStack(spacing: Theme.Spacing.s) {

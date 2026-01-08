@@ -14,6 +14,177 @@ struct EventPhoto {
     let imageIndex: Int
 }
 
+struct FullScreenPhotoViewer: View {
+    let photos: [EventPhoto]
+    @Binding var currentIndex: Int
+    @Environment(\.dismiss) var dismiss
+
+    var body: some View {
+        ZStack {
+            Color.sioreeBlack.edgesIgnoringSafeArea(.all)
+
+            TabView(selection: $currentIndex) {
+                ForEach(photos.indices, id: \.self) { index in
+                    let photo = photos[index]
+                    ZStack(alignment: .bottomLeading) {
+                        if let url = URL(string: photo.url) {
+                            AsyncImage(url: url) { phase in
+                                switch phase {
+                                case .empty:
+                                    Rectangle()
+                                        .fill(Color.sioreeCharcoal)
+                                        .overlay(
+                                            ProgressView()
+                                                .tint(Color.sioreeIcyBlue)
+                                                .scaleEffect(2)
+                                        )
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                case .failure:
+                                    Rectangle()
+                                        .fill(Color.sioreeCharcoal)
+                                        .overlay(
+                                            VStack(spacing: Theme.Spacing.m) {
+                                                Image(systemName: "photo")
+                                                    .font(.system(size: 60))
+                                                    .foregroundColor(Color.sioreeLightGrey)
+                                                Text("Failed to load")
+                                                    .font(.sioreeH4)
+                                                    .foregroundColor(Color.sioreeLightGrey.opacity(0.7))
+                                            }
+                                        )
+                                @unknown default:
+                                    Rectangle()
+                                        .fill(Color.sioreeCharcoal)
+                                }
+                            }
+                        }
+
+                        // Photo info overlay
+                        VStack(alignment: .leading, spacing: 4) {
+                            Spacer()
+                            if let caption = photo.post.caption, !caption.isEmpty {
+                                Text(caption)
+                                    .font(.sioreeBody)
+                                    .foregroundColor(Color.sioreeWhite)
+                                    .lineLimit(3)
+                                    .shadow(color: Color.black.opacity(0.8), radius: 4)
+                                    .padding(.horizontal, Theme.Spacing.m)
+                                    .padding(.bottom, 8)
+                            }
+
+                            HStack(spacing: 8) {
+                                Text("\(index + 1) of \(photos.count)")
+                                    .font(.sioreeCaption)
+                                    .foregroundColor(Color.sioreeWhite.opacity(0.8))
+                                    .padding(.horizontal, Theme.Spacing.s)
+                                    .padding(.vertical, Theme.Spacing.xs)
+                                    .background(Color.black.opacity(0.6))
+                                    .cornerRadius(Theme.CornerRadius.medium)
+
+                                Spacer()
+
+                                // User info
+                                HStack(spacing: 6) {
+                                    if let avatarUrl = photo.post.userAvatar, let url = URL(string: avatarUrl) {
+                                        AsyncImage(url: url) { phase in
+                                            switch phase {
+                                            case .success(let image):
+                                                image
+                                                    .resizable()
+                                                    .scaledToFill()
+                                                    .frame(width: 24, height: 24)
+                                                    .clipShape(Circle())
+                                            default:
+                                                Circle()
+                                                    .fill(Color.sioreeLightGrey.opacity(0.3))
+                                                    .frame(width: 24, height: 24)
+                                            }
+                                        }
+                                    } else {
+                                        Circle()
+                                            .fill(Color.sioreeLightGrey.opacity(0.3))
+                                            .frame(width: 24, height: 24)
+                                            .overlay(
+                                                Image(systemName: "person.fill")
+                                                    .font(.system(size: 12))
+                                                    .foregroundColor(Color.sioreeLightGrey)
+                                            )
+                                    }
+
+                                    Text(photo.post.userName)
+                                        .font(.sioreeCaption)
+                                        .foregroundColor(Color.sioreeWhite)
+                                }
+                                .shadow(color: Color.black.opacity(0.8), radius: 4)
+                            }
+                            .padding(.horizontal, Theme.Spacing.m)
+                            .padding(.bottom, Theme.Spacing.m)
+                        }
+                    }
+                    .tag(index)
+                }
+            }
+            .tabViewStyle(.page)
+            .indexViewStyle(.page(backgroundDisplayMode: .always))
+            .overlay(
+                // Tap areas for immediate navigation
+                GeometryReader { geometry in
+                    HStack(spacing: 0) {
+                        // Left tap area (previous photo)
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                if currentIndex > 0 {
+                                    var transaction = Transaction(animation: nil)
+                                    transaction.disablesAnimations = true
+                                    withTransaction(transaction) {
+                                        currentIndex -= 1
+                                    }
+                                }
+                            }
+                            .frame(width: geometry.size.width / 2)
+                        
+                        // Right tap area (next photo)
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                if currentIndex < photos.count - 1 {
+                                    var transaction = Transaction(animation: nil)
+                                    transaction.disablesAnimations = true
+                                    withTransaction(transaction) {
+                                        currentIndex += 1
+                                    }
+                                }
+                            }
+                            .frame(width: geometry.size.width / 2)
+                    }
+                }
+            )
+
+            // Close button
+            VStack {
+                HStack {
+                    Spacer()
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 30))
+                            .foregroundColor(Color.sioreeWhite.opacity(0.8))
+                            .background(Color.black.opacity(0.6))
+                            .clipShape(Circle())
+                            .padding(.top, Theme.Spacing.m)
+                            .padding(.trailing, Theme.Spacing.m)
+                    }
+                }
+                Spacer()
+            }
+        }
+    }
+}
+
 struct EventPhotosViewer: View {
     let event: Event
     let viewUserId: String? // If provided, show photos by this user only; if nil, show current user's photos
@@ -117,8 +288,10 @@ struct EventPhotosViewer: View {
 
                     Spacer()
 
-                    // Add Photos button - only show when viewing own profile
-                    if isOwnProfile && viewUserId == nil {
+                    // Add Photos button - only show when viewing own profile and event is not past
+                    // For hosts, don't show the button on past events
+                    let isEventPast = event.date < Date() || event.status == .completed
+                    if isOwnProfile && viewUserId == nil && (!isHost || !isEventPast) {
                         Button(action: {
                             showAddPhotos = true
                         }) {
@@ -308,26 +481,26 @@ struct EventPhotosViewer: View {
             print("🎬 EventPhotosViewer appeared, loading posts...")
             loadPosts()
         }
-            .sheet(isPresented: $showAddPhotos) {
-                AddPostFromEventView(event: event)
-                    .environmentObject(authViewModel)
-            }
-            .sheet(isPresented: $showFullScreenViewer) {
-                FullScreenPhotoViewer(
-                    photos: allImages,
-                    currentIndex: $currentPhotoIndex
-                )
-            }
-            .alert("Delete Photo", isPresented: $showDeleteConfirmation) {
-                Button("Cancel", role: .cancel) { }
-                Button("Delete", role: .destructive) {
-                    if let postToDelete = postToDelete {
-                        deletePost(postToDelete)
-                    }
+        .sheet(isPresented: $showAddPhotos) {
+            AddPostFromEventView(event: event)
+                .environmentObject(authViewModel)
+        }
+        .sheet(isPresented: $showFullScreenViewer) {
+            FullScreenPhotoViewer(
+                photos: allImages,
+                currentIndex: $currentPhotoIndex
+            )
+        }
+        .alert("Delete Photo", isPresented: $showDeleteConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                if let postToDelete = postToDelete {
+                    deletePost(postToDelete)
                 }
-            } message: {
-                Text("Are you sure you want to delete this photo? This action cannot be undone.")
             }
+        } message: {
+            Text("Are you sure you want to delete this photo? This action cannot be undone.")
+        }
     }
 
     private func deletePhoto(_ photoUrl: String) {
@@ -456,40 +629,9 @@ struct EventCardZStack: View {
         ZStack {
             // Event card with offset based on index
             VStack(alignment: .leading, spacing: 0) {
-                // Hero Image
+                // Hero Image - Cover photo ONLY, no fallback
                 ZStack(alignment: .topTrailing) {
-                    if let firstImage = event.images.first {
-                        AsyncImage(url: URL(string: firstImage)) { image in
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                        } placeholder: {
-                            ZStack {
-                                LinearGradient(
-                                    colors: [Color.sioreeIcyBlue.opacity(0.3), Color.sioreeWarmGlow.opacity(0.2)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                                Image(systemName: "party.popper.fill")
-                                    .font(.system(size: 60))
-                                    .foregroundColor(.sioreeIcyBlue.opacity(0.6))
-                            }
-                        }
-                        .frame(height: 200)
-                        .clipped()
-                    } else {
-                        ZStack {
-                            LinearGradient(
-                                colors: [Color.sioreeIcyBlue.opacity(0.3), Color.sioreeWarmGlow.opacity(0.2)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                            Image(systemName: "party.popper.fill")
-                                .font(.system(size: 60))
-                                .foregroundColor(.sioreeIcyBlue.opacity(0.6))
-                        }
-                        .frame(height: 200)
-                    }
+                    CoverPhotoView(imageURL: event.images.first, height: 200)
                 }
 
                 // Content
@@ -693,178 +835,6 @@ struct EventsAttendedView: View {
     }
 
     @State private var cancellables = Set<AnyCancellable>()
-}
-
-
-struct FullScreenPhotoViewer: View {
-    let photos: [EventPhoto]
-    @Binding var currentIndex: Int
-    @Environment(\.dismiss) var dismiss
-
-    var body: some View {
-        ZStack {
-            Color.sioreeBlack.edgesIgnoringSafeArea(.all)
-
-            TabView(selection: $currentIndex) {
-                ForEach(photos.indices, id: \.self) { index in
-                    let photo = photos[index]
-                    ZStack(alignment: .bottomLeading) {
-                        if let url = URL(string: photo.url) {
-                            AsyncImage(url: url) { phase in
-                                switch phase {
-                                case .empty:
-                                    Rectangle()
-                                        .fill(Color.sioreeCharcoal)
-                                        .overlay(
-                                            ProgressView()
-                                                .tint(Color.sioreeIcyBlue)
-                                                .scaleEffect(2)
-                                        )
-                                case .success(let image):
-                                    image
-                                        .resizable()
-                                        .scaledToFit()
-                                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                case .failure:
-                                    Rectangle()
-                                        .fill(Color.sioreeCharcoal)
-                                        .overlay(
-                                            VStack(spacing: Theme.Spacing.m) {
-                                                Image(systemName: "photo")
-                                                    .font(.system(size: 60))
-                                                    .foregroundColor(Color.sioreeLightGrey)
-                                                Text("Failed to load")
-                                                    .font(.sioreeH4)
-                                                    .foregroundColor(Color.sioreeLightGrey.opacity(0.7))
-                                            }
-                                        )
-                                @unknown default:
-                                    Rectangle()
-                                        .fill(Color.sioreeCharcoal)
-                                }
-                            }
-                        }
-
-                        // Photo info overlay
-                        VStack(alignment: .leading, spacing: 4) {
-                            Spacer()
-                            if let caption = photo.post.caption, !caption.isEmpty {
-                                Text(caption)
-                                    .font(.sioreeBody)
-                                    .foregroundColor(Color.sioreeWhite)
-                                    .lineLimit(3)
-                                    .shadow(color: Color.black.opacity(0.8), radius: 4)
-                                    .padding(.horizontal, Theme.Spacing.m)
-                                    .padding(.bottom, 8)
-                            }
-
-                            HStack(spacing: 8) {
-                                Text("\(index + 1) of \(photos.count)")
-                                    .font(.sioreeCaption)
-                                    .foregroundColor(Color.sioreeWhite.opacity(0.8))
-                                    .padding(.horizontal, Theme.Spacing.s)
-                                    .padding(.vertical, Theme.Spacing.xs)
-                                    .background(Color.black.opacity(0.6))
-                                    .cornerRadius(Theme.CornerRadius.medium)
-
-                                Spacer()
-
-                                // User info
-                                HStack(spacing: 6) {
-                                    if let avatarUrl = photo.post.userAvatar, let url = URL(string: avatarUrl) {
-                                        AsyncImage(url: url) { phase in
-                                            switch phase {
-                                            case .success(let image):
-                                                image
-                                                    .resizable()
-                                                    .scaledToFill()
-                                                    .frame(width: 24, height: 24)
-                                                    .clipShape(Circle())
-                                            default:
-                                                Circle()
-                                                    .fill(Color.sioreeLightGrey.opacity(0.3))
-                                                    .frame(width: 24, height: 24)
-                                            }
-                                        }
-                                    } else {
-                                        Circle()
-                                            .fill(Color.sioreeLightGrey.opacity(0.3))
-                                            .frame(width: 24, height: 24)
-                                            .overlay(
-                                                Image(systemName: "person.fill")
-                                                    .font(.system(size: 12))
-                                                    .foregroundColor(Color.sioreeLightGrey)
-                                            )
-                                    }
-
-                                    Text(photo.post.userName)
-                                        .font(.sioreeCaption)
-                                        .foregroundColor(Color.sioreeWhite)
-                                }
-                                .shadow(color: Color.black.opacity(0.8), radius: 4)
-                            }
-                            .padding(.horizontal, Theme.Spacing.m)
-                            .padding(.bottom, Theme.Spacing.m)
-                        }
-                    }
-                    .tag(index)
-                }
-            }
-            .tabViewStyle(.page)
-            .indexViewStyle(.page(backgroundDisplayMode: .always))
-            .overlay(
-                // Tap areas for immediate navigation
-                GeometryReader { geometry in
-                    HStack(spacing: 0) {
-                        // Left tap area (previous photo)
-                        Color.clear
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                if currentIndex > 0 {
-                                    var transaction = Transaction(animation: nil)
-                                    transaction.disablesAnimations = true
-                                    withTransaction(transaction) {
-                                        currentIndex -= 1
-                                    }
-                                }
-                            }
-                            .frame(width: geometry.size.width / 2)
-                        
-                        // Right tap area (next photo)
-                        Color.clear
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                if currentIndex < photos.count - 1 {
-                                    var transaction = Transaction(animation: nil)
-                                    transaction.disablesAnimations = true
-                                    withTransaction(transaction) {
-                                        currentIndex += 1
-                                    }
-                                }
-                            }
-                            .frame(width: geometry.size.width / 2)
-                    }
-                }
-            )
-
-            // Close button
-            VStack {
-                HStack {
-                    Spacer()
-                    Button(action: { dismiss() }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 30))
-                            .foregroundColor(Color.sioreeWhite.opacity(0.8))
-                            .background(Color.black.opacity(0.6))
-                            .clipShape(Circle())
-                            .padding(.top, Theme.Spacing.m)
-                            .padding(.trailing, Theme.Spacing.m)
-                    }
-                }
-                Spacer()
-            }
-        }
-    }
 }
 
 #Preview {

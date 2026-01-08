@@ -348,6 +348,149 @@ router.post('/', authenticate, [
   }
 });
 
+// PUT /api/events/:id (requires auth, host only)
+router.put('/:id', authenticate, [
+  body('title').optional().trim().notEmpty(),
+  body('description').optional().trim(),
+  body('date').optional().isISO8601(),
+  body('location').optional().trim().notEmpty(),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    
+    const { id } = req.params;
+    const {
+      title,
+      description,
+      date,
+      location,
+      latitude,
+      longitude,
+      capacity,
+    } = req.body;
+    
+    // First, verify the event exists and the user is the host
+    const eventCheck = await query(
+      'SELECT host_id FROM events WHERE id = $1',
+      [id]
+    );
+    
+    if (eventCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Event not found' });
+    }
+    
+    if (eventCheck.rows[0].host_id !== req.user.id) {
+      return res.status(403).json({ error: 'Only the event host can update this event' });
+    }
+    
+    // Build update query dynamically based on provided fields
+    const updates = [];
+    const params = [];
+    let paramIndex = 1;
+    
+    if (title !== undefined) {
+      updates.push(`title = $${paramIndex}`);
+      params.push(title);
+      paramIndex++;
+    }
+    
+    if (description !== undefined) {
+      updates.push(`description = $${paramIndex}`);
+      params.push(description);
+      paramIndex++;
+    }
+    
+    if (date !== undefined) {
+      updates.push(`date = $${paramIndex}`);
+      params.push(date);
+      paramIndex++;
+    }
+    
+    if (location !== undefined) {
+      updates.push(`location = $${paramIndex}`);
+      params.push(location);
+      paramIndex++;
+    }
+    
+    if (latitude !== undefined) {
+      updates.push(`latitude = $${paramIndex}`);
+      params.push(latitude);
+      paramIndex++;
+    }
+    
+    if (longitude !== undefined) {
+      updates.push(`longitude = $${paramIndex}`);
+      params.push(longitude);
+      paramIndex++;
+    }
+    
+    if (capacity !== undefined) {
+      updates.push(`capacity = $${paramIndex}`);
+      params.push(capacity);
+      paramIndex++;
+    }
+    
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+    
+    // Always update the updated_at timestamp
+    updates.push(`updated_at = NOW()`);
+    
+    params.push(id);
+    
+    const updateQuery = `
+      UPDATE events 
+      SET ${updates.join(', ')}
+      WHERE id = $${paramIndex}
+      RETURNING id, host_id, title, description, date, location, latitude, longitude, ticket_price, capacity, tags, is_featured, images, created_at, updated_at
+    `;
+    
+    const result = await query(updateQuery, params);
+    const updatedEvent = result.rows[0];
+    
+    // Get host name
+    const hostResult = await query(
+      'SELECT name, username FROM users WHERE id = $1',
+      [updatedEvent.host_id]
+    );
+    const host = hostResult.rows[0];
+    
+    // Format response similar to create endpoint
+    const completeEvent = {
+      id: updatedEvent.id,
+      hostId: updatedEvent.host_id,
+      title: updatedEvent.title,
+      hostName: host?.name || host?.username || 'Unknown Host',
+      date: updatedEvent.date,
+      location: updatedEvent.location,
+      latitude: updatedEvent.latitude,
+      longitude: updatedEvent.longitude,
+      ticketPrice: updatedEvent.ticket_price,
+      capacity: updatedEvent.capacity,
+      tags: updatedEvent.tags || [],
+      isFeatured: updatedEvent.is_featured || false,
+      images: updatedEvent.images || [],
+      created_at: updatedEvent.created_at,
+      description: updatedEvent.description || '',
+      attendees: 0,
+      status: 'published',
+      likes: 0,
+      isLiked: false,
+      isSaved: false,
+      isRSVPed: false,
+    };
+    
+    res.json(completeEvent);
+  } catch (error) {
+    console.error('Update event error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /api/events/:eventId/attendees
 router.get('/:eventId/attendees', async (req, res) => {
   try {

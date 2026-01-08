@@ -26,25 +26,8 @@ struct AppEventCard: View {
             onTap()
         }) {
             VStack(alignment: .leading, spacing: 0) {
-                // Event Image with enhanced gradient
-                ZStack {
-                    LinearGradient(
-                        colors: [
-                            Color.sioreeIcyBlue.opacity(0.4),
-                            Color.sioreeWarmGlow.opacity(0.3),
-                            Color.sioreeIcyBlue.opacity(0.2)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                    .frame(height: 200)
-                    
-                    // Animated party icon
-                    Image(systemName: "party.popper.fill")
-                        .font(.system(size: 60))
-                        .foregroundColor(.sioreeIcyBlue.opacity(0.7))
-                        .shadow(color: .sioreeIcyBlue.opacity(0.5), radius: 10)
-                }
+                // Event Image - Cover photo ONLY, no fallback
+                CoverPhotoView(imageURL: event.images.first, height: 200)
                 
                 // Content - Fixed height container
                 VStack(alignment: .leading, spacing: Theme.Spacing.s) {

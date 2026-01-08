@@ -312,6 +312,8 @@ router.post("/", async (req, res) => {
     const body = req.body || {};
     const eventDate = body.event_date || body.date || body.eventDate;
     const { title, description, location, ticket_price, ticketPrice, capacity } = body;
+    // Extract images array from request body - support both camelCase and snake_case
+    const images = body.images || body.cover_photo || (body.coverPhoto ? [body.coverPhoto] : []) || [];
     const lookingForTalentType =
       body.lookingForTalentType ||
       body.looking_for_talent_type ||
@@ -338,6 +340,7 @@ router.post("/", async (req, res) => {
     console.log("   Event Date:", eventDate);
     console.log("   Ticket Price:", ticket_price || ticketPrice);
     console.log("   Capacity:", capacity);
+    console.log("   Images:", images);
     console.log("   Looking For Talent Type:", lookingForTalentType);
     console.log("   Looking For Roles:", lookingForRoles);
     console.log("   Looking For Notes:", lookingForNotes);
@@ -385,9 +388,12 @@ router.post("/", async (req, res) => {
     
     console.log("💰 Ticket price received:", ticketPriceField, "→ parsed:", ticketPriceValue, "→ DB:", dbTicketPrice);
 
+    // Ensure images is an array and save to database
+    const imagesArray = Array.isArray(images) ? images : (images ? [images] : []);
+    
     const result = await db.query(
-      `INSERT INTO events (creator_id, title, description, location, event_date, ticket_price, capacity, talent_ids, looking_for_talent_type, looking_for_roles, looking_for_notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `INSERT INTO events (creator_id, title, description, location, event_date, ticket_price, capacity, talent_ids, looking_for_talent_type, looking_for_roles, looking_for_notes, images)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING *`,
       [
         decoded.userId,
@@ -400,7 +406,8 @@ router.post("/", async (req, res) => {
         talentIds,
         lookingForTalentType || lookingForLabel || null,
         lookingForRoles,
-        lookingForNotes || null
+        lookingForNotes || null,
+        imagesArray // Save images array to database
       ]
     );
 
@@ -433,6 +440,10 @@ router.post("/", async (req, res) => {
     // Persist the computed featured flag so subsequent reads stay consistent
     await db.query(`UPDATE events SET is_featured = $1 WHERE id = $2`, [qualifiesFeatured, eventId]);
 
+    // Get images from database result or use the ones from request body
+    const savedImages = eventRow.images || imagesArray;
+    const finalImages = Array.isArray(savedImages) ? savedImages : (savedImages ? [savedImages] : []);
+    
     const event = {
       id: eventId,
       title: eventRow.title || "",
@@ -442,7 +453,7 @@ router.post("/", async (req, res) => {
       hostAvatar: host.avatar || null,
       date: toISOString(eventRow.event_date),
       location: eventRow.location || "",
-      images: [],
+      images: finalImages, // Use the actual images array - NOT empty!
       ticketPrice: eventRow.ticket_price && parseFloat(eventRow.ticket_price) > 0 ? parseFloat(eventRow.ticket_price) : null,
       capacity: eventRow.capacity || null,
       attendees: 0,  // Maps to attendeeCount via CodingKeys
@@ -458,6 +469,8 @@ router.post("/", async (req, res) => {
       lookingForRoles: eventLookingForRoles,
       lookingForNotes: eventLookingForNotes
     };
+    
+    console.log("📸 Event images:", finalImages);
     
     // Validate all required fields are present
     if (!event.id || !event.title || !event.hostId || !event.hostName || !event.date || !event.location) {

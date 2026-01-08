@@ -19,6 +19,7 @@ struct EventStoryViewer: View {
     @State private var showAddPhotos = false
     @State private var cancellables = Set<AnyCancellable>()
     @State private var dragOffset: CGFloat = 0
+    @State private var verticalDragOffset: CGFloat = 0
     @State private var showDeleteConfirmation = false
     @State private var photoToDelete: EventPhoto? = nil
     
@@ -216,7 +217,9 @@ struct EventStoryViewer: View {
                                 .scaledToFill()
                                 .frame(width: geometry.size.width, height: geometry.size.height)
                                 .clipped()
-                                .offset(x: dragOffset)
+                                .offset(x: dragOffset, y: verticalDragOffset)
+                                .scaleEffect(verticalDragOffset != 0 ? 1 - abs(verticalDragOffset) / 1000.0 : 1.0)
+                                .opacity(verticalDragOffset != 0 ? 1.0 - abs(verticalDragOffset) / 500.0 : 1.0)
                         case .failure:
                             Color.sioreeCharcoal
                                 .overlay(
@@ -336,17 +339,42 @@ struct EventStoryViewer: View {
             .gesture(
                 DragGesture()
                     .onChanged { value in
-                        dragOffset = value.translation.width
+                        // Prioritize vertical drag for dismiss gesture
+                        if abs(value.translation.height) > abs(value.translation.width) {
+                            // Vertical swipe - for dismissing
+                            verticalDragOffset = value.translation.height
+                        } else {
+                            // Horizontal swipe - for photo navigation
+                            dragOffset = value.translation.width
+                        }
                     }
                     .onEnded { value in
-                        let threshold: CGFloat = 100
-                        if value.translation.width > threshold {
-                            goToPrevious()
-                        } else if value.translation.width < -threshold {
-                            goToNext()
-                        }
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                            dragOffset = 0
+                        // Check if it's a downward swipe (dismiss gesture)
+                        if abs(value.translation.height) > abs(value.translation.width) && value.translation.height > 0 {
+                            // Downward swipe - dismiss if significant
+                            let threshold: CGFloat = 100
+                            if value.translation.height > threshold {
+                                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                    dismiss()
+                                }
+                            } else {
+                                // Spring back if not enough
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                    verticalDragOffset = 0
+                                }
+                            }
+                        } else {
+                            // Horizontal swipe - navigate photos
+                            let threshold: CGFloat = 100
+                            if value.translation.width > threshold {
+                                goToPrevious()
+                            } else if value.translation.width < -threshold {
+                                goToNext()
+                            }
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                dragOffset = 0
+                                verticalDragOffset = 0
+                            }
                         }
                     }
             )

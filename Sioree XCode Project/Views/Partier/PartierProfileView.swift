@@ -78,36 +78,7 @@ struct PartierProfileView: View {
     }
 
     private var eventsSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            eventsSectionHeader
             eventsContent
-        }
-    }
-
-    private var eventsSectionHeader: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("Event History")
-                    .font(.sioreeH2)
-                    .foregroundColor(Color.sioreeWhite)
-                Spacer()
-                if viewModel.events.count > 6 {
-                    NavigationLink(destination: EventsAttendedView()) {
-                        Text("See All")
-                            .font(.sioreeBodySmall)
-                            .foregroundColor(Color.sioreeIcyBlue)
-                    }
-                }
-            }
-            .padding(.horizontal, Theme.Spacing.m)
-            .padding(.vertical, Theme.Spacing.m)
-
-            // Subtle divider
-            Rectangle()
-                .fill(Color.sioreeLightGrey.opacity(0.2))
-                .frame(height: 1)
-                .padding(.horizontal, Theme.Spacing.m)
-        }
     }
 
     private var eventsContent: some View {
@@ -141,28 +112,46 @@ struct PartierProfileView: View {
     }
 
     private var eventsGridView: some View {
-        LazyVGrid(
-            columns: [
-                GridItem(.flexible(), spacing: Theme.Spacing.m),
-                GridItem(.flexible(), spacing: Theme.Spacing.m)
-            ],
-            spacing: Theme.Spacing.m
-        ) {
-            ForEach(Array(viewModel.events.prefix(6)), id: \.id) { event in
-                EventCardGridItem(event: event)
-                    .onTapGesture {
-                        selectedEventForPhotos = event
-                    }
-                    .contextMenu {
-                        Button(action: {
-                            selectedEventForPost = event
-                        }) {
-                            Label("Add Photos", systemImage: "photo.fill")
+        let columns = Array(repeating: GridItem(.flexible(), spacing: Theme.Spacing.m), count: 3)
+        
+        return LazyVGrid(columns: columns, spacing: Theme.Spacing.l) {
+            ForEach(Array(viewModel.events.prefix(9)), id: \.id) { event in
+                VStack(spacing: Theme.Spacing.xs) {
+                    EventHighlightCircle(event: event)
+                        .onTapGesture {
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+                                // Check if event has photos
+                                let coverKey = "event_cover_\(event.id)"
+                                let hasCover = UserDefaults.standard.string(forKey: coverKey) != nil
+                                let hasEventImages = !event.images.isEmpty
+                                
+                                if !hasCover && !hasEventImages {
+                                    // If no photos, go directly to add photos
+                                    selectedEventForPost = event
+                                } else {
+                                    selectedEventForPhotos = event
+                                }
+                            }
                         }
-                    }
+                        .contextMenu {
+                            Button(action: {
+                                selectedEventForPost = event
+                            }) {
+                                Label("Add Photos", systemImage: "photo.fill")
+                            }
+                        }
+                    
+                    // Event name below (like Instagram highlights)
+                    Text(event.title)
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundColor(.sioreeWhite)
+                        .lineLimit(1)
+                        .frame(maxWidth: 100)
+                }
             }
         }
-        .padding(.all, Theme.Spacing.m)
+        .padding(.horizontal, Theme.Spacing.m)
+        .padding(.vertical, Theme.Spacing.m)
     }
     
     var body: some View {
@@ -230,6 +219,385 @@ struct PartierProfileView: View {
     }
 }
 
+struct EventCollageItem: View {
+    let event: Event
+    
+    private var coverImageUrl: String? {
+        // Check for stored cover image first (from first photo upload)
+        let coverKey = "event_cover_\(event.id)"
+        if let storedCover = UserDefaults.standard.string(forKey: coverKey), !storedCover.isEmpty {
+            return storedCover
+        }
+        // Fallback to event's first image
+        return event.images.first
+    }
+    
+    private var availableImages: [String] {
+        var images: [String] = []
+        
+        // Add cover image if available
+        if let cover = coverImageUrl {
+            images.append(cover)
+        }
+        
+        // Add other event images (excluding the cover if it's already there)
+        for image in event.images {
+            if image != coverImageUrl && !images.contains(image) {
+                images.append(image)
+            }
+        }
+        
+        // Limit to 4 photos for the collage
+        return Array(images.prefix(4))
+    }
+    
+    private var collageHeight: CGFloat {
+        // Dynamic height based on number of photos
+        switch availableImages.count {
+        case 1:
+            return 280
+        case 2:
+            return 240
+        case 3, 4:
+            return 300
+        default:
+            return 280
+        }
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                let images = availableImages
+                let imageCount = images.count
+                
+                if imageCount == 0 {
+                    // No photos - subtle gradient placeholder
+                    LinearGradient(
+                        colors: [
+                            Color.sioreeCharcoal.opacity(0.5),
+                            Color.sioreeCharcoal.opacity(0.3)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .frame(width: geometry.size.width, height: collageHeight)
+                    .clipShape(RoundedRectangle(cornerRadius: 0))
+                } else if imageCount == 1 {
+                    // Single photo - full width
+                    if let url = URL(string: images[0]) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .empty:
+                                Color.sioreeCharcoal
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                    .frame(width: geometry.size.width, height: collageHeight)
+                                    .clipped()
+                        case .failure:
+                                Color.sioreeCharcoal
+                        @unknown default:
+                                Color.sioreeCharcoal
+                            }
+                        }
+                        .frame(width: geometry.size.width, height: collageHeight)
+                        .clipShape(RoundedRectangle(cornerRadius: 0))
+                    }
+                } else if imageCount == 2 {
+                    // Two photos - side by side with subtle overlap
+                    HStack(spacing: 0) {
+                        // Left photo
+                        if let url = URL(string: images[0]) {
+                            AsyncImage(url: url) { phase in
+                                if case .success(let image) = phase {
+                                    image
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: geometry.size.width * 0.52, height: collageHeight)
+                                        .clipped()
+                                } else {
+                                    Color.sioreeCharcoal
+                                }
+                            }
+                            .frame(width: geometry.size.width * 0.52, height: collageHeight)
+                            .clipShape(RoundedRectangle(cornerRadius: 0))
+                            .zIndex(1)
+                        }
+                        
+                        // Right photo - slightly overlapping
+                        if let url = URL(string: images[1]) {
+                            AsyncImage(url: url) { phase in
+                                if case .success(let image) = phase {
+                                    image
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: geometry.size.width * 0.52, height: collageHeight)
+                                        .clipped()
+                                } else {
+                                    Color.sioreeCharcoal
+                                }
+                            }
+                            .frame(width: geometry.size.width * 0.52, height: collageHeight)
+                            .offset(x: -geometry.size.width * 0.04)
+                            .clipShape(RoundedRectangle(cornerRadius: 0))
+                            .zIndex(0)
+                        }
+                    }
+                } else if imageCount == 3 {
+                    // Three photos - one large, two smaller overlapping
+                    HStack(spacing: 0) {
+                        // Left large photo
+                        if let url = URL(string: images[0]) {
+                            AsyncImage(url: url) { phase in
+                                if case .success(let image) = phase {
+                                    image
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: geometry.size.width * 0.6, height: collageHeight)
+                                        .clipped()
+                                } else {
+                                    Color.sioreeCharcoal
+                                }
+                            }
+                            .frame(width: geometry.size.width * 0.6, height: collageHeight)
+                            .clipShape(RoundedRectangle(cornerRadius: 0))
+                            .zIndex(1)
+                        }
+                        
+                        // Right stack of two photos
+                        VStack(spacing: 0) {
+                            // Top right photo
+                            if let url = URL(string: images[1]) {
+                                AsyncImage(url: url) { phase in
+                                    if case .success(let image) = phase {
+                                        image
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: geometry.size.width * 0.42, height: collageHeight * 0.52)
+                                            .clipped()
+                                    } else {
+                                        Color.sioreeCharcoal
+                                    }
+                                }
+                                .frame(width: geometry.size.width * 0.42, height: collageHeight * 0.52)
+                                .offset(x: -geometry.size.width * 0.02)
+                                .clipShape(RoundedRectangle(cornerRadius: 0))
+                                .zIndex(2)
+                            }
+                            
+                            // Bottom right photo
+                            if let url = URL(string: images[2]) {
+                                AsyncImage(url: url) { phase in
+                                    if case .success(let image) = phase {
+                                        image
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: geometry.size.width * 0.42, height: collageHeight * 0.52)
+                                            .clipped()
+                                    } else {
+                                        Color.sioreeCharcoal
+                                    }
+                                }
+                                .frame(width: geometry.size.width * 0.42, height: collageHeight * 0.52)
+                                .offset(x: -geometry.size.width * 0.02, y: -collageHeight * 0.04)
+                                .clipShape(RoundedRectangle(cornerRadius: 0))
+                                .zIndex(0)
+                            }
+                        }
+                    }
+                } else if imageCount >= 4 {
+                    // Four photos - grid with subtle overlaps
+                    VStack(spacing: 0) {
+                        // Top row - two photos
+                        HStack(spacing: 0) {
+                            if let url = URL(string: images[0]) {
+                                AsyncImage(url: url) { phase in
+                                    if case .success(let image) = phase {
+                                        image
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: geometry.size.width * 0.52, height: collageHeight * 0.52)
+                                            .clipped()
+                                    } else {
+                                        Color.sioreeCharcoal
+                                    }
+                                }
+                                .frame(width: geometry.size.width * 0.52, height: collageHeight * 0.52)
+                                .clipShape(RoundedRectangle(cornerRadius: 0))
+                                .zIndex(2)
+                            }
+                            
+                            if let url = URL(string: images[1]) {
+                                AsyncImage(url: url) { phase in
+                                    if case .success(let image) = phase {
+                                        image
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: geometry.size.width * 0.52, height: collageHeight * 0.52)
+                                            .clipped()
+                } else {
+                                        Color.sioreeCharcoal
+                                    }
+                                }
+                                .frame(width: geometry.size.width * 0.52, height: collageHeight * 0.52)
+                                .offset(x: -geometry.size.width * 0.04)
+                                .clipShape(RoundedRectangle(cornerRadius: 0))
+                                .zIndex(1)
+                            }
+                        }
+                        
+                        // Bottom row - two photos
+                        HStack(spacing: 0) {
+                            if let url = URL(string: images[2]) {
+                                AsyncImage(url: url) { phase in
+                                    if case .success(let image) = phase {
+                                        image
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: geometry.size.width * 0.52, height: collageHeight * 0.52)
+                                            .clipped()
+                                    } else {
+                                        Color.sioreeCharcoal
+                                    }
+                                }
+                                .frame(width: geometry.size.width * 0.52, height: collageHeight * 0.52)
+                                .offset(y: -collageHeight * 0.04)
+                                .clipShape(RoundedRectangle(cornerRadius: 0))
+                                .zIndex(1)
+                            }
+                            
+                            if let url = URL(string: images[3]) {
+                                AsyncImage(url: url) { phase in
+                                    if case .success(let image) = phase {
+                                        image
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: geometry.size.width * 0.52, height: collageHeight * 0.52)
+                                            .clipped()
+                                    } else {
+                                        Color.sioreeCharcoal
+                                    }
+                                }
+                                .frame(width: geometry.size.width * 0.52, height: collageHeight * 0.52)
+                                .offset(x: -geometry.size.width * 0.04, y: -collageHeight * 0.04)
+                                .clipShape(RoundedRectangle(cornerRadius: 0))
+                                .zIndex(0)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .frame(height: collageHeight)
+    }
+}
+
+// Safe array subscript extension
+extension Array {
+    subscript(safe index: Int) -> Element? {
+        return indices.contains(index) ? self[index] : nil
+    }
+}
+
+// EventHighlightCircle - Instagram-style circular highlights for Partier profile
+struct EventHighlightCircle: View {
+    let event: Event
+    private let circleSize: CGFloat = 100
+    
+    private var coverImageUrl: String? {
+        // Check for stored cover image first (from first photo upload)
+        let coverKey = "event_cover_\(event.id)"
+        if let storedCover = UserDefaults.standard.string(forKey: coverKey), !storedCover.isEmpty {
+            return storedCover
+        }
+        // Fallback to event's first image
+        return event.images.first
+    }
+    
+    var body: some View {
+        ZStack {
+            // Glowing icy blue border (outer glow)
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.sioreeIcyBlue.opacity(0.4),
+                            Color.sioreeIcyBlue.opacity(0.6)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: circleSize + 8, height: circleSize + 8)
+                .blur(radius: 4)
+                .overlay(
+                    Circle()
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    Color.sioreeIcyBlue.opacity(0.8),
+                                    Color.sioreeIcyBlue
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 2.5
+                        )
+                        .frame(width: circleSize + 6, height: circleSize + 6)
+                )
+            
+            // Inner circle with image
+            if let imageUrl = coverImageUrl, let url = URL(string: imageUrl) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        Circle()
+                            .fill(Color.sioreeCharcoal)
+                            .frame(width: circleSize, height: circleSize)
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: circleSize, height: circleSize)
+                            .clipShape(Circle())
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.sioreeBlack, lineWidth: 2)
+                                    .frame(width: circleSize, height: circleSize)
+                            )
+                    case .failure:
+                        Circle()
+                            .fill(Color.sioreeCharcoal)
+                            .frame(width: circleSize, height: circleSize)
+                    @unknown default:
+                        Circle()
+                            .fill(Color.sioreeCharcoal)
+                            .frame(width: circleSize, height: circleSize)
+                    }
+                }
+            } else {
+                // No image - subtle gradient placeholder
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.sioreeCharcoal.opacity(0.6),
+                                Color.sioreeCharcoal.opacity(0.4)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: circleSize, height: circleSize)
+            }
+        }
+        .shadow(color: Color.sioreeIcyBlue.opacity(0.3), radius: 8, x: 0, y: 4)
+    }
+}
+
+// EventCardGridItem - for grid layouts (used in UserProfileView)
 struct EventCardGridItem: View {
     let event: Event
     
@@ -244,32 +612,24 @@ struct EventCardGridItem: View {
     }
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            // Event image/thumbnail
-            ZStack {
+        GeometryReader { geometry in
+            ZStack(alignment: .bottomLeading) {
+                // Event image/thumbnail
                 if let imageUrl = coverImageUrl, let url = URL(string: imageUrl) {
                     AsyncImage(url: url) { phase in
                         switch phase {
                         case .empty:
                             Rectangle()
                                 .fill(Color.sioreeCharcoal)
-                                .overlay(
-                                    Image(systemName: "party.popper.fill")
-                                        .font(.system(size: 24))
-                                        .foregroundColor(Color.sioreeIcyBlue.opacity(0.5))
-                                )
                         case .success(let image):
                             image
                                 .resizable()
                                 .scaledToFill()
+                                .frame(width: geometry.size.width, height: geometry.size.height)
+                                .clipped()
                         case .failure:
                             Rectangle()
                                 .fill(Color.sioreeCharcoal)
-                                .overlay(
-                                    Image(systemName: "party.popper.fill")
-                                        .font(.system(size: 24))
-                                        .foregroundColor(Color.sioreeLightGrey)
-                                )
                         @unknown default:
                             Rectangle()
                                 .fill(Color.sioreeCharcoal)
@@ -278,38 +638,13 @@ struct EventCardGridItem: View {
                 } else {
                     Rectangle()
                         .fill(Color.sioreeCharcoal)
-                        .overlay(
-                            Image(systemName: "party.popper.fill")
-                                .font(.system(size: 24))
-                                .foregroundColor(Color.sioreeIcyBlue.opacity(0.5))
-                        )
                 }
             }
-            .frame(height: 180)
-            .cornerRadius(Theme.CornerRadius.medium)
+            .frame(width: geometry.size.width, height: geometry.size.height)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
             .shadow(color: Color.black.opacity(0.3), radius: 8, x: 0, y: 4)
-
-            // Event info overlay
-            VStack(alignment: .leading, spacing: 2) {
-                Spacer()
-                Text(event.title)
-                    .font(.sioreeCaption)
-                    .foregroundColor(Color.sioreeWhite)
-                    .lineLimit(1)
-                    .shadow(color: Color.black.opacity(0.8), radius: 2)
-
-                HStack(spacing: 4) {
-                    Image(systemName: "calendar")
-                        .font(.system(size: 10))
-                        .foregroundColor(Color.sioreeLightGrey.opacity(0.9))
-                    Text(event.date.formatted(date: .abbreviated, time: .omitted))
-                        .font(.sioreeCaption)
-                        .foregroundColor(Color.sioreeLightGrey.opacity(0.9))
-                }
-                .shadow(color: Color.black.opacity(0.8), radius: 2)
-            }
-            .padding(Theme.Spacing.s)
         }
+        .aspectRatio(1.0, contentMode: .fit)
     }
 }
 

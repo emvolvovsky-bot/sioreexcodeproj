@@ -507,12 +507,8 @@ struct EventHighlightCircle: View {
     private let circleSize: CGFloat = 100
     
     private var coverImageUrl: String? {
-        // Check for stored cover image first (from first photo upload)
-        let coverKey = "event_cover_\(event.id)"
-        if let storedCover = UserDefaults.standard.string(forKey: coverKey), !storedCover.isEmpty {
-            return storedCover
-        }
-        // Fallback to event's first image
+        // Use the host's event image (first image from event.images)
+        // This is the image the host uploaded when creating the event
         return event.images.first
     }
     

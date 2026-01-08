@@ -812,6 +812,40 @@ struct FullScreenPhotoViewer: View {
             }
             .tabViewStyle(.page)
             .indexViewStyle(.page(backgroundDisplayMode: .always))
+            .overlay(
+                // Tap areas for immediate navigation
+                GeometryReader { geometry in
+                    HStack(spacing: 0) {
+                        // Left tap area (previous photo)
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                if currentIndex > 0 {
+                                    var transaction = Transaction(animation: nil)
+                                    transaction.disablesAnimations = true
+                                    withTransaction(transaction) {
+                                        currentIndex -= 1
+                                    }
+                                }
+                            }
+                            .frame(width: geometry.size.width / 2)
+                        
+                        // Right tap area (next photo)
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                if currentIndex < photos.count - 1 {
+                                    var transaction = Transaction(animation: nil)
+                                    transaction.disablesAnimations = true
+                                    withTransaction(transaction) {
+                                        currentIndex += 1
+                                    }
+                                }
+                            }
+                            .frame(width: geometry.size.width / 2)
+                    }
+                }
+            )
 
             // Close button
             VStack {

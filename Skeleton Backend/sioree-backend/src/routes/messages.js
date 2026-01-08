@@ -72,13 +72,17 @@ router.get("/conversations", async (req, res) => {
     const userId = getUserIdFromToken(req);
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-    // Show all conversations (no role filtering)
-    const query = `SELECT DISTINCT
+    // Show all conversations (regular 1-on-1 + group chats)
+    const query = `(
+      -- Regular 1-on-1 conversations
+      SELECT DISTINCT
         CASE 
           WHEN c.user1_id = $1 THEN c.user2_id
           ELSE c.user1_id
         END as participant_id,
         c.id as conversation_id,
+        c.is_group,
+        c.title as conversation_title,
         u.name as participant_name,
         u.username as participant_username,
         u.avatar as participant_avatar,
@@ -97,18 +101,47 @@ router.get("/conversations", async (req, res) => {
         ORDER BY created_at DESC
         LIMIT 1
       ) m ON true
-      WHERE c.user1_id = $1 OR c.user2_id = $1
-      GROUP BY c.id, participant_id, u.name, u.username, u.avatar, m.text, m.created_at
-      ORDER BY m.created_at DESC NULLS LAST`;
+      WHERE (c.user1_id = $1 OR c.user2_id = $1) AND (c.is_group = false OR c.is_group IS NULL)
+      GROUP BY c.id, participant_id, c.is_group, c.title, u.name, u.username, u.avatar, m.text, m.created_at
+    )
+    UNION ALL
+    (
+      -- Group chats
+      SELECT DISTINCT
+        NULL::integer as participant_id,
+        c.id as conversation_id,
+        c.is_group,
+        c.title as conversation_title,
+        NULL::text as participant_name,
+        NULL::text as participant_username,
+        NULL::text as participant_avatar,
+        m.text as last_message,
+        m.created_at as last_message_time,
+        0 as unread_count
+      FROM conversations c
+      INNER JOIN group_members gm ON c.id = gm.conversation_id
+      LEFT JOIN LATERAL (
+        SELECT text, created_at, is_read, sender_id
+        FROM messages
+        WHERE conversation_id = c.id
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) m ON true
+      WHERE gm.user_id = $1 AND c.is_group = true
+      GROUP BY c.id, c.is_group, c.title, m.text, m.created_at
+    )
+    ORDER BY last_message_time DESC NULLS LAST`;
     const params = [userId];
 
     const result = await db.query(query, params);
 
     const conversations = result.rows.map(row => ({
       id: row.conversation_id.toString(),
-      participantId: row.participant_id.toString(),
-      participantName: row.participant_name || row.participant_username || "Unknown",
+      isGroup: row.is_group === true,
+      participantId: row.participant_id ? row.participant_id.toString() : null,
+      participantName: row.participant_name || row.participant_username || (row.is_group ? row.conversation_title : "Unknown"),
       participantAvatar: row.participant_avatar || null,
+      conversationTitle: row.conversation_title || null,
       lastMessage: row.last_message || "",
       lastMessageTime: row.last_message_time ? new Date(row.last_message_time).toISOString() : new Date().toISOString(),
       unreadCount: parseInt(row.unread_count) || 0,
@@ -135,21 +168,48 @@ router.get("/:conversationId", async (req, res) => {
     const limit = 50;
     const offset = (page - 1) * limit;
 
-    // Verify user is part of conversation and get other participant
+    // Verify user is part of conversation
     // Handle both string and integer conversationId
     const convId = parseInt(conversationId) || conversationId;
+    
+    // Check if conversation exists and get its type
     const convCheck = await db.query(
-      `SELECT * FROM conversations WHERE id = $1 AND (user1_id = $2 OR user2_id = $2)`,
-      [convId, userId]
+      `SELECT id, is_group, user1_id, user2_id FROM conversations WHERE id = $1`,
+      [convId]
     );
 
     if (convCheck.rows.length === 0) {
       return res.status(404).json({ error: "Conversation not found" });
     }
 
-    const conversation = convCheck.rows[0];
-    // Determine the other participant (receiver for messages sent by current user)
-    const otherUserId = conversation.user1_id === userId ? conversation.user2_id : conversation.user1_id;
+    const conv = convCheck.rows[0];
+    const isGroupChat = conv.is_group === true;
+
+    // Verify user is part of conversation
+    if (isGroupChat) {
+      // Check group_members for group chats
+      const memberCheck = await db.query(
+        `SELECT id FROM group_members WHERE conversation_id = $1 AND user_id = $2`,
+        [convId, userId]
+      );
+
+      if (memberCheck.rows.length === 0) {
+        return res.status(403).json({ error: "Not a member of this group chat" });
+      }
+    } else {
+      // Check user1_id/user2_id for regular chats
+      const participantCheck = await db.query(
+        `SELECT * FROM conversations WHERE id = $1 AND (user1_id = $2 OR user2_id = $2)`,
+        [convId, userId]
+      );
+
+      if (participantCheck.rows.length === 0) {
+        return res.status(403).json({ error: "Not authorized for this conversation" });
+      }
+    }
+    
+    // Determine the other participant (for 1-on-1 chats only)
+    const otherUserId = !isGroupChat && conv.user1_id ? (conv.user1_id === userId ? conv.user2_id : conv.user1_id) : null;
 
     // No role filter - show all messages
     const query = `SELECT * FROM messages 
@@ -161,9 +221,15 @@ router.get("/:conversationId", async (req, res) => {
     const result = await db.query(query, params);
 
     const messages = result.rows.map(row => {
-      // Determine receiver_id: if sender is current user, receiver is other user, otherwise receiver is current user
-      const messageSenderId = row.sender_id;
-      const messageReceiverId = messageSenderId === userId ? otherUserId : userId;
+      // For group chats, use the receiver_id from the message (or sender_id if not set)
+      // For 1-on-1 chats, determine receiver based on sender
+      let messageReceiverId;
+      if (isGroupChat) {
+        messageReceiverId = row.receiver_id || row.sender_id;
+      } else {
+        const messageSenderId = row.sender_id;
+        messageReceiverId = messageSenderId === userId ? otherUserId : userId;
+      }
       
       return {
         id: row.id.toString(),
@@ -274,33 +340,91 @@ router.post("/", async (req, res) => {
 
     if (!convId) return res.status(400).json({ error: "Conversation ID or receiver ID required" });
 
-    // Verify user is part of conversation
-    const convCheck = await db.query(
-      `SELECT * FROM conversations WHERE id = $1 AND (user1_id = $2 OR user2_id = $2)`,
-      [convId, userId]
+    // Check if conversation exists and get its type
+    // Try both integer and string versions to handle type mismatches
+    let convCheck = await db.query(
+      `SELECT id, is_group, user1_id, user2_id, created_by, title FROM conversations WHERE id = $1`,
+      [convId]
     );
 
+    // If not found, try as string
+    if (convCheck.rows.length === 0 && typeof convId === 'string') {
+      convCheck = await db.query(
+        `SELECT id, is_group, user1_id, user2_id, created_by, title FROM conversations WHERE id = $1::integer`,
+        [convId]
+      );
+    }
+
+    // If still not found, try as integer
+    if (convCheck.rows.length === 0 && typeof convId !== 'string') {
+      convCheck = await db.query(
+        `SELECT id, is_group, user1_id, user2_id, created_by, title FROM conversations WHERE id = $1`,
+        [parseInt(convId)]
+      );
+    }
+
     if (convCheck.rows.length === 0) {
-      return res.status(404).json({ error: "Conversation not found" });
+      console.error(`❌ Conversation not found: convId=${convId}, type=${typeof convId}, userId=${userId}`);
+      // Try to see if conversation exists at all (debug)
+      try {
+        const debugCheck = await db.query(`SELECT id, is_group, created_by, title FROM conversations WHERE id = $1 OR CAST(id AS TEXT) = $2`, [convId, String(convId)]);
+        console.error(`🔍 Debug check: Found ${debugCheck.rows.length} conversations matching id ${convId}`);
+        if (debugCheck.rows.length > 0) {
+          console.error(`🔍 Conversation details:`, debugCheck.rows[0]);
+        }
+      } catch (debugErr) {
+        console.error(`🔍 Debug query error:`, debugErr.message);
+      }
+      return res.status(404).json({ error: "Conversation not found", details: `Conversation ID ${convId} not found` });
     }
 
-    // Determine receiver strictly from the conversation participants to avoid FK errors
     const conv = convCheck.rows[0];
-    const participantA = conv.user1_id;
-    const participantB = conv.user2_id;
+    const isGroupChat = conv.is_group === true;
 
-    // The only valid receiver is the "other" participant in this 1:1 conversation
-    const computedReceiver = String(participantA) === String(userId) ? participantB : participantA;
+    let receiver;
 
-    // If caller provided a receiverId, ensure it matches the conversation participants
-    if (receiverId && String(receiverId) !== String(computedReceiver)) {
-      return res.status(400).json({ error: "receiverId does not match this conversation" });
-    }
+    // Verify user is part of conversation
+    if (isGroupChat) {
+      // Check group_members for group chats
+      const memberCheck = await db.query(
+        `SELECT id FROM group_members WHERE conversation_id = $1 AND user_id = $2`,
+        [convId, userId]
+      );
 
-    const receiver = computedReceiver;
+      if (memberCheck.rows.length === 0) {
+        return res.status(403).json({ error: "Not a member of this group chat" });
+      }
 
-    if (!receiver) {
-      return res.status(400).json({ error: "Conversation participants not set correctly" });
+      // For group chats, use sender as receiver (messages are broadcast to all members via Socket.io)
+      receiver = receiverId || userId;
+    } else {
+      // Check participant1_id/participant2_id for regular chats
+      const participantCheck = await db.query(
+        `SELECT * FROM conversations WHERE id = $1 AND (user1_id = $2 OR user2_id = $2)`,
+        [convId, userId]
+      );
+
+      if (participantCheck.rows.length === 0) {
+        return res.status(403).json({ error: "Not authorized for this conversation" });
+      }
+
+      // Determine receiver strictly from the conversation participants to avoid FK errors
+      const participantA = conv.user1_id;
+      const participantB = conv.user2_id;
+
+      // The only valid receiver is the "other" participant in this 1:1 conversation
+      const computedReceiver = String(participantA) === String(userId) ? participantB : participantA;
+
+      // If caller provided a receiverId, ensure it matches the conversation participants
+      if (receiverId && String(receiverId) !== String(computedReceiver)) {
+        return res.status(400).json({ error: "receiverId does not match this conversation" });
+      }
+
+      receiver = computedReceiver;
+
+      if (!receiver) {
+        return res.status(400).json({ error: "Conversation participants not set correctly" });
+      }
     }
 
     // Insert message
@@ -412,13 +536,16 @@ router.post("/groups", async (req, res) => {
     }
 
     // Create group conversation
+    // Note: user1_id and user2_id should be NULL for group chats
     const convResult = await db.query(
-      `INSERT INTO conversations (created_by, is_group, title) 
-       VALUES ($1, true, $2) RETURNING *`,
+      `INSERT INTO conversations (created_by, is_group, title, user1_id, user2_id) 
+       VALUES ($1, true, $2, NULL, NULL) RETURNING *`,
       [userId, title]
     );
 
     const conversationId = convResult.rows[0].id;
+    
+    console.log(`✅ Group chat created: id=${conversationId}, title=${title}, created_by=${userId}`);
 
     // Add creator as admin
     await db.query(

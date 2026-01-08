@@ -12,6 +12,7 @@ struct CreateGroupChatView: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var authViewModel: AuthViewModel
     @State private var groupTitle: String = ""
+    @State private var initialMessage: String = ""
     @State private var selectedMembers: Set<String> = []
     @State private var allUsers: [User] = []
     @State private var searchQuery: String = ""
@@ -20,6 +21,7 @@ struct CreateGroupChatView: View {
     @State private var errorMessage = ""
     @State private var cancellables = Set<AnyCancellable>()
     private let networkService = NetworkService()
+    @StateObject private var messagingService = MessagingService.shared
     
     var filteredUsers: [User] {
         if searchQuery.isEmpty {
@@ -54,9 +56,36 @@ struct CreateGroupChatView: View {
                         TextField("Enter group name", text: $groupTitle)
                             .padding(Theme.Spacing.m)
                             .foregroundColor(.sioreeWhite)
+                            .background(
+                                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                                    .fill(Color.sioreeLightGrey.opacity(0.1))
+                            )
                             .overlay(
                                 RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                                    .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 1)
+                                    .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 1.5)
+                            )
+                            .padding(.horizontal, Theme.Spacing.m)
+                    }
+                    
+                    // Initial Message Input
+                    VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                        Text("Initial Message")
+                            .font(.sioreeH4)
+                            .foregroundColor(.sioreeWhite)
+                            .padding(.horizontal, Theme.Spacing.m)
+                            .padding(.top, Theme.Spacing.m)
+                        
+                        TextField("Say something to start the conversation...", text: $initialMessage, axis: .vertical)
+                            .lineLimit(3...6)
+                            .padding(Theme.Spacing.m)
+                            .foregroundColor(.sioreeWhite)
+                            .background(
+                                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                                    .fill(Color.sioreeLightGrey.opacity(0.1))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                                    .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 1.5)
                             )
                             .padding(.horizontal, Theme.Spacing.m)
                     }
@@ -155,7 +184,8 @@ struct CreateGroupChatView: View {
                         createGroupChat()
                     }
                     .fontWeight(.semibold)
-                    .disabled(isCreating || groupTitle.isEmpty || selectedMembers.isEmpty)
+                    .foregroundColor(.sioreeIcyBlue)
+                    .disabled(isCreating || groupTitle.isEmpty || selectedMembers.isEmpty || initialMessage.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
             .overlay {
@@ -190,7 +220,7 @@ struct CreateGroupChatView: View {
     }
     
     private func createGroupChat() {
-        guard !groupTitle.isEmpty, !selectedMembers.isEmpty else { return }
+        guard !groupTitle.isEmpty, !selectedMembers.isEmpty, !initialMessage.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         
         isCreating = true
         errorMessage = ""
@@ -213,8 +243,38 @@ struct CreateGroupChatView: View {
                     showError = true
                 }
             },
+            receiveValue: { [self] groupChat in
+                // After successfully creating the group chat, try to send the initial message
+                let trimmedMessage = initialMessage.trimmingCharacters(in: .whitespaces)
+                sendInitialMessage(to: groupChat.id, text: trimmedMessage)
+            }
+        )
+        .store(in: &cancellables)
+    }
+    
+    private func sendInitialMessage(to conversationId: String, text: String) {
+        // For group chats, we use the conversationId and pass sender as receiverId
+        // The backend will handle group chats correctly when conversationId is provided
+        let currentUserId = authViewModel.currentUser?.id ?? ""
+        
+        messagingService.sendMessage(
+            conversationId: conversationId,
+            receiverId: currentUserId, // For group chats, backend will handle this
+            text: text
+        )
+        .receive(on: DispatchQueue.main)
+        .sink(
+            receiveCompletion: { [self] completion in
+                // Don't show error for message sending failure - group chat was created successfully
+                if case .failure(let error) = completion {
+                    print("⚠️ Note: Group chat created but initial message couldn't be sent: \(error.localizedDescription)")
+                    print("⚠️ User can send their first message manually when they open the chat")
+                }
+                // Always dismiss since group chat creation succeeded
+                dismiss()
+            },
             receiveValue: { [self] _ in
-                // Success - dismiss
+                // Success - message sent
                 dismiss()
             }
         )

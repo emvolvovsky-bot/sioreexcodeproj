@@ -14,200 +14,153 @@ struct HostProfileView: View {
     @State private var showEditProfile = false
     @State private var showFollowersList = false
     @State private var showFollowingList = false
-    @State private var selectedEventForPost: Event?
     @State private var selectedEventForPhotos: Event? = nil
-    @State private var selectedEventForDetail: Event? = nil
+    @State private var selectedEventForPost: Event?
     
     private var currentUser: User? {
         authViewModel.currentUser
     }
 
-    private func isEventPast(_ event: Event) -> Bool {
-        return event.date < Date() || event.status == .completed
+    private var backgroundGradient: some View {
+        LinearGradient(
+            colors: [
+                Color.sioreeBlack,
+                Color.sioreeBlack.opacity(0.98),
+                Color.sioreeCharcoal.opacity(0.05)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
+    }
+
+    private var mainContent: some View {
+        Group {
+            if currentUser == nil {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let user = currentUser {
+                userProfileContent(user: user)
+            }
+        }
+    }
+
+    private func userProfileContent(user: User) -> some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                profileHeader(user: user)
+                eventsSection
+            }
+            .padding(.bottom, Theme.Spacing.xl)
+        }
+    }
+
+    private func profileHeader(user: User) -> some View {
+        InstagramStyleProfileHeader(
+            user: user,
+            postsCount: viewModel.events.count,
+            followerCount: viewModel.followerCount,
+            followingCount: viewModel.followingCount,
+            onEditProfile: {
+                showEditProfile = true
+            },
+            onFollowersTap: {
+                showFollowersList = true
+            },
+            onFollowingTap: {
+                showFollowingList = true
+            },
+            showEventsStat: false,
+            showEditButton: true
+        )
+        .padding(.top, 8)
+    }
+
+    private var eventsSection: some View {
+        eventsContent
+    }
+
+    private var eventsContent: some View {
+        Group {
+            if viewModel.events.isEmpty {
+                emptyEventsView
+            } else {
+                eventsGridView
+            }
+        }
+    }
+
+    private var emptyEventsView: some View {
+        VStack(spacing: Theme.Spacing.l) {
+            Image(systemName: "calendar.badge.exclamationmark")
+                .font(.system(size: 48))
+                .foregroundColor(Color.sioreeLightGrey.opacity(0.4))
+            VStack(spacing: Theme.Spacing.s) {
+                Text("No events hosted yet")
+                    .font(.sioreeH3)
+                    .foregroundColor(Color.sioreeWhite)
+                Text("Your hosted events and photos will appear here")
+                    .font(.sioreeBody)
+                    .foregroundColor(Color.sioreeLightGrey.opacity(0.6))
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 300)
+        .padding(.vertical, Theme.Spacing.xl)
+        .padding(.horizontal, Theme.Spacing.l)
+    }
+
+    private var eventsGridView: some View {
+        let columns = Array(repeating: GridItem(.flexible(), spacing: Theme.Spacing.m), count: 3)
+        
+        return LazyVGrid(columns: columns, spacing: Theme.Spacing.l) {
+            ForEach(Array(viewModel.events.prefix(9)), id: \.id) { event in
+                VStack(spacing: Theme.Spacing.xs) {
+                    EventHighlightCircle(event: event)
+                        .onTapGesture {
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+                                // Check if event has photos
+                                let coverKey = "event_cover_\(event.id)"
+                                let hasCover = UserDefaults.standard.string(forKey: coverKey) != nil
+                                let hasEventImages = !event.images.isEmpty
+                                
+                                if !hasCover && !hasEventImages {
+                                    // If no photos, go directly to add photos
+                                    selectedEventForPost = event
+                                } else {
+                                    selectedEventForPhotos = event
+                                }
+                            }
+                        }
+                        .contextMenu {
+                            Button(action: {
+                                selectedEventForPost = event
+                            }) {
+                                Label("Add Photos", systemImage: "photo.fill")
+                            }
+                        }
+                    
+                    // Event name below (like Instagram highlights)
+                    Text(event.title)
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundColor(.sioreeWhite)
+                        .lineLimit(1)
+                        .frame(maxWidth: 100)
+                }
+            }
+        }
+        .padding(.horizontal, Theme.Spacing.m)
+        .padding(.vertical, Theme.Spacing.m)
     }
     
     var body: some View {
         NavigationStack {
             ZStack {
-                // Subtle gradient on black background
-                LinearGradient(
-                    colors: [Color.sioreeBlack, Color.sioreeBlack.opacity(0.95), Color.sioreeCharcoal.opacity(0.1)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
-                
-                Group {
-                    if currentUser == nil {
-                        ProgressView()
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else if let user = currentUser {
-                        ScrollView {
-                            VStack(spacing: 0) {
-                                // Instagram-style profile header
-                                InstagramStyleProfileHeader(
-                                    user: user,
-                                    postsCount: viewModel.posts.count,
-                                    followerCount: viewModel.followerCount,
-                                    followingCount: viewModel.followingCount,
-                                    onEditProfile: {
-                                        showEditProfile = true
-                                    },
-                                    onFollowersTap: {
-                                        showFollowersList = true
-                                    },
-                                    onFollowingTap: {
-                                        showFollowingList = true
-                                    },
-                                    showEventsStat: false,
-                                    showEditButton: true
-                                )
-                                .padding(.top, 8)
-
-                                // Tab Picker for Events
-                                Picker("Event Type", selection: $viewModel.selectedHostTab) {
-                                    ForEach(ProfileViewModel.HostProfileTab.allCases, id: \.self) { tab in
-                                        Text(tab.rawValue).tag(tab)
-                                    }
-                                }
-                                .pickerStyle(.segmented)
-                                .padding(.horizontal, Theme.Spacing.m)
-                                .padding(.top, Theme.Spacing.m)
-
-                                // Events Section
-                                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                                    Text(viewModel.selectedHostTab.rawValue)
-                                        .font(.sioreeH3)
-                                        .foregroundColor(.sioreeWhite)
-                                        .padding(.horizontal, Theme.Spacing.m)
-
-                                    if viewModel.filteredEvents.isEmpty {
-                                        Text(viewModel.selectedHostTab == .hosted ?
-                                             "No past events yet. Host your first event!" :
-                                             "No upcoming events. Create your next event!")
-                                            .font(.sioreeBody)
-                                            .foregroundColor(.sioreeLightGrey)
-                                            .padding(.horizontal, Theme.Spacing.m)
-                                            .padding(.bottom, Theme.Spacing.m)
-                                    } else {
-                                        LazyVGrid(
-                                            columns: [
-                                                GridItem(.flexible(), spacing: Theme.Spacing.m),
-                                                GridItem(.flexible(), spacing: Theme.Spacing.m)
-                                            ],
-                                            spacing: Theme.Spacing.m
-                                        ) {
-                                            ForEach(viewModel.filteredEvents) { event in
-                                                HostEventCardGrid(event: event) {
-                                                    if isEventPast(event) {
-                                                        // Past event - show photo collage
-                                                        selectedEventForPhotos = event
-                                                    } else {
-                                                        // Upcoming event - show event detail
-                                                        selectedEventForDetail = event
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        .padding(.horizontal, Theme.Spacing.m)
-                                        .padding(.bottom, Theme.Spacing.m)
-                                    }
-                                }
-                                .padding(.top, Theme.Spacing.m)
-                                
-                                // Earnings (only for hosts)
-                                if user.userType == .host {
-                                    NavigationLink(destination: EarningsView()) {
-                                        HStack {
-                                            Image(systemName: "dollarsign.circle.fill")
-                                                .font(.system(size: 20))
-                                                .foregroundColor(Color.sioreeIcyBlue)
-                                            
-                                            Text("Earnings")
-                                                .font(.sioreeBody)
-                                                .foregroundColor(Color.sioreeWhite)
-                                            
-                                            Spacer()
-                                            
-                                            Image(systemName: "chevron.right")
-                                                .font(.system(size: 14))
-                                                .foregroundColor(Color.sioreeLightGrey)
-                                        }
-                                        .padding(Theme.Spacing.m)
-                                        .background(Color.sioreeLightGrey.opacity(0.1))
-                                        .cornerRadius(Theme.CornerRadius.medium)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                                                .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 1)
-                                        )
-                                    }
-                                    .padding(.horizontal, Theme.Spacing.m)
-                                    .padding(.top, Theme.Spacing.m)
-                                    
-                                    // Host History (only for hosts)
-                                    NavigationLink(destination: HostHistoryView(hostId: user.id, hostName: user.name ?? user.username)) {
-                                        HStack {
-                                            Image(systemName: "video.fill")
-                                                .font(.system(size: 20))
-                                                .foregroundColor(Color.sioreeIcyBlue)
-
-                                            Text("View Video Compilation")
-                                                .font(.sioreeBody)
-                                                .foregroundColor(Color.sioreeWhite)
-
-                                            Spacer()
-
-                                            Image(systemName: "chevron.right")
-                                                .font(.system(size: 14))
-                                                .foregroundColor(Color.sioreeLightGrey)
-                                        }
-                                        .padding(Theme.Spacing.m)
-                                        .background(Color.sioreeLightGrey.opacity(0.1))
-                                        .cornerRadius(Theme.CornerRadius.medium)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                                                .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 2)
-                                        )
-                                    }
-                                    .padding(.horizontal, Theme.Spacing.m)
-                                    .padding(.top, Theme.Spacing.m)
-
-                                    // Talent Media (only for hosts)
-                                    NavigationLink(destination: TalentMediaView(hostId: user.id)) {
-                                        HStack {
-                                            Image(systemName: "person.2.fill")
-                                                .font(.system(size: 20))
-                                                .foregroundColor(Color.sioreeIcyBlue)
-
-                                            Text("Talent Media")
-                                                .font(.sioreeBody)
-                                                .foregroundColor(Color.sioreeWhite)
-
-                                            Spacer()
-
-                                            Image(systemName: "chevron.right")
-                                                .font(.system(size: 14))
-                                                .foregroundColor(Color.sioreeLightGrey)
-                                        }
-                                        .padding(Theme.Spacing.m)
-                                        .background(Color.sioreeLightGrey.opacity(0.1))
-                                        .cornerRadius(Theme.CornerRadius.medium)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                                                .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 1)
-                                        )
-                                    }
-                                    .padding(.horizontal, Theme.Spacing.m)
-                                    .padding(.top, Theme.Spacing.m)
-                                }
-                                
-                            }
-                            .padding(.bottom, Theme.Spacing.m)
-                        }
-                    }
-                }
+                backgroundGradient
+                mainContent
             }
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Color.sioreeBlack.opacity(0.8), for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     if let user = currentUser {
@@ -216,14 +169,14 @@ struct HostProfileView: View {
                             .foregroundColor(.sioreeWhite)
                     }
                 }
-                
+
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: {
                         showSettings = true
                     }) {
                         Image(systemName: "line.3.horizontal")
                             .foregroundColor(.sioreeWhite)
-                            .font(.system(size: 20, weight: .medium))
+                            .font(.system(size: 18, weight: .medium))
                     }
                 }
             }
@@ -245,16 +198,13 @@ struct HostProfileView: View {
                     UserListListView(userId: userId, listType: .following, userType: .host)
                 }
             }
+            .fullScreenCover(item: $selectedEventForPhotos) { event in
+                EventStoryViewer(event: event)
+                    .environmentObject(authViewModel)
+            }
             .sheet(item: $selectedEventForPost) { event in
                 AddPostFromEventView(event: event)
                     .environmentObject(authViewModel)
-            }
-            .sheet(item: $selectedEventForPhotos) { event in
-                EventPhotosViewer(event: event)
-                    .environmentObject(authViewModel)
-            }
-            .sheet(item: $selectedEventForDetail) { event in
-                EventDetailPlaceholderView(event: event)
             }
             .onAppear {
                 viewModel.setAuthViewModel(authViewModel)
@@ -262,10 +212,6 @@ struct HostProfileView: View {
             }
             .onChange(of: authViewModel.currentUser?.id) { _ in
                 viewModel.setAuthViewModel(authViewModel)
-                viewModel.loadUserContent()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("PostCreated"))) { notification in
-                // Refresh posts when a new post is created
                 viewModel.loadUserContent()
             }
         }

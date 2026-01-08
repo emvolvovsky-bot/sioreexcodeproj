@@ -37,11 +37,7 @@ struct RoleRootView: View {
         switch role {
         case .host:
             return [
-                ("Home", "house.fill", AnyView(HostHomeView())),
-                ("My Events", "calendar", AnyView(MyEventsView())),
-                ("Talent Requests", "person.2.circle.fill", AnyView(HostTalentRequestsView())),
-                ("Inbox", "envelope.fill", AnyView(HostInboxView())),
-                ("Profile", "person.fill", AnyView(HostProfileView()))
+                ("Home", "house.fill", AnyView(HostTabContainer()))
             ]
         case .partier:
             return [

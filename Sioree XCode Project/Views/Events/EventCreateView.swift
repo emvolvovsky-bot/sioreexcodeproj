@@ -7,6 +7,7 @@
 
 import SwiftUI
 import MapKit
+import Combine
 
 struct EventCreateView: View {
     @Environment(\.dismiss) var dismiss
@@ -29,48 +30,125 @@ struct EventCreateView: View {
     @State private var showError = false
     @State private var errorMessage = ""
     
-    @State private var selectedLookingForTalents: Set<TalentCategory> = []
-    @State private var lookingForNotes: String = ""
-    @State private var isRequestingTalent = true
+    @State private var coverPhoto: UIImage?
+    @State private var showPhotoPicker = false
+    @State private var coverPhotoUrl: String?
+    @State private var isUploadingPhoto = false
+    
+    @State private var selectedTalentIds: [String] = []
     @State private var showTalentBrowser = false
-    private let availableTalentCategories: [TalentCategory] = TalentCategory.allCases
+    @StateObject private var photoService = PhotoService.shared
+    @State private var cancellables = Set<AnyCancellable>()
     
     var body: some View {
         NavigationView {
             ZStack {
-                Color.sioreeWhite.ignoresSafeArea()
+                backgroundGlow
                 
                 Form {
-                    Section("Event Details") {
+                    Section {
                         CustomTextField(placeholder: "Event Title", text: $title)
                         CustomTextField(placeholder: "Additional Info", text: $description)
+                    } header: {
+                        Text("Event Details")
+                            .foregroundColor(.sioreeWhite)
                     }
                     
-                    Section("Date & Time") {
-                        DatePicker("Date", selection: $date, displayedComponents: .date)
-                        DatePicker("Time", selection: $time, displayedComponents: .hourAndMinute)
-                    }
-                    
-                    Section("Location") {
-                        CustomTextField(placeholder: "Location", text: $location)
+                    Section {
+                        Button(action: {
+                            showPhotoPicker = true
+                        }) {
+                            HStack {
+                                if let coverPhoto = coverPhoto {
+                                    Image(uiImage: coverPhoto)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 80, height: 80)
+                                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                                } else {
+                                    ZStack {
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(Color.sioreeCharcoal.opacity(0.3))
+                                            .frame(width: 80, height: 80)
+                                        
+                                        VStack(spacing: 4) {
+                                            Image(systemName: "photo.fill")
+                                                .font(.system(size: 24))
+                                                .foregroundColor(.sioreeIcyBlue)
+                                            Text("Add Photo")
+                                                .font(.caption)
+                                                .foregroundColor(.sioreeIcyBlue)
+                                        }
+                                    }
+                                }
+                                
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(coverPhoto == nil ? "Required" : "Cover Photo Selected")
+                                        .font(.sioreeBody)
+                                        .foregroundColor(.sioreeWhite)
+                                    Text(coverPhoto == nil ? "Add a cover photo for your event" : "Tap to change")
+                                        .font(.caption)
+                                        .foregroundColor(.sioreeLightGrey)
+                                }
+                                
+                                Spacer()
+                                
+                                Image(systemName: "chevron.right")
+                                    .foregroundColor(.sioreeIcyBlue.opacity(0.7))
+                                    .font(.system(size: 14))
+                            }
+                        }
+                        .buttonStyle(.plain)
                         
+                        if isUploadingPhoto {
+                            HStack {
+                                ProgressView()
+                                    .tint(.sioreeIcyBlue)
+                                Text("Uploading...")
+                                    .font(.caption)
+                                    .foregroundColor(.sioreeLightGrey)
+                            }
+                        }
+                    } header: {
+                        Text("Cover Photo *")
+                            .foregroundColor(.sioreeWhite)
+                    }
+                    
+                    Section {
+                        DatePicker("Date", selection: $date, displayedComponents: .date)
+                            .foregroundColor(.sioreeWhite)
+                        DatePicker("Time", selection: $time, displayedComponents: .hourAndMinute)
+                            .foregroundColor(.sioreeWhite)
+                    } header: {
+                        Text("Date & Time")
+                            .foregroundColor(.sioreeWhite)
+                    }
+                    
+                    Section {
                         Button(action: {
                             showMap = true
                         }) {
                             HStack {
                                 Image(systemName: "map.fill")
                                     .foregroundColor(.sioreeIcyBlue)
-                                Text("Select on Map")
-                                    .foregroundColor(.sioreeIcyBlue)
+                                Text(selectedAddress ?? "Select Location on Map")
+                                    .foregroundColor(selectedAddress == nil ? .sioreeIcyBlue : .sioreeWhite)
                                     .font(.sioreeBody)
                                 Spacer()
                                 if let coord = selectedCoordinate {
                                     Text("\(coord.latitude, specifier: "%.4f"), \(coord.longitude, specifier: "%.4f")")
                                         .font(.caption)
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(.sioreeLightGrey)
                                 }
+                                Image(systemName: "chevron.right")
+                                    .foregroundColor(.sioreeIcyBlue.opacity(0.7))
+                                    .font(.system(size: 14))
                             }
                         }
+                        .buttonStyle(.plain)
+                    } header: {
+                        Text("Location")
+                            .foregroundColor(.sioreeWhite)
                     }
                     .onChange(of: selectedAddress) { newValue in
                         if let address = newValue, !address.isEmpty {
@@ -78,19 +156,34 @@ struct EventCreateView: View {
                         }
                     }
                     
-                    Section("Pricing") {
+                    Section {
                         Toggle("Ticket Price", isOn: $showPriceInput)
+                            .foregroundColor(.sioreeWhite)
                         if showPriceInput {
-                            TextField("Price", value: $ticketPrice, format: .currency(code: "USD"))
+                            HStack {
+                                Text("$")
+                                    .foregroundColor(.sioreeWhite)
+                                TextField("0.00", value: $ticketPrice, format: .number)
                         .keyboardType(.decimalPad)
+                                    .foregroundColor(.sioreeWhite)
+                            }
+                            .padding(.vertical, Theme.Spacing.m + 2)
+                            .padding(.horizontal, Theme.Spacing.m)
+                            .background(Color.sioreeCharcoal.opacity(0.7))
+                            .cornerRadius(Theme.CornerRadius.medium)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                                    .stroke(Color.sioreeLightGrey.opacity(0.22), lineWidth: 1.2)
+                            )
                         }
 
-                      TextField("Capacity (optional)", text: $capacity)
-                        .keyboardType(.numberPad)
+                        CustomTextField(placeholder: "Capacity (optional)", text: $capacity, keyboardType: .numberPad)
+                    } header: {
+                        Text("Pricing")
+                            .foregroundColor(.sioreeWhite)
                     }
 
-                    // Request talent section
-                    Section("Request Talent") {
+                    Section {
                         Button {
                             showTalentBrowser = true
                         } label: {
@@ -101,6 +194,15 @@ struct EventCreateView: View {
                                     .foregroundColor(.sioreeIcyBlue)
                                     .font(.sioreeBody)
                                 Spacer()
+                                if !selectedTalentIds.isEmpty {
+                                    Text("\(selectedTalentIds.count)")
+                                        .font(.caption)
+                                        .foregroundColor(.sioreeIcyBlue)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color.sioreeIcyBlue.opacity(0.2))
+                                        .clipShape(Capsule())
+                                }
                                 Image(systemName: "chevron.right")
                                     .foregroundColor(.sioreeIcyBlue.opacity(0.7))
                                     .font(.system(size: 14))
@@ -110,55 +212,13 @@ struct EventCreateView: View {
 
                         Text("Select specific talent to send direct requests to work your event.")
                             .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-
-                    // Looking for talent section
-                    Section("Looking For Talent") {
-                        Text(isRequestingTalent ?
-                            "Specify the talent roles you need. Your event will be highlighted to matching talent." :
-                            "Specify the talent roles you need. Talent can browse and find your event.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Common Roles")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 8) {
-                                    ForEach(availableTalentCategories, id: \.self) { category in
-                                        Button {
-                                            toggle(category, in: &selectedLookingForTalents)
-                                        } label: {
-                                            tagChip(category.rawValue, color: selectedLookingForTalents.contains(category) ? .sioreeIcyBlue : .sioreeCharcoal.opacity(0.4))
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                }
-                                .padding(.vertical, 4)
-                            }
-                        }
-                        
-                        VStack(alignment: .leading, spacing: 8) {
-                            TextField("Notes for talent (optional)", text: $lookingForNotes, axis: .vertical)
-                                .lineLimit(1...3)
-                                .autocorrectionDisabled(false)
-                                .textInputAutocapitalization(.sentences)
-                        }
-                        
-                        if !lookingForRolesPayload.isEmpty {
-                            tagChip("Roles: \(lookingForRolesPayload.joined(separator: ", "))", color: .sioreeIcyBlue.opacity(0.85))
-                        }
-                        if let notes = lookingForNotesPayload, !notes.isEmpty {
-                            tagChip("Notes: \(notes)", color: .sioreeLightGrey)
-                        }
-                        if isRequestingTalent {
-                            tagChip("🎯 Actively Requesting Talent", color: .green.opacity(0.8))
-                        }
+                            .foregroundColor(.sioreeLightGrey)
+                    } header: {
+                        Text("Request Talent")
+                            .foregroundColor(.sioreeWhite)
                     }
                 }
+                .scrollContentBackground(.hidden)
             }
             .navigationTitle("Create Event")
             .navigationBarTitleDisplayMode(.inline)
@@ -167,58 +227,42 @@ struct EventCreateView: View {
                     Button("Cancel") {
                         dismiss()
                     }
+                    .foregroundColor(.sioreeWhite)
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
-                        isPublishing = true
-                        let capacityValue = Int(capacity.trimmingCharacters(in: .whitespacesAndNewlines))
-                        viewModel.createEvent(
-                            title: title,
-                            description: description,
-                            date: date,
-                            time: time,
-                            location: location,
-                            images: [],
-                            ticketPrice: ticketPrice,
-                            capacity: capacityValue,
-                            talentIds: [],
-                            lookingForRoles: lookingForRolesPayload,
-                            lookingForNotes: lookingForNotesPayload,
-                            lookingForTalentType: lookingForTalentTypePayload
-                        ) { result in
-                            DispatchQueue.main.async {
-                                isPublishing = false
-                                switch result {
-                                case .success(let event):
-                                    onEventCreated?(event)
-                                    dismiss()
-                                case .failure(let error):
-                                    errorMessage = error.localizedDescription
-                                    showError = true
-                                }
-                            }
-                        }
+                        publishEvent()
                     } label: {
                         if isPublishing {
                             ProgressView()
                         } else {
                             Text("Publish")
                                 .fontWeight(.semibold)
+                                .foregroundColor(canPublish ? .sioreeIcyBlue : .sioreeLightGrey)
                         }
                     }
-                    .disabled(title.isEmpty || location.isEmpty || isPublishing)
+                    .disabled(!canPublish || isPublishing)
                 }
             }
             .fullScreenCover(isPresented: $showMap) {
                 EventLocationMapView(selectedLocation: $selectedCoordinate, selectedAddress: $selectedAddress, initialUserLocation: currentUserLocation)
             }
+            .sheet(isPresented: $showPhotoPicker) {
+                PhotoPicker(selectedImage: $coverPhoto)
+            }
+            .onChange(of: coverPhoto) { _, newImage in
+                if let image = newImage {
+                    uploadCoverPhoto(image)
+                }
+            }
             .fullScreenCover(isPresented: $showTalentBrowser) {
                 TalentBrowserView(event: nil, onTalentRequested: { talent in
-                    // Handle talent request callback
-                    print("Requested talent: \(talent.name)")
-                    // In a real implementation, this would create a booking request
-                    // and send a notification to the talent
+                    // Add talent ID to selected list if not already there
+                    if !selectedTalentIds.contains(talent.userId) {
+                        selectedTalentIds.append(talent.userId)
+                    }
+                    print("Selected talent: \(talent.name) - ID: \(talent.userId)")
                 })
             }
             .alert("Event Publish Failed", isPresented: $showError) {
@@ -229,54 +273,94 @@ struct EventCreateView: View {
         }
     }
     
-    private var lookingForRolesPayload: [String] {
-        let categoryRoles = selectedLookingForTalents.map { $0.rawValue.trimmingCharacters(in: .whitespacesAndNewlines) }
-        return Array(Set(categoryRoles)).filter { !$0.isEmpty }
+    private var canPublish: Bool {
+        !title.isEmpty && 
+        !location.isEmpty && 
+        coverPhotoUrl != nil
     }
     
-    private var lookingForNotesPayload: String? {
-        let trimmed = lookingForNotes.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
+    private func uploadCoverPhoto(_ image: UIImage) {
+        isUploadingPhoto = true
+        photoService.uploadImage(image)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    isUploadingPhoto = false
+                    if case .failure(let error) = completion {
+                        errorMessage = "Failed to upload cover photo: \(error.localizedDescription)"
+                        showError = true
+                        coverPhoto = nil
+                        coverPhotoUrl = nil
+                    }
+                },
+                receiveValue: { url in
+                    isUploadingPhoto = false
+                    coverPhotoUrl = url
+                    print("✅ Cover photo uploaded: \(url)")
+                }
+            )
+            .store(in: &cancellables)
     }
     
-    private var lookingForTalentTypePayload: String {
-        if !lookingForRolesPayload.isEmpty {
-            return lookingForRolesPayload.joined(separator: ", ")
+    private func publishEvent() {
+        guard canPublish else { return }
+        
+        isPublishing = true
+        let capacityValue = Int(capacity.trimmingCharacters(in: .whitespacesAndNewlines))
+        let images = coverPhotoUrl != nil ? [coverPhotoUrl!] : []
+        
+        viewModel.createEvent(
+            title: title,
+            description: description,
+            date: date,
+            time: time,
+            location: location,
+            images: images,
+            ticketPrice: ticketPrice,
+            capacity: capacityValue,
+            talentIds: selectedTalentIds,
+            lookingForRoles: [],
+            lookingForNotes: nil,
+            lookingForTalentType: nil
+        ) { result in
+            DispatchQueue.main.async {
+                isPublishing = false
+                switch result {
+                case .success(let event):
+                    onEventCreated?(event)
+                    dismiss()
+                case .failure(let error):
+                    errorMessage = error.localizedDescription
+                    showError = true
+                }
+            }
         }
-        if let notes = lookingForNotesPayload, !notes.isEmpty {
-            return notes
-        }
-        return "General talent"
     }
     
-    private var lookingForSummary: String? {
-        var parts: [String] = []
-        if !lookingForRolesPayload.isEmpty {
-            parts.append(lookingForRolesPayload.joined(separator: ", "))
-        }
-        if let notes = lookingForNotesPayload {
-            parts.append(notes)
-        }
-        let combined = parts.joined(separator: " — ")
-        return combined.isEmpty ? nil : combined
-    }
-    
-    @ViewBuilder
-    private func tagChip(_ text: String, color: Color) -> some View {
-        Text(text)
-            .font(.caption)
-            .foregroundColor(.sioreeWhite)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(color.opacity(0.85))
-            .cornerRadius(12)
-    }
-    
-    private func toggle(_ category: TalentCategory, in set: inout Set<TalentCategory>) {
-        if set.contains(category) {
-            set.remove(category)
-        } else {
-            set.insert(category)
+    private var backgroundGlow: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color.sioreeBlack,
+                    Color.sioreeBlack.opacity(0.98),
+                    Color.sioreeCharcoal.opacity(0.85)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+            
+            Circle()
+                .fill(Color.sioreeIcyBlue.opacity(0.25))
+                .frame(width: 360, height: 360)
+                .blur(radius: 120)
+                .offset(x: -120, y: -320)
+            
+            Circle()
+                .fill(Color.sioreeIcyBlue.opacity(0.2))
+                .frame(width: 420, height: 420)
+                .blur(radius: 140)
+                .offset(x: 160, y: 220)
         }
     }
     
@@ -335,4 +419,6 @@ struct TalentTypePickerView: View {
 #Preview {
     EventCreateView()
 }
+
+//trial party
 

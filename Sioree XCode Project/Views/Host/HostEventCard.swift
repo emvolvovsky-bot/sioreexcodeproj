@@ -97,86 +97,28 @@ struct HostEventCard: View {
 struct HostEventCardGrid: View {
     let event: Event
     let onTap: () -> Void
-    @State private var attendeePhotos: [String] = []
-    @State private var isLoadingPhotos = true
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            // Photo collage background (same style as partier profile)
+            // Event cover photo (prioritized)
             ZStack {
-                if !attendeePhotos.isEmpty {
-                    // Display attendee photos in collage
-                    GeometryReader { geometry in
-                        ZStack {
-                            // Display up to 4 photos in a collage
-                            ForEach(0..<min(attendeePhotos.count, 4), id: \.self) { index in
-                                if let url = URL(string: attendeePhotos[index]) {
-                                    AsyncImage(url: url) { phase in
-                                        switch phase {
-                                        case .success(let image):
-                                            image
-                                                .resizable()
-                                                .scaledToFill()
-                                                .frame(width: collageSize(for: index, in: geometry.size).width,
-                                                       height: collageSize(for: index, in: geometry.size).height)
-                                                .clipped()
-                                                .position(collagePosition(for: index, in: geometry.size))
-                                                .rotationEffect(.degrees(collageRotation(for: index)))
-                                        default:
-                                            EmptyView()
-                                        }
-                                    }
-                                }
-                            }
+                if let imageUrl = event.images.first, let url = URL(string: imageUrl) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .empty:
+                            placeholderImage
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        case .failure:
+                            placeholderImage
+                        @unknown default:
+                            placeholderImage
                         }
-                    }
-                } else if !isLoadingPhotos {
-                    // No photos - show event image or placeholder
-                    if let imageUrl = event.images.first, let url = URL(string: imageUrl) {
-                        AsyncImage(url: url) { phase in
-                            switch phase {
-                            case .empty:
-                                Rectangle()
-                                    .fill(Color.sioreeCharcoal)
-                                    .overlay(
-                                        Image(systemName: "party.popper.fill")
-                                            .font(.system(size: 24))
-                                            .foregroundColor(Color.sioreeIcyBlue.opacity(0.5))
-                                    )
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .scaledToFill()
-                            case .failure:
-                                Rectangle()
-                                    .fill(Color.sioreeCharcoal)
-                                    .overlay(
-                                        Image(systemName: "party.popper.fill")
-                                            .font(.system(size: 24))
-                                            .foregroundColor(Color.sioreeLightGrey)
-                                    )
-                            @unknown default:
-                                Rectangle()
-                                    .fill(Color.sioreeCharcoal)
-                            }
-                        }
-                    } else {
-                        Rectangle()
-                            .fill(Color.sioreeCharcoal)
-                            .overlay(
-                                Image(systemName: "party.popper.fill")
-                                    .font(.system(size: 24))
-                                    .foregroundColor(Color.sioreeIcyBlue.opacity(0.5))
-                            )
                     }
                 } else {
-                    // Loading placeholder
-                    Rectangle()
-                        .fill(Color.sioreeCharcoal)
-                        .overlay(
-                            ProgressView()
-                                .tint(Color.sioreeIcyBlue)
-                        )
+                    placeholderImage
                 }
             }
             .frame(height: 180)
@@ -202,107 +144,147 @@ struct HostEventCardGrid: View {
                 }
                 .shadow(color: Color.black.opacity(0.8), radius: 2)
 
-                // Photo count indicator for hosted events
-                if !attendeePhotos.isEmpty {
-                    HStack(spacing: 4) {
-                        Image(systemName: "photo.fill")
-                            .font(.system(size: 10))
-                            .foregroundColor(Color.sioreeIcyBlue.opacity(0.9))
-                        Text("\(attendeePhotos.count)")
-                            .font(.sioreeCaption)
-                            .foregroundColor(Color.sioreeIcyBlue.opacity(0.9))
-                    }
-                    .shadow(color: Color.black.opacity(0.8), radius: 2)
-                }
             }
             .padding(Theme.Spacing.s)
         }
         .onTapGesture {
             onTap()
         }
-        .onAppear {
-            loadAttendeePhotos()
-        }
     }
-
-    private func eventStatusString(for event: Event) -> String {
-        if event.date < Date() {
-            return "Ended"
-        } else {
-            return "Upcoming"
-        }
-    }
-
-    private func loadAttendeePhotos() {
-        isLoadingPhotos = true
-
-        // Try to load photos from API first
-        let networkService = NetworkService()
-        networkService.fetchPostsForEvent(eventId: event.id)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { completion in
-                    self.isLoadingPhotos = false
-                    if case .failure = completion {
-                        // Fallback to local storage
-                        self.loadPhotosFromLocalStorage()
-                    }
-                },
-                receiveValue: { posts in
-                    // Extract all images from posts
-                    self.attendeePhotos = posts.flatMap { $0.images }
-                }
+    
+    private var placeholderImage: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color.sioreeIcyBlue.opacity(0.3),
+                    Color.sioreeCharcoal.opacity(0.5)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
             )
-            .store(in: &cancellables)
-    }
-
-    private func loadPhotosFromLocalStorage() {
-        let storageKey = "event_photos_\(event.id)"
-        let storedPhotos = UserDefaults.standard.array(forKey: storageKey) as? [[String: Any]] ?? []
-
-        let images = storedPhotos.compactMap { photoData -> [String]? in
-            return photoData["images"] as? [String]
-        }.flatMap { $0 }
-
-        self.attendeePhotos = images
-    }
-
-    // Collage layout helpers
-    private func collageSize(for index: Int, in totalSize: CGSize) -> CGSize {
-        let baseSize = min(totalSize.width, totalSize.height) * 0.4
-        switch index {
-        case 0: return CGSize(width: baseSize * 1.2, height: baseSize * 1.2) // Main photo
-        case 1: return CGSize(width: baseSize * 0.8, height: baseSize * 0.8) // Secondary
-        case 2: return CGSize(width: baseSize * 0.6, height: baseSize * 0.6) // Small
-        case 3: return CGSize(width: baseSize * 0.5, height: baseSize * 0.5) // Smallest
-        default: return CGSize(width: baseSize * 0.4, height: baseSize * 0.4)
+            Image(systemName: "party.popper.fill")
+                .font(.system(size: 40))
+                .foregroundColor(.sioreeIcyBlue.opacity(0.5))
         }
     }
+}
 
-    private func collagePosition(for index: Int, in totalSize: CGSize) -> CGPoint {
-        let centerX = totalSize.width / 2
-        let centerY = totalSize.height / 2
-
-        switch index {
-        case 0: return CGPoint(x: centerX - 20, y: centerY - 20) // Slightly offset main
-        case 1: return CGPoint(x: centerX + 40, y: centerY + 20) // Bottom right
-        case 2: return CGPoint(x: centerX - 50, y: centerY + 30) // Bottom left
-        case 3: return CGPoint(x: centerX + 20, y: centerY - 40) // Top right
-        default: return CGPoint(x: centerX, y: centerY)
+struct HostUpcomingEventCard: View {
+    let event: Event
+    let authViewModel: AuthViewModel
+    @State private var showAttendees = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Event cover photo
+            ZStack(alignment: .bottomLeading) {
+                if let coverPhotoUrl = event.images.first, let url = URL(string: coverPhotoUrl) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .empty:
+                            placeholderImage
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        case .failure:
+                            placeholderImage
+                        @unknown default:
+                            placeholderImage
+                        }
+                    }
+                } else {
+                    placeholderImage
+                }
+                
+                // Event info overlay
+                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                    Spacer()
+                    Text(event.title)
+                        .font(.sioreeH3)
+                        .foregroundColor(.sioreeWhite)
+                        .lineLimit(2)
+                        .shadow(color: Color.black.opacity(0.8), radius: 4, x: 0, y: 2)
+                    
+                    HStack(spacing: Theme.Spacing.s) {
+                        Image(systemName: "calendar")
+                            .font(.system(size: 12))
+                            .foregroundColor(.sioreeLightGrey)
+                        Text(event.date.formatted(date: .abbreviated, time: .omitted))
+                            .font(.sioreeBodySmall)
+                            .foregroundColor(.sioreeLightGrey)
+                        
+                        Text("•")
+                            .foregroundColor(.sioreeLightGrey.opacity(0.5))
+                        
+                        Image(systemName: "mappin.circle.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(.sioreeLightGrey)
+                        Text(event.location)
+                            .font(.sioreeBodySmall)
+                            .foregroundColor(.sioreeLightGrey)
+                            .lineLimit(1)
+                    }
+                    .shadow(color: Color.black.opacity(0.8), radius: 4, x: 0, y: 2)
+                }
+                .padding(Theme.Spacing.m)
+            }
+            .frame(height: 280)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
+            
+            // Attendee List Button
+            Button(action: {
+                showAttendees = true
+            }) {
+                HStack {
+                    Image(systemName: "person.3.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(.sioreeIcyBlue)
+                    Text("Attendee List")
+                        .font(.sioreeBody)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.sioreeIcyBlue)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14))
+                        .foregroundColor(.sioreeIcyBlue.opacity(0.7))
+                }
+                .padding(Theme.Spacing.m)
+                .background(Color.sioreeCharcoal.opacity(0.3))
+            }
+            .buttonStyle(.plain)
+        }
+        .background(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                .fill(Color.sioreeCharcoal.opacity(0.2))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                .stroke(Color.sioreeIcyBlue.opacity(0.2), lineWidth: 1)
+        )
+        .sheet(isPresented: $showAttendees) {
+            NavigationStack {
+                EventAttendeesView(eventId: event.id, eventName: event.title)
+                    .environmentObject(authViewModel)
+            }
         }
     }
-
-    private func collageRotation(for index: Int) -> Double {
-        switch index {
-        case 0: return 0
-        case 1: return 5
-        case 2: return -8
-        case 3: return 12
-        default: return 0
+    
+    private var placeholderImage: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color.sioreeIcyBlue.opacity(0.3),
+                    Color.sioreeCharcoal.opacity(0.5)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            Image(systemName: "party.popper.fill")
+                .font(.system(size: 60))
+                .foregroundColor(.sioreeIcyBlue.opacity(0.5))
         }
     }
-
-    @State private var cancellables = Set<AnyCancellable>()
 }
 
 #Preview {

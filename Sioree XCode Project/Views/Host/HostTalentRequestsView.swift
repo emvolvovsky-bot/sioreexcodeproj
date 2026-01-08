@@ -22,39 +22,31 @@ struct HostTalentRequestsView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // Background
-                LinearGradient(
-                    colors: [Color.sioreeBlack, Color.sioreeBlack.opacity(0.95)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
+                backgroundGlow
 
                 VStack(spacing: 0) {
-                    // Tab Picker
-                    Picker("Request Status", selection: $selectedTab) {
-                        ForEach(TalentRequestTab.allCases, id: \.self) { tab in
-                            Text(tab.rawValue).tag(tab)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal, Theme.Spacing.m)
-                    .padding(.vertical, Theme.Spacing.m)
+                    // Custom Segmented Control
+                    customSegmentedControl
+                        .padding(.horizontal, Theme.Spacing.l)
+                        .padding(.top, Theme.Spacing.m)
+                        .padding(.bottom, Theme.Spacing.s)
 
                     // Content
                     if viewModel.isLoading {
-                        LoadingView()
+                        ProgressView()
+                            .tint(.sioreeIcyBlue)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else if filteredRequests.isEmpty {
                         emptyStateView
                     } else {
                         ScrollView {
-                            LazyVStack(spacing: Theme.Spacing.s) {
+                            LazyVStack(spacing: Theme.Spacing.m) {
                                 ForEach(filteredRequests) { request in
                                     TalentRequestListItem(request: request) {
                                         // Start conversation with talent
                                         startConversation(with: request.talentId, talentName: request.talentName ?? "Talent")
                                     }
-                                    .padding(.horizontal, Theme.Spacing.m)
+                                    .padding(.horizontal, Theme.Spacing.l)
                                 }
                             }
                             .padding(.vertical, Theme.Spacing.m)
@@ -62,8 +54,8 @@ struct HostTalentRequestsView: View {
                     }
                 }
             }
-            .navigationTitle("Talent Requests")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.hidden, for: .navigationBar)
             .sheet(item: $selectedConversation) { conversation in
                 RealMessageView(conversation: conversation)
             }
@@ -150,6 +142,91 @@ struct HostTalentRequestsView: View {
             }
         )
         .store(in: &viewModel.cancellables)
+    }
+    
+    private var backgroundGlow: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color.sioreeBlack,
+                    Color.sioreeBlack.opacity(0.98),
+                    Color.sioreeCharcoal.opacity(0.85)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+            
+            Circle()
+                .fill(Color.sioreeIcyBlue.opacity(0.25))
+                .frame(width: 360, height: 360)
+                .blur(radius: 120)
+                .offset(x: -120, y: -320)
+            
+            Circle()
+                .fill(Color.sioreeIcyBlue.opacity(0.2))
+                .frame(width: 420, height: 420)
+                .blur(radius: 140)
+                .offset(x: 160, y: 220)
+        }
+    }
+    
+    private var customSegmentedControl: some View {
+        HStack(spacing: Theme.Spacing.xs) {
+            segmentButton(title: "Pending", isSelected: selectedTab == .pending) {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    selectedTab = .pending
+                }
+            }
+            
+            segmentButton(title: "Accepted", isSelected: selectedTab == .accepted) {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    selectedTab = .accepted
+                }
+            }
+            
+            segmentButton(title: "All", isSelected: selectedTab == .all) {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    selectedTab = .all
+                }
+            }
+        }
+        .padding(4)
+        .background(
+            Capsule(style: .continuous)
+                .fill(Color.white.opacity(0.06))
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                )
+        )
+    }
+    
+    private func segmentButton(title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.sioreeBody)
+                .fontWeight(.semibold)
+                .foregroundColor(.sioreeWhite)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, Theme.Spacing.s)
+                .background(
+                    Group {
+                        if isSelected {
+                            Capsule(style: .continuous)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color.sioreeIcyBlue.opacity(0.9), Color.sioreeIcyBlue],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .shadow(color: Color.sioreeIcyBlue.opacity(0.35), radius: 12, x: 0, y: 6)
+                        }
+                    }
+                )
+        }
+        .buttonStyle(.plain)
     }
 }
 

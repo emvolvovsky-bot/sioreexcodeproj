@@ -82,9 +82,24 @@ struct EventDetailView: View {
                             
                             // Content
                             VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                                Text(event.title)
-                                    .font(.sioreeH1)
-                                    .foregroundColor(.sioreeWhite)
+                                HStack(alignment: .center) {
+                                    Text(event.title)
+                                        .font(.sioreeH1)
+                                        .foregroundColor(.sioreeWhite)
+                                    
+                                    Spacer()
+                                    
+                                    // Edit button for host on upcoming events only
+                                    if isHost, let event = viewModel.event, event.date >= Date() {
+                                        Button(action: {
+                                            showEditEvent = true
+                                        }) {
+                                            Text("✏️")
+                                                .font(.system(size: 24))
+                                        }
+                                        .padding(.leading, Theme.Spacing.s)
+                                    }
+                                }
 
                                 if !isTalentMapMode, let need = event.lookingForSummary ?? event.lookingForTalentType, !need.isEmpty, need.lowercased() != "general talent" {
                                     HStack(spacing: Theme.Spacing.s) {
@@ -100,24 +115,47 @@ struct EventDetailView: View {
                                     .cornerRadius(Theme.CornerRadius.medium)
                                 }
                                 
-                                NavigationLink(destination: UserProfileView(userId: event.hostId)) {
-                                    HStack(spacing: Theme.Spacing.s) {
-                                        AvatarView(imageURL: event.hostAvatar, size: .small)
-                                        Text(event.hostName)
-                                            .font(.sioreeBody)
-                                            .foregroundColor(.sioreeWhite)
-                                        Spacer()
-                                        Image(systemName: "chevron.right")
-                                            .font(.system(size: 14))
-                                            .foregroundColor(Color.sioreeIcyBlue)
+                                // Only show host profile and message host button if user is not the host
+                                if !isHost {
+                                    NavigationLink(destination: UserProfileView(userId: event.hostId)) {
+                                        HStack(spacing: Theme.Spacing.s) {
+                                            AvatarView(imageURL: event.hostAvatar, size: .small)
+                                            Text(event.hostName)
+                                                .font(.sioreeBody)
+                                                .foregroundColor(.sioreeWhite)
+                                            Spacer()
+                                            Image(systemName: "chevron.right")
+                                                .font(.system(size: 14))
+                                                .foregroundColor(Color.sioreeIcyBlue)
+                                        }
                                     }
+                                    .buttonStyle(PlainButtonStyle())
+                                    
+                                    Divider()
+                                    
+                                    // Message Host Button
+                                    NavigationLink(destination: UserProfileView(userId: event.hostId)) {
+                                        HStack {
+                                            Image(systemName: "message.fill")
+                                                .foregroundColor(.sioreeIcyBlue)
+                                            Text("Message Host")
+                                                .font(.sioreeBody)
+                                                .foregroundColor(.sioreeIcyBlue)
+                                            Spacer()
+                                        }
+                                        .padding(Theme.Spacing.m)
+                                        .background(Color.sioreeIcyBlue.opacity(0.1))
+                                        .cornerRadius(Theme.CornerRadius.medium)
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                    
+                                    Divider()
                                 }
-                                .buttonStyle(PlainButtonStyle())
-                                
-                                Divider()
                                 
                                 // Brand promotion info (if featured)
                                 if !isTalentMapMode, event.isFeatured {
+                                    Divider()
+                                    
                                     HStack(spacing: Theme.Spacing.s) {
                                         Image(systemName: "star.fill")
                                             .font(.system(size: 14))
@@ -131,22 +169,6 @@ struct EventDetailView: View {
                                     .background(Color.sioreeIcyBlue.opacity(0.1))
                                     .cornerRadius(Theme.CornerRadius.small)
                                 }
-                                
-                                // Message Host Button
-                                NavigationLink(destination: UserProfileView(userId: event.hostId)) {
-                                    HStack {
-                                        Image(systemName: "message.fill")
-                                            .foregroundColor(.sioreeIcyBlue)
-                                        Text("Message Host")
-                                            .font(.sioreeBody)
-                                            .foregroundColor(.sioreeIcyBlue)
-                                        Spacer()
-                                    }
-                                    .padding(Theme.Spacing.m)
-                                    .background(Color.sioreeIcyBlue.opacity(0.1))
-                                    .cornerRadius(Theme.CornerRadius.medium)
-                                }
-                                .buttonStyle(PlainButtonStyle())
                                 
                                 Divider()
                                 
@@ -331,33 +353,10 @@ struct EventDetailView: View {
                         VStack(spacing: 0) {
                             Divider()
                             Group {
-                                // Host controls
+                                // Host controls - no special buttons for host since edit is in header
                                 if isHost {
-                                    VStack(spacing: Theme.Spacing.s) {
-                                        Text("You are the host of this event")
-                                            .font(.sioreeBody)
-                                            .foregroundColor(.sioreeCharcoal.opacity(0.7))
-                                        
-                                        // Edit button for upcoming events only
-                                        if let event = viewModel.event, event.date >= Date() {
-                                            CustomButton(
-                                                title: "Edit Event",
-                                                variant: .primary,
-                                                size: .medium
-                                            ) {
-                                                showEditEvent = true
-                                            }
-                                        }
-
-                                        CustomButton(
-                                            title: "Request Talent",
-                                            variant: .primary,
-                                            size: .medium
-                                        ) {
-                                            showTalentBrowser = true
-                                        }
-                                    }
-                                    .padding(.vertical, Theme.Spacing.m)
+                                    // Host sees nothing special in bottom bar
+                                    EmptyView()
                                 } else if authViewModel.currentUser?.userType == .talent {
                                     CustomButton(
                                         title: isRequestingHelp ? "Sending..." : (isTalentMapMode ? "Request to Work" : "Request to Help"),

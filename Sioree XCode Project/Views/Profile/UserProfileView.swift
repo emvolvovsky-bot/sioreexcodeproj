@@ -173,12 +173,25 @@ struct UserProfileView: View {
             .sheet(isPresented: $showFollowingList) {
                 UserListListView(userId: userId, listType: .following, userType: getUserTypeFromRole())
             }
-            .sheet(item: $selectedEventForPhotos) { event in
-                EventPhotosViewer(event: event, viewUserId: userId)
-                    .environmentObject(authViewModel)
+            .fullScreenCover(item: $selectedEventForPhotos) { event in
+                if isCurrentUser || (viewModel.user?.userType == .partier) {
+                    // For partiers, use EventStoryViewer (stories view)
+                    EventStoryViewer(event: event, viewUserId: isCurrentUser ? nil : userId)
+                        .environmentObject(authViewModel)
+                } else {
+                    // For hosts/talents, use EventPhotosViewer
+                    EventPhotosViewer(event: event, viewUserId: userId)
+                        .environmentObject(authViewModel)
+                }
             }
-            .sheet(item: $selectedEventForDetail) { event in
-                EventDetailPlaceholderView(event: event)
+            .navigationDestination(item: $selectedEventForDetail) { event in
+                // For hosts viewing their own upcoming events, show EventDetailView which will have edit capability
+                if isCurrentUser && viewModel.user?.userType == .host && !isEventPast(event) {
+                    EventDetailView(eventId: event.id, isTalentMapMode: false)
+                        .environmentObject(authViewModel)
+                } else {
+                    EventDetailPlaceholderView(event: event)
+                }
             }
         }
     }
@@ -189,8 +202,45 @@ struct UserProfileView: View {
 
     private func partierContent(user: User) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            eventsSectionHeader(title: "Event History", eventCount: viewModel.events.count, seeAllDestination: EventsAttendedView())
-            eventsContent(events: viewModel.events, user: user, showPhotos: true)
+            if isCurrentUser {
+                eventsSectionHeader(title: "Event History", eventCount: viewModel.events.count, seeAllDestination: EventsAttendedView())
+                eventsContent(events: viewModel.events, user: user, showPhotos: true)
+            } else {
+                // Show circles like PartierProfileView when viewing another person's profile
+                partierEventsCirclesView(events: viewModel.events)
+            }
+        }
+    }
+    
+    private func partierEventsCirclesView(events: [Event]) -> some View {
+        Group {
+            if events.isEmpty {
+                emptyEventsView
+            } else {
+                let columns = Array(repeating: GridItem(.flexible(), spacing: Theme.Spacing.m), count: 3)
+                
+                LazyVGrid(columns: columns, spacing: Theme.Spacing.l) {
+                    ForEach(Array(events.prefix(9)), id: \.id) { event in
+                        VStack(spacing: Theme.Spacing.xs) {
+                            EventHighlightCircle(event: event)
+                                .onTapGesture {
+                                    withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+                                        selectedEventForPhotos = event
+                                    }
+                                }
+                            
+                            // Event name below (like Instagram highlights)
+                            Text(event.title)
+                                .font(.system(size: 12, weight: .regular))
+                                .foregroundColor(.sioreeWhite)
+                                .lineLimit(1)
+                                .frame(maxWidth: 100)
+                        }
+                    }
+                }
+                .padding(.horizontal, Theme.Spacing.m)
+                .padding(.vertical, Theme.Spacing.m)
+            }
         }
     }
 
@@ -235,7 +285,7 @@ struct UserProfileView: View {
                                     // Past event - show photo collage
                                     selectedEventForPhotos = event
                                 } else {
-                                    // Upcoming event - show event detail
+                                    // Upcoming event - show event detail (with edit capability for hosts)
                                     selectedEventForDetail = event
                                 }
                             }

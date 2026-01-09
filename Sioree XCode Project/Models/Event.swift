@@ -7,6 +7,32 @@
 
 import Foundation
 
+enum EventCategory: CaseIterable, Hashable {
+    case all, music, food, sport, movies, meetups
+    
+    var label: String {
+        switch self {
+        case .all: return "All"
+        case .music: return "Music"
+        case .food: return "Food"
+        case .sport: return "Sport"
+        case .movies: return "Movies"
+        case .meetups: return "Meetups"
+        }
+    }
+    
+    var keyword: String {
+        switch self {
+        case .all: return ""
+        case .music: return "music"
+        case .food: return "food"
+        case .sport: return "sport"
+        case .movies: return "movie"
+        case .meetups: return "meet"
+        }
+    }
+}
+
 enum EventStatus: String, Codable {
     case draft
     case published

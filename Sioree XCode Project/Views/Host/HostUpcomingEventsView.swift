@@ -75,7 +75,7 @@ struct HostUpcomingEventsView: View {
                                 .buttonStyle(PlainButtonStyle())
                             }
                         }
-                        .padding(.horizontal, Theme.Spacing.m)
+                        .padding(.horizontal, Theme.Spacing.l)
                         .padding(.vertical, Theme.Spacing.m)
                         .padding(.bottom, Theme.Spacing.xl)
                     }

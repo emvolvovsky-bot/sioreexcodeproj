@@ -386,6 +386,52 @@ class NetworkService {
         return request("/api/events", method: "POST", body: jsonData)
     }
     
+    func updateEvent(
+        eventId: String,
+        title: String,
+        description: String,
+        date: Date,
+        time: Date,
+        location: String,
+        capacity: Int? = nil
+    ) -> AnyPublisher<Event, Error> {
+        // Combine date and time for event_date
+        let calendar = Calendar.current
+        let dateComponents = calendar.dateComponents([.year, .month, .day], from: date)
+        let timeComponents = calendar.dateComponents([.hour, .minute], from: time)
+        var combinedComponents = DateComponents()
+        combinedComponents.year = dateComponents.year
+        combinedComponents.month = dateComponents.month
+        combinedComponents.day = dateComponents.day
+        combinedComponents.hour = timeComponents.hour
+        combinedComponents.minute = timeComponents.minute
+        let combinedDate = calendar.date(from: combinedComponents) ?? date
+        
+        let isoDate = ISO8601DateFormatter().string(from: combinedDate)
+        
+        var body: [String: Any] = [
+            "title": title,
+            "description": description,
+            "event_date": isoDate,
+            "eventDate": isoDate,
+            "date": isoDate,
+            "location": location
+        ]
+        
+        // Add capacity if provided
+        if let capacity = capacity {
+            body["capacity"] = capacity
+        }
+        
+        print("📤 Updating event \(eventId) with body: \(body)")
+        
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else {
+            return Fail(error: NetworkError.unknown).eraseToAnyPublisher()
+        }
+        
+        return request("/api/events/\(eventId)", method: "PUT", body: jsonData)
+    }
+    
     func toggleEventLike(eventId: String) -> AnyPublisher<Bool, Error> {
         return request("/api/events/\(eventId)/like", method: "POST")
     }

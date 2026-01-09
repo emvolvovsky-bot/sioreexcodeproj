@@ -298,12 +298,15 @@ private extension PartierHomeView {
             .padding(.horizontal, listPadding)
                     
             LazyVStack(spacing: Theme.Spacing.m) {
-                ForEach(filteredEvents) { event in
+                let events = filteredEvents
+                ForEach(events, id: \.id) { (event: Event) in
                     Group {
                         if event.isPrivate, let requiredCode = event.accessCode {
                             if let savedCode = enteredCodes[event.id], savedCode == requiredCode {
                                 NavigationLink(destination: EventDetailView(eventId: event.id)) {
-                                    NightEventCard(event: event, accent: .sioreeIcyBlue)
+                                    NightEventCard(event: event, accent: .sioreeIcyBlue) {
+                                        viewModel.toggleSaveEvent(event)
+                                    }
                                 }
                                 .buttonStyle(.plain)
                             } else {
@@ -311,13 +314,17 @@ private extension PartierHomeView {
                                     selectedEvent = event
                                     showCodeEntry = true
                                 }) {
-                                    NightEventCard(event: event, accent: .sioreeIcyBlue)
+                                    NightEventCard(event: event, accent: .sioreeIcyBlue) {
+                                        viewModel.toggleSaveEvent(event)
+                                    }
                                 }
                                 .buttonStyle(.plain)
                             }
                         } else {
                             NavigationLink(destination: EventDetailView(eventId: event.id)) {
-                                NightEventCard(event: event, accent: .sioreeIcyBlue)
+                                NightEventCard(event: event, accent: .sioreeIcyBlue) {
+                                    viewModel.toggleSaveEvent(event)
+                                }
                             }
                             .buttonStyle(.plain)
                         }
@@ -371,9 +378,10 @@ private extension PartierHomeView {
     }
     
     var filteredEvents: [Event] {
-        baseEvents.filter { event in
+        let events: [Event] = baseEvents.filter { event in
             matchesCategory(event) && matchesSearch(event)
         }
+        return events
     }
     
     var baseEvents: [Event] {
@@ -400,32 +408,6 @@ private extension PartierHomeView {
         }
     }
 
-}
-
-private enum EventCategory: CaseIterable {
-    case all, music, food, sport, movies, meetups
-    
-    var label: String {
-        switch self {
-        case .all: return "All"
-        case .music: return "Music"
-        case .food: return "Food"
-        case .sport: return "Sport"
-        case .movies: return "Movies"
-        case .meetups: return "Meetups"
-        }
-    }
-    
-    var keyword: String {
-        switch self {
-        case .all: return ""
-        case .music: return "music"
-        case .food: return "food"
-        case .sport: return "sport"
-        case .movies: return "movie"
-        case .meetups: return "meet"
-        }
-    }
 }
 
 private struct GlassChip: View {
@@ -474,9 +456,10 @@ private struct GlassChip: View {
     }
 }
 
-private struct NightEventCard: View {
+struct NightEventCard: View {
     let event: Event
     let accent: Color
+    var onSave: (() -> Void)? = nil
     
     private var priceText: String {
         if let price = event.ticketPrice, price > 0 {
@@ -555,7 +538,7 @@ private struct NightEventCard: View {
                             .foregroundColor(.sioreeWhite)
                 }
                 
-                    if let lookingFor = event.lookingForSummary {
+                    if let lookingFor = event.lookingForSummary, lookingFor.lowercased() != "general talent" {
                         Label(lookingFor, systemImage: "music.quarternote.3")
                             .font(.sioreeCaption)
                             .foregroundColor(.sioreeLightGrey)
@@ -563,8 +546,10 @@ private struct NightEventCard: View {
                     }
                     
                     HStack {
-                        attendeeStack
-                            .padding(.leading, Theme.Spacing.xs)
+                        if event.attendeeCount > 0 {
+                            attendeeStack
+                                .padding(.leading, Theme.Spacing.xs)
+                        }
                         Spacer()
                         Text("Get Now")
                             .font(.sioreeBody)
@@ -656,19 +641,24 @@ private struct NightEventCard: View {
     }
     
     private var heartButton: some View {
-        Image(systemName: event.isSaved ? "heart.fill" : "heart")
-            .font(.body.bold())
-            .foregroundColor(event.isSaved ? accent : .sioreeWhite)
-            .frame(width: 42, height: 42)
-            .background(
-                Circle()
-                    .fill(Color.black.opacity(0.35))
-                    .overlay(
-                        Circle()
-                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                    )
-            )
-            .shadow(color: accent.opacity(0.3), radius: 12, x: 0, y: 8)
+        Button(action: {
+            onSave?()
+        }) {
+            Image(systemName: event.isSaved ? "heart.fill" : "heart")
+                .font(.body.bold())
+                .foregroundColor(event.isSaved ? accent : .sioreeWhite)
+                .frame(width: 42, height: 42)
+                .background(
+                    Circle()
+                        .fill(Color.black.opacity(0.35))
+                        .overlay(
+                            Circle()
+                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                        )
+                )
+                .shadow(color: accent.opacity(0.3), radius: 12, x: 0, y: 8)
+        }
+        .buttonStyle(.plain)
     }
     
     private var attendeeStack: some View {

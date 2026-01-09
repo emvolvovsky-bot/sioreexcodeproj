@@ -39,6 +39,8 @@ struct EventCreateView: View {
     @State private var showTalentBrowser = false
     @StateObject private var photoService = PhotoService.shared
     @State private var cancellables = Set<AnyCancellable>()
+    @State private var selectedCategory: EventCategory? = nil
+    @State private var showCategoryPicker = false
     
     var body: some View {
         NavigationView {
@@ -111,6 +113,32 @@ struct EventCreateView: View {
                         }
                     } header: {
                         Text("Cover Photo *")
+                            .foregroundColor(.sioreeWhite)
+                    }
+                    
+                    Section {
+                        Button(action: {
+                            showCategoryPicker = true
+                        }) {
+                            HStack {
+                                Image(systemName: "tag.fill")
+                                    .foregroundColor(.sioreeIcyBlue)
+                                Text(selectedCategory?.label ?? "Select Category")
+                                    .foregroundColor(selectedCategory == nil ? .sioreeIcyBlue : .sioreeWhite)
+                                    .font(.sioreeBody)
+                                Spacer()
+                                if selectedCategory != nil {
+                                    Image(systemName: "checkmark")
+                                        .foregroundColor(.sioreeIcyBlue)
+                                }
+                                Image(systemName: "chevron.right")
+                                    .foregroundColor(.sioreeIcyBlue.opacity(0.7))
+                                    .font(.system(size: 14))
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    } header: {
+                        Text("Category *")
                             .foregroundColor(.sioreeWhite)
                     }
                     
@@ -270,13 +298,17 @@ struct EventCreateView: View {
             } message: {
                 Text(errorMessage.isEmpty ? "Please try again." : errorMessage)
             }
+            .sheet(isPresented: $showCategoryPicker) {
+                CategoryPickerView(selectedCategory: $selectedCategory)
+            }
         }
     }
     
     private var canPublish: Bool {
         !title.isEmpty && 
         !location.isEmpty && 
-        coverPhotoUrl != nil
+        coverPhotoUrl != nil &&
+        selectedCategory != nil
     }
     
     private func uploadCoverPhoto(_ image: UIImage) {
@@ -366,6 +398,61 @@ struct EventCreateView: View {
     
 }
 
+
+// Category Picker View
+struct CategoryPickerView: View {
+    @Environment(\.dismiss) var dismiss
+    @Binding var selectedCategory: EventCategory?
+    
+    private let categories: [EventCategory] = [.music, .food, .sport, .movies, .meetups]
+    
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                LinearGradient(
+                    colors: [
+                        Color.sioreeBlack,
+                        Color.sioreeBlack.opacity(0.98),
+                        Color.sioreeCharcoal.opacity(0.85)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+                
+                List {
+                    ForEach(categories, id: \.self) { category in
+                        Button(action: {
+                            selectedCategory = category
+                            dismiss()
+                        }) {
+                            HStack {
+                                Text(category.label)
+                                    .foregroundColor(.sioreeWhite)
+                                Spacer()
+                                if selectedCategory == category {
+                                    Image(systemName: "checkmark")
+                                        .foregroundColor(.sioreeIcyBlue)
+                                }
+                            }
+                        }
+                    }
+                }
+                .scrollContentBackground(.hidden)
+            }
+            .navigationTitle("Select Category")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .foregroundColor(.sioreeIcyBlue)
+                }
+            }
+        }
+    }
+}
 
 // Talent Type Picker View
 struct TalentTypePickerView: View {

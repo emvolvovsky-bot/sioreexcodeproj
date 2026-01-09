@@ -57,7 +57,6 @@ struct HostHomeView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: Theme.Spacing.l) {
                         header
-                        liveQueueSection
                         recentSignupsSection
                     }
                     .padding(.horizontal, Theme.Spacing.m)
@@ -85,17 +84,17 @@ struct HostHomeView: View {
                 .foregroundColor(.sioreeWhite)
                 .padding(.top, Theme.Spacing.l)
             
-            Text("Track your active queue and recent signups.")
+            Text("Track your recent signups.")
                 .font(.sioreeBodySmall)
                 .foregroundColor(.sioreeLightGrey.opacity(0.8))
         }
     }
     
-    private var liveQueueSection: some View {
+    private var recentSignupsSection: some View {
         dashboardCard {
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                 HStack(spacing: Theme.Spacing.s) {
-                    Text("Queue (active checkouts)")
+                    Text("Recent signups")
                         .font(.sioreeH4)
                         .foregroundColor(.sioreeWhite)
                     Spacer()
@@ -123,52 +122,14 @@ struct HostHomeView: View {
                             message: signupsError,
                             tint: .sioreeWarmGlow
                         )
-                    } else if queueSignups.isEmpty {
-                        Text("No active checkouts right now.")
-                            .font(.sioreeBodySmall)
-                            .foregroundColor(.sioreeLightGrey)
-                    } else {
-                        LazyVStack(spacing: Theme.Spacing.s) {
-                            ForEach(queueSignups) { signup in
-                                NavigationLink(destination: UserProfileView(userId: signup.userId)) {
-                                    RecentSignupRow(signup: signup)
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    private var recentSignupsSection: some View {
-        dashboardCard {
-            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                HStack {
-                    Text("Recent signups")
-                        .font(.sioreeH4)
-                        .foregroundColor(.sioreeWhite)
-                    Spacer()
-                }
-                
-                Group {
-                    if isLoadingSignups {
-                        skeletonList
-                    } else if let signupsError {
-                        InfoBanner(
-                            systemImage: "wifi.exclamationmark",
-                            message: signupsError,
-                            tint: .sioreeWarmGlow
-                        )
-                    } else if recentSignupsWithoutQueue.isEmpty {
+                    } else if recentSignups.isEmpty {
                         Text("No recent signups yet.")
                             .font(.sioreeBodySmall)
                             .foregroundColor(.sioreeLightGrey)
                             .padding(.vertical, Theme.Spacing.s)
                     } else {
                         LazyVStack(spacing: Theme.Spacing.s) {
-                            ForEach(recentSignupsWithoutQueue) { signup in
+                            ForEach(recentSignups.sorted { $0.signedUpAt > $1.signedUpAt }) { signup in
                                 NavigationLink(destination: UserProfileView(userId: signup.userId)) {
                                     RecentSignupRow(signup: signup)
                                 }
@@ -186,28 +147,6 @@ struct HostHomeView: View {
             return "Updated \(timeAgoString(from: lastUpdated))"
         }
         return "Updated just now"
-    }
-    
-    private var queueEventId: String? {
-        let upcoming = recentSignups
-            .filter { $0.eventDate >= Date() }
-            .sorted { $0.eventDate < $1.eventDate }
-            .first?
-            .eventId
-        return upcoming
-    }
-    
-    private var queueSignups: [EventSignup] {
-        guard let eventId = queueEventId else { return [] }
-        return recentSignups
-            .filter { $0.eventId == eventId }
-            .sorted { $0.signedUpAt > $1.signedUpAt }
-    }
-    
-    private var recentSignupsWithoutQueue: [EventSignup] {
-        recentSignups
-            .filter { $0.eventId != queueEventId }
-            .sorted { $0.signedUpAt > $1.signedUpAt }
     }
     
     private func dashboardCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {

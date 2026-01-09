@@ -29,7 +29,12 @@ struct AddPostFromEventView: View {
     
     private let maxEventHistoryPhotos = 7
     private var maxPhotosAllowed: Int {
-        // For event history, limit to 7 total photos
+        let isHost = authViewModel.currentUser?.userType == .host
+        // Hosts have no limit on photos for events
+        if event != nil && isHost {
+            return Constants.Limits.maxPostImages // Use standard post limit per upload, but can upload unlimited times
+        }
+        // For event history (partiers), limit to 7 total photos
         if event != nil {
             return max(1, maxEventHistoryPhotos - existingPhotoCount)
         }

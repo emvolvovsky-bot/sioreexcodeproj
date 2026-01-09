@@ -24,7 +24,7 @@ class HomeViewModel: ObservableObject {
     private var allFeaturedEvents: [Event] = []
     private var allNearbyEvents: [Event] = []
     
-    private let networkService = NetworkService()
+    let networkService = NetworkService()
     private var cancellables = Set<AnyCancellable>()
     
     init() {
@@ -62,11 +62,15 @@ class HomeViewModel: ObservableObject {
     }
     
     private func removeEventFromLists(eventId: String) {
-        // Remove from featured events
+        // Remove from displayed featured events
         featuredEvents.removeAll { $0.id == eventId }
+        // Remove from stored featured events
+        allFeaturedEvents.removeAll { $0.id == eventId }
 
-        // Remove from nearby events
+        // Remove from displayed nearby events
         nearbyEvents.removeAll { $0.id == eventId }
+        // Remove from stored nearby events
+        allNearbyEvents.removeAll { $0.id == eventId }
 
         print("✅ Removed event \(eventId) from nearby/featured lists")
     }
@@ -392,7 +396,7 @@ class HomeViewModel: ObservableObject {
         nearbyEvents
     }
     
-    // Filter events by selected date
+    // Filter events by selected date - ONLY show events for that specific day
     func applyDateFilter() {
         guard let selectedDate = selectedDate else {
             // No filter - show all events
@@ -405,15 +409,17 @@ class HomeViewModel: ObservableObject {
         let startOfDay = calendar.startOfDay(for: selectedDate)
         let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? startOfDay
         
-        // Filter featured events
+        // Filter featured events - ONLY events on the selected date
         featuredEvents = allFeaturedEvents.filter { event in
             let eventDate = calendar.startOfDay(for: event.date)
+            // Only include events that are exactly on the selected date
             return eventDate >= startOfDay && eventDate < endOfDay
         }
         
-        // Filter nearby events
+        // Filter nearby events - ONLY events on the selected date
         nearbyEvents = allNearbyEvents.filter { event in
             let eventDate = calendar.startOfDay(for: event.date)
+            // Only include events that are exactly on the selected date
             return eventDate >= startOfDay && eventDate < endOfDay
         }
         
@@ -426,6 +432,45 @@ class HomeViewModel: ObservableObject {
     func clearDateFilter() {
         selectedDate = nil
         applyDateFilter()
+    }
+    
+    // Toggle save event
+    func toggleSaveEvent(_ event: Event) {
+        // Optimistic update
+        if let index = featuredEvents.firstIndex(where: { $0.id == event.id }) {
+            featuredEvents[index].isSaved.toggle()
+        } else if let index = nearbyEvents.firstIndex(where: { $0.id == event.id }) {
+            nearbyEvents[index].isSaved.toggle()
+        }
+        
+        // Also update in all events arrays
+        if let index = allFeaturedEvents.firstIndex(where: { $0.id == event.id }) {
+            allFeaturedEvents[index].isSaved.toggle()
+        } else if let index = allNearbyEvents.firstIndex(where: { $0.id == event.id }) {
+            allNearbyEvents[index].isSaved.toggle()
+        }
+        
+        networkService.toggleEventSave(eventId: event.id)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { [weak self] completion in
+                    if case .failure = completion {
+                        // Revert optimistic update
+                        if let index = self?.featuredEvents.firstIndex(where: { $0.id == event.id }) {
+                            self?.featuredEvents[index].isSaved.toggle()
+                        } else if let index = self?.nearbyEvents.firstIndex(where: { $0.id == event.id }) {
+                            self?.nearbyEvents[index].isSaved.toggle()
+                        }
+                        if let index = self?.allFeaturedEvents.firstIndex(where: { $0.id == event.id }) {
+                            self?.allFeaturedEvents[index].isSaved.toggle()
+                        } else if let index = self?.allNearbyEvents.firstIndex(where: { $0.id == event.id }) {
+                            self?.allNearbyEvents[index].isSaved.toggle()
+                        }
+                    }
+                },
+                receiveValue: { _ in }
+            )
+            .store(in: &cancellables)
     }
     
 }

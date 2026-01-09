@@ -6,6 +6,7 @@
 //
 //
 import SwiftUI
+import Combine
 
 enum PartierTab: CaseIterable {
     case tickets
@@ -47,7 +48,7 @@ struct PartierTabContainer: View {
                     .tag(PartierTab.home)
                     .tabItem { EmptyView() }
                 
-                FavoritesPlaceholderView()
+                FavoritesView()
                     .tag(PartierTab.favorites)
                     .tabItem { EmptyView() }
                 
@@ -264,22 +265,163 @@ private struct PartierBottomBar: View {
         .environmentObject(AuthViewModel())
 }
 
-private struct FavoritesPlaceholderView: View {
+struct FavoritesView: View {
+    @EnvironmentObject var authViewModel: AuthViewModel
+    @StateObject private var viewModel = FavoritesViewModel()
+    @StateObject private var locationManager = LocationManager()
+    
     var body: some View {
-        ZStack {
-            Color.sioreeBlack.ignoresSafeArea()
-            VStack(spacing: Theme.Spacing.m) {
-                Image(systemName: "heart")
-                    .font(.system(size: 44, weight: .regular))
-                    .foregroundColor(.sioreeIcyBlue)
-                Text("Favorites")
-                    .font(.sioreeH3)
-                    .foregroundColor(.sioreeWhite)
-                Text("Your saved events will appear here.")
-                    .font(.sioreeBody)
-                    .foregroundColor(.sioreeLightGrey)
+        NavigationStack {
+            ZStack {
+                backgroundGlow
+                
+                if viewModel.isLoading && viewModel.events.isEmpty {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if viewModel.events.isEmpty {
+                    emptyStateView
+                } else {
+                    ScrollView(showsIndicators: false) {
+                        LazyVStack(spacing: Theme.Spacing.m) {
+                            ForEach(viewModel.events) { event in
+                                NavigationLink(destination: EventDetailView(eventId: event.id)) {
+                                    NightEventCard(event: event, accent: .sioreeIcyBlue) {
+                                        viewModel.toggleSaveEvent(event)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal, Theme.Spacing.l)
+                        .padding(.vertical, Theme.Spacing.l)
+                    }
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.hidden, for: .navigationBar)
+            .onAppear {
+                viewModel.loadFavorites()
             }
         }
+    }
+    
+    private var backgroundGlow: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color.sioreeBlack,
+                    Color.sioreeBlack.opacity(0.98),
+                    Color.sioreeCharcoal.opacity(0.85)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+            
+            Circle()
+                .fill(Color.sioreeIcyBlue.opacity(0.25))
+                .frame(width: 360, height: 360)
+                .blur(radius: 120)
+                .offset(x: -120, y: -320)
+            
+            Circle()
+                .fill(Color.sioreeIcyBlue.opacity(0.2))
+                .frame(width: 420, height: 420)
+                .blur(radius: 140)
+                .offset(x: 160, y: 220)
+        }
+    }
+    
+    private var emptyStateView: some View {
+        VStack(spacing: Theme.Spacing.m) {
+            Image(systemName: "heart")
+                .font(.system(size: 64, weight: .regular))
+                .foregroundColor(.sioreeIcyBlue.opacity(0.5))
+            Text("No Favorites Yet")
+                .font(.sioreeH3)
+                .foregroundColor(.sioreeWhite)
+            Text("Save events you're interested in and they'll appear here.")
+                .font(.sioreeBody)
+                .foregroundColor(.sioreeLightGrey)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, Theme.Spacing.l)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+class FavoritesViewModel: ObservableObject {
+    @Published var events: [Event] = []
+    @Published var isLoading = false
+    @Published var errorMessage: String?
+    
+    private let networkService = NetworkService()
+    private var cancellables = Set<AnyCancellable>()
+    
+    func loadFavorites() {
+        isLoading = true
+        errorMessage = nil
+        
+        // Fetch both featured and nearby events, then filter for saved ones
+        Publishers.CombineLatest(
+            networkService.fetchFeaturedEvents(),
+            networkService.fetchNearbyEvents()
+        )
+        .receive(on: DispatchQueue.main)
+        .sink(
+            receiveCompletion: { [weak self] completion in
+                self?.isLoading = false
+                if case .failure(let error) = completion {
+                    self?.errorMessage = error.localizedDescription
+                }
+            },
+            receiveValue: { [weak self] featured, nearby in
+                // Combine and filter to only saved events
+                let allEvents = featured + nearby
+                self?.events = allEvents.filter { $0.isSaved }
+                self?.isLoading = false
+            }
+        )
+        .store(in: &cancellables)
+    }
+    
+    func refreshFavorites() {
+        loadFavorites()
+    }
+    
+    func toggleSaveEvent(_ event: Event) {
+        // Optimistic update
+        if let index = events.firstIndex(where: { $0.id == event.id }) {
+            events[index].isSaved.toggle()
+        }
+        
+        networkService.toggleEventSave(eventId: event.id)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { [weak self] completion in
+                    if case .failure = completion {
+                        // Revert optimistic update
+                        if let index = self?.events.firstIndex(where: { $0.id == event.id }) {
+                            self?.events[index].isSaved.toggle()
+                        }
+                    } else {
+                        // If unsaved, remove from favorites list
+                        if let index = self?.events.firstIndex(where: { $0.id == event.id }) {
+                            if !(self?.events[index].isSaved ?? false) {
+                                self?.events.remove(at: index)
+                            }
+                        }
+                    }
+                },
+                receiveValue: { _ in }
+            )
+            .store(in: &cancellables)
+    }
+}
+
+private struct FavoritesPlaceholderView: View {
+    var body: some View {
+        FavoritesView()
     }
 }
 

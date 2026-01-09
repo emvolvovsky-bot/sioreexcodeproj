@@ -10,6 +10,7 @@ import Combine
 
 struct EventStoryViewer: View {
     let event: Event
+    let viewUserId: String? // If provided, show photos by this user only; if nil, show current user's photos
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var authViewModel: AuthViewModel
     
@@ -24,15 +25,33 @@ struct EventStoryViewer: View {
     @State private var photoToDelete: EventPhoto? = nil
     
     private let postCreatedNotification = NotificationCenter.default.publisher(for: NSNotification.Name("PostCreated"))
-    private let maxPhotos = 7
+    
+    private var isHost: Bool {
+        authViewModel.currentUser?.userType == .host
+    }
+    
+    private var maxPhotos: Int {
+        // Hosts have no limit, partiers have limit of 7
+        return isHost ? Int.max : 7
+    }
+    
+    init(event: Event, viewUserId: String? = nil) {
+        self.event = event
+        self.viewUserId = viewUserId
+    }
     
     private var isOwnProfile: Bool {
         guard let currentUserId = authViewModel.currentUser?.id else { return false }
+        // If viewUserId is provided and different from current user, it's not own profile
+        if let viewUserId = viewUserId {
+            return currentUserId == viewUserId
+        }
         return currentUserId == StorageService.shared.getUserId()
     }
     
     private var allImages: [EventPhoto] {
-        let userId = authViewModel.currentUser?.id
+        // Use viewUserId if provided (viewing another person's profile), otherwise use current user's ID
+        let userId = viewUserId ?? authViewModel.currentUser?.id
         let filtered = posts.filter { post in
             post.userId == userId
         }
@@ -63,8 +82,9 @@ struct EventStoryViewer: View {
                 // Move cover image to first position if it exists in user's photos
                 let coverPhoto = images.remove(at: coverIndex)
                 images.insert(coverPhoto, at: 0)
-            } else if images.count < maxPhotos {
+            } else if isHost || images.count < maxPhotos {
                 // Add event cover image as first photo if user has space and it's not already there
+                // Hosts have no limit, so always add if not already present
                 let coverPhoto = EventPhoto(
                     url: coverImageUrl,
                     post: Post(
@@ -83,11 +103,16 @@ struct EventStoryViewer: View {
             }
         }
         
-        // Limit to max 7 photos
-        return Array(images.prefix(maxPhotos))
+        // Limit photos only for partiers (hosts have no limit)
+        if isHost {
+            return images
+        } else {
+            return Array(images.prefix(maxPhotos))
+        }
     }
     
     private var canDeleteCurrentPhoto: Bool {
+        // Can only delete if viewing own profile
         guard isOwnProfile, currentPhotoIndex < allImages.count else { return false }
         let photo = allImages[currentPhotoIndex]
         // Don't allow deleting the cover image if it's not from user's own post
@@ -96,7 +121,8 @@ struct EventStoryViewer: View {
             return false
         }
         // Only allow deleting photos that belong to the current user
-        return photo.post.userId == authViewModel.currentUser?.id
+        let userId = viewUserId ?? authViewModel.currentUser?.id
+        return photo.post.userId == userId
     }
     
     var body: some View {
@@ -149,6 +175,23 @@ struct EventStoryViewer: View {
     
     private var emptyStateView: some View {
         VStack(spacing: Theme.Spacing.l) {
+            // Close button at top
+            HStack {
+                Spacer()
+                Button(action: {
+                    dismiss()
+                }) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.sioreeWhite)
+                        .frame(width: 44, height: 44)
+                        .background(Color.black.opacity(0.6))
+                        .clipShape(Circle())
+                }
+                .padding(.trailing, Theme.Spacing.m)
+                .padding(.top, Theme.Spacing.m)
+            }
+            
             Spacer()
             
             Image(systemName: "camera.fill")
@@ -160,13 +203,15 @@ struct EventStoryViewer: View {
                     .font(.sioreeH2)
                     .foregroundColor(Color.sioreeWhite)
                 
-                Text("Add photos to share memories from this event")
+                Text(isOwnProfile && viewUserId == nil ? 
+                     "Add photos to share memories from this event" :
+                     "This user hasn't added photos to this event yet")
                     .font(.sioreeBody)
                     .foregroundColor(Color.sioreeLightGrey.opacity(0.8))
                     .multilineTextAlignment(.center)
             }
             
-            if isOwnProfile {
+            if isOwnProfile && viewUserId == nil {
                 Button(action: {
                     showAddPhotos = true
                 }) {
@@ -189,11 +234,34 @@ struct EventStoryViewer: View {
                     )
                     .cornerRadius(Theme.CornerRadius.large)
                 }
+            } else {
+                // Show dismiss button when viewing another person's empty profile
+                Button(action: {
+                    dismiss()
+                }) {
+                    Text("Close")
+                        .font(.sioreeBody)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.sioreeWhite)
+                        .padding(.horizontal, Theme.Spacing.xl)
+                        .padding(.vertical, Theme.Spacing.m)
+                        .background(Color.sioreeLightGrey.opacity(0.2))
+                        .cornerRadius(Theme.CornerRadius.large)
+                }
             }
             
             Spacer()
         }
         .padding(.horizontal, Theme.Spacing.l)
+        .gesture(
+            DragGesture()
+                .onEnded { value in
+                    // Allow swipe down to dismiss
+                    if value.translation.height > 100 {
+                        dismiss()
+                    }
+                }
+        )
     }
     
     private var storyContentView: some View {
@@ -314,11 +382,12 @@ struct EventStoryViewer: View {
                     
                     Spacer()
                     
-                    // Bottom + button (only on own profile)
+                    // Bottom + button (only on own profile, and only if viewUserId is nil or matches current user)
+                    // Hosts have no limit, partiers have limit
                     HStack {
                         Spacer()
                         
-                        if isOwnProfile && allImages.count < maxPhotos {
+                        if isOwnProfile && viewUserId == nil && (isHost || allImages.count < maxPhotos) {
                             Button(action: {
                                 showAddPhotos = true
                             }) {

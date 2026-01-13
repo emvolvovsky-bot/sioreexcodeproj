@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sioree - Where Events Come Alive</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        header {
+            text-align: center;
+            padding: 60px 0 40px;
+            color: white;
+        }
+
+        .logo {
+            font-size: 3.5rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #00d4ff, #0099ff, #667eea);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .tagline {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            margin-bottom: 30px;
+        }
+
+        .hero-section {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            margin-bottom: 50px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .section {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .section h2 {
+            color: #667eea;
+            font-size: 2rem;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-top: 30px;
+        }
+
+        .feature-card {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            border-radius: 15px;
+            padding: 30px;
+            text-align: center;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+            border-color: #667eea;
+        }
+
+        .feature-icon {
+            font-size: 3rem;
+            margin-bottom: 20px;
+            display: block;
+        }
+
+        .feature-card h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.3rem;
+        }
+
+        .map-demo {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 30px;
+            margin: 30px 0;
+            border: 2px solid #e9ecef;
+        }
+
+        .map-placeholder {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+            height: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.2rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .map-pin {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 2rem;
+            animation: bounce 2s infinite;
+        }
+
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% {
+                transform: translate(-50%, -50%) translateY(0);
+            }
+            40% {
+                transform: translate(-50%, -50%) translateY(-10px);
+            }
+            60% {
+                transform: translate(-50%, -50%) translateY(-5px);
+            }
+        }
+
+        .code-example {
+            background: #2d3748;
+            color: #e2e8f0;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.9rem;
+            overflow-x: auto;
+        }
+
+        .highlight {
+            background: linear-gradient(45deg, #00d4ff, #0099ff);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+
+        .steps {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .step {
+            display: flex;
+            align-items: flex-start;
+            gap: 15px;
+        }
+
+        .step-number {
+            background: #667eea;
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+
+        .step-content h4 {
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .benefits {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .benefit {
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%);
+            color: white;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .benefit h4 {
+            margin-bottom: 10px;
+        }
+
+        .cta-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-align: center;
+            padding: 50px 0;
+            border-radius: 20px;
+            margin-top: 50px;
+        }
+
+        .cta-button {
+            background: white;
+            color: #667eea;
+            padding: 15px 30px;
+            border-radius: 25px;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 1.1rem;
+            display: inline-block;
+            transition: transform 0.3s ease;
+        }
+
+        .cta-button:hover {
+            transform: scale(1.05);
+        }
+
+        footer {
+            text-align: center;
+            padding: 30px 0;
+            color: white;
+            opacity: 0.8;
+        }
+
+        @media (max-width: 768px) {
+            .logo {
+                font-size: 2.5rem;
+            }
+
+            .feature-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .container {
+                padding: 0 15px;
+            }
+
+            .section {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1 class="logo">Sioree</h1>
+            <p class="tagline">Where Events Come Alive - Connect, Discover, Celebrate</p>
+        </div>
+    </header>
+
+    <div class="container">
+        <section class="hero-section">
+            <h2>🎯 Discover Events Around You</h2>
+            <p>Sioree transforms how you experience events with powerful map integration that makes finding and creating memorable experiences effortless.</p>
+        </section>
+
+        <section class="section">
+            <h2>🗺️ Map Functionality Overview</h2>
+            <p>Our interactive map system is the heart of the Sioree experience, enabling seamless event discovery and creation.</p>
+
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <span class="feature-icon">📍</span>
+                    <h3>Location-Based Discovery</h3>
+                    <p>Find events happening near you with real-time location tracking and intelligent filtering.</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">🎯</span>
+                    <h3>Precise Event Pinning</h3>
+                    <p>Drop pins exactly where your event will take place with our intuitive map interface.</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">🔍</span>
+                    <h3>Smart Geocoding</h3>
+                    <p>Automatic address lookup converts coordinates to readable locations instantly.</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">📱</span>
+                    <h3>Mobile-First Design</h3>
+                    <p>Optimized for iOS with smooth interactions and beautiful visual feedback.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>🎨 Interactive Map Demo</h2>
+            <p>Experience how our map works in real-time:</p>
+
+            <div class="map-demo">
+                <div class="map-placeholder">
+                    <div class="map-pin">📍</div>
+                    <div style="text-align: center; z-index: 1; position: relative;">
+                        <strong>Interactive Map View</strong><br>
+                        <small>Drag to explore • Tap pins for details • Center on your location</small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h4>Location Permission</h4>
+                        <p>The app requests location access to show events near you and center the map on your current position.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h4>Event Visualization</h4>
+                        <p>Events appear as colorful pins on the map, with party popper icons indicating active events in your area.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step">
+                        <div class="step-number">3</div>
+                        <div class="step-content">
+                            <h4>Interactive Selection</h4>
+                            <p>Tap any event pin to view details, RSVP, or navigate to the full event page with venue information.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <h4>Event Creation</h4>
+                        <p>Hosts can drag the map to position their event exactly where it will occur, with automatic address geocoding.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>⚡ Technical Implementation</h2>
+            <p>Built with modern iOS technologies for optimal performance:</p>
+
+            <div class="code-example">
+// Core MapKit Integration
+struct EventsMapView: View {
+    @StateObject private var locationManager = LocationManager()
+    @StateObject private var viewModel = FeedViewModel()
+
+    var body: some View {
+        Map(coordinateRegion: $region, annotationItems: viewModel.events) { event in
+            MapAnnotation(coordinate: coordinateForEvent(event)) {
+                EventMapPin(event: event) {
+                    selectedEvent = event
+                }
+            }
+        }
+    }
+}
+            </div>
+
+            <div class="benefits">
+                <div class="benefit">
+                    <h4>📍 MapKit Framework</h4>
+                    <p>Native iOS mapping with smooth performance and accurate location services.</p>
+                </div>
+                <div class="benefit">
+                    <h4>🎯 Core Location</h4>
+                    <p>Precise GPS tracking with user permission management and location accuracy optimization.</p>
+                </div>
+                <div class="benefit">
+                    <h4>🔄 Real-Time Updates</h4>
+                    <p>Live event data synchronization with backend APIs for instant map updates.</p>
+                </div>
+                <div class="benefit">
+                    <h4>🎨 SwiftUI Integration</h4>
+                    <p>Modern declarative UI with smooth animations and responsive design patterns.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>🚀 Key Features</h2>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <span class="feature-icon">🎪</span>
+                    <h3>Event Discovery</h3>
+                    <p>Browse nearby events with intelligent filtering by date, category, and distance.</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">👥</span>
+                    <h3>Social Integration</h3>
+                    <p>Connect with attendees, follow organizers, and build your event community.</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">💳</span>
+                    <h3>Seamless Payments</h3>
+                    <p>Purchase tickets and book talent directly through integrated payment processing.</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">💬</span>
+                    <h3>Real-Time Messaging</h3>
+                    <p>Chat with event organizers, coordinate with attendees, and network with talent.</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">🎭</span>
+                    <h3>Talent Marketplace</h3>
+                    <p>Discover and book performers, DJs, and service providers for your events.</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">📊</span>
+                    <h3>Analytics Dashboard</h3>
+                    <p>Track event performance, attendee engagement, and booking metrics.</p>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <section class="cta-section">
+        <div class="container">
+            <h2>Ready to Experience Sioree?</h2>
+            <p>Join thousands of event creators and attendees who are already discovering amazing experiences.</p>
+            <br>
+            <a href="#" class="cta-button">Download on the App Store</a>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2024 Sioree. Built for the future of event experiences.</p>
+        </div>
+    </footer>
+</body>
+</html>

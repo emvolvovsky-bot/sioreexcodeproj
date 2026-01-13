@@ -14,8 +14,8 @@
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             line-height: 1.6;
-            color: #333;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #1E1E1E;
+            background: linear-gradient(135deg, #00D4FF 0%, #FFB74D 100%);
             min-height: 100vh;
         }
 
@@ -35,7 +35,7 @@
             font-size: 3.5rem;
             font-weight: 700;
             margin-bottom: 10px;
-            background: linear-gradient(45deg, #00d4ff, #0099ff, #667eea);
+            background: linear-gradient(45deg, #00D4FF, #FFB74D);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -48,12 +48,13 @@
         }
 
         .hero-section {
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(250, 250, 250, 0.95);
             backdrop-filter: blur(10px);
             border-radius: 20px;
             padding: 40px;
             margin-bottom: 50px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            color: #1E1E1E;
         }
 
         .section {
@@ -65,7 +66,7 @@
         }
 
         .section h2 {
-            color: #667eea;
+            color: #00D4FF;
             font-size: 2rem;
             margin-bottom: 20px;
             text-align: center;
@@ -79,7 +80,7 @@
         }
 
         .feature-card {
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            background: linear-gradient(135deg, #FAFAFA 0%, #E0E0E0 100%);
             border-radius: 15px;
             padding: 30px;
             text-align: center;
@@ -89,14 +90,27 @@
 
         .feature-card:hover {
             transform: translateY(-5px);
-            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
-            border-color: #667eea;
+            box-shadow: 0 15px 35px rgba(0, 212, 255, 0.3);
+            border-color: #00D4FF;
         }
 
         .feature-icon {
-            font-size: 3rem;
+            width: 80px;
+            height: 80px;
             margin-bottom: 20px;
             display: block;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #00D4FF 0%, #FFB74D 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            color: #FAFAFA;
+            box-shadow: 0 4px 15px rgba(0, 212, 255, 0.4);
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
 
         .feature-card h3 {
@@ -114,16 +128,35 @@
         }
 
         .map-placeholder {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #00D4FF 0%, #FFB74D 100%);
             border-radius: 10px;
             height: 300px;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: white;
-            font-size: 1.2rem;
             position: relative;
             overflow: hidden;
+            box-shadow: 0 8px 25px rgba(0, 212, 255, 0.3);
+        }
+
+        .map-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.4);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #FAFAFA;
+            text-align: center;
+            z-index: 2;
+        }
+
+        .map-text {
+            margin-top: 20px;
         }
 
         .map-pin {
@@ -131,8 +164,13 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            font-size: 2rem;
+            font-size: 3rem;
+            color: #00D4FF;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.4)) brightness(1.1);
             animation: bounce 2s infinite;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
 
         @keyframes bounce {
@@ -159,8 +197,8 @@
         }
 
         .highlight {
-            background: linear-gradient(45deg, #00d4ff, #0099ff);
-            color: white;
+            background: linear-gradient(45deg, #00D4FF, #FFB74D);
+            color: #FAFAFA;
             padding: 2px 6px;
             border-radius: 4px;
             font-weight: bold;
@@ -180,8 +218,8 @@
         }
 
         .step-number {
-            background: #667eea;
-            color: white;
+            background: #00D4FF;
+            color: #FAFAFA;
             width: 30px;
             height: 30px;
             border-radius: 50%;
@@ -190,6 +228,7 @@
             justify-content: center;
             font-weight: bold;
             flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(0, 212, 255, 0.4);
         }
 
         .step-content h4 {
@@ -206,10 +245,11 @@
 
         .benefit {
             padding: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%);
-            color: white;
+            background: linear-gradient(135deg, #00D4FF 0%, #FFB74D 50%);
+            color: #FAFAFA;
             border-radius: 10px;
             text-align: center;
+            box-shadow: 0 4px 15px rgba(0, 212, 255, 0.3);
         }
 
         .benefit h4 {
@@ -217,24 +257,31 @@
         }
 
         .cta-section {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+            background: linear-gradient(135deg, #00D4FF 0%, #FFB74D 100%);
+            color: #FAFAFA;
             text-align: center;
             padding: 50px 0;
             border-radius: 20px;
             margin-top: 50px;
+            box-shadow: 0 10px 30px rgba(0, 212, 255, 0.4);
         }
 
         .cta-button {
-            background: white;
-            color: #667eea;
+            background: #FAFAFA;
+            color: #00D4FF;
             padding: 15px 30px;
             border-radius: 25px;
             text-decoration: none;
             font-weight: bold;
             font-size: 1.1rem;
             display: inline-block;
-            transition: transform 0.3s ease;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .cta-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(0, 212, 255, 0.3);
         }
 
         .cta-button:hover {
@@ -268,8 +315,9 @@
     </style>
 </head>
 <body>
-    <header>
-        <div class="container">
+    <header style="background-image: url('https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=1200&h=600&fit=crop&crop=center'); background-size: cover; background-position: center; position: relative;">
+        <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 212, 255, 0.1); backdrop-filter: blur(1px);"></div>
+        <div class="container" style="position: relative; z-index: 2;">
             <h1 class="logo">Sioree</h1>
             <p class="tagline">Where Events Come Alive - Connect, Discover, Celebrate</p>
         </div>
@@ -287,22 +335,22 @@
 
             <div class="feature-grid">
                 <div class="feature-card">
-                    <span class="feature-icon">📍</span>
+                    <span class="feature-icon" style="font-size: 2.2rem;">📍</span>
                     <h3>Location-Based Discovery</h3>
                     <p>Find events happening near you with real-time location tracking and intelligent filtering.</p>
                 </div>
                 <div class="feature-card">
-                    <span class="feature-icon">🎯</span>
+                    <span class="feature-icon" style="font-size: 2.2rem;">🎯</span>
                     <h3>Precise Event Pinning</h3>
                     <p>Drop pins exactly where your event will take place with our intuitive map interface.</p>
                 </div>
                 <div class="feature-card">
-                    <span class="feature-icon">🔍</span>
+                    <span class="feature-icon" style="font-size: 2.2rem;">🔍</span>
                     <h3>Smart Geocoding</h3>
                     <p>Automatic address lookup converts coordinates to readable locations instantly.</p>
                 </div>
                 <div class="feature-card">
-                    <span class="feature-icon">📱</span>
+                    <span class="feature-icon" style="font-size: 2.2rem;">📱</span>
                     <h3>Mobile-First Design</h3>
                     <p>Optimized for iOS with smooth interactions and beautiful visual feedback.</p>
                 </div>
@@ -314,11 +362,13 @@
             <p>Experience how our map works in real-time:</p>
 
             <div class="map-demo">
-                <div class="map-placeholder">
-                    <div class="map-pin">📍</div>
-                    <div style="text-align: center; z-index: 1; position: relative;">
-                        <strong>Interactive Map View</strong><br>
-                        <small>Drag to explore • Tap pins for details • Center on your location</small>
+                <div class="map-placeholder" style="background-image: url('https://images.unsplash.com/photo-1524661135-423995f22d0b?w=800&h=400&fit=crop&crop=center'); background-size: cover; background-position: center;">
+                    <div class="map-overlay">
+                        <div class="map-pin">📍</div>
+                        <div class="map-text">
+                            <strong>Interactive Map View</strong><br>
+                            <small>Drag to explore • Tap pins for details • Center on your location</small>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -403,32 +453,32 @@ struct EventsMapView: View {
             <h2>🚀 Key Features</h2>
             <div class="feature-grid">
                 <div class="feature-card">
-                    <span class="feature-icon">🎪</span>
+                    <span class="feature-icon" style="font-size: 2.2rem;">🎪</span>
                     <h3>Event Discovery</h3>
                     <p>Browse nearby events with intelligent filtering by date, category, and distance.</p>
                 </div>
                 <div class="feature-card">
-                    <span class="feature-icon">👥</span>
+                    <span class="feature-icon" style="font-size: 2.2rem;">👥</span>
                     <h3>Social Integration</h3>
                     <p>Connect with attendees, follow organizers, and build your event community.</p>
                 </div>
                 <div class="feature-card">
-                    <span class="feature-icon">💳</span>
+                    <span class="feature-icon" style="font-size: 2.2rem;">💳</span>
                     <h3>Seamless Payments</h3>
                     <p>Purchase tickets and book talent directly through integrated payment processing.</p>
                 </div>
                 <div class="feature-card">
-                    <span class="feature-icon">💬</span>
+                    <span class="feature-icon" style="font-size: 2.2rem;">💬</span>
                     <h3>Real-Time Messaging</h3>
                     <p>Chat with event organizers, coordinate with attendees, and network with talent.</p>
                 </div>
                 <div class="feature-card">
-                    <span class="feature-icon">🎭</span>
+                    <span class="feature-icon" style="font-size: 2.2rem;">🎭</span>
                     <h3>Talent Marketplace</h3>
                     <p>Discover and book performers, DJs, and service providers for your events.</p>
                 </div>
                 <div class="feature-card">
-                    <span class="feature-icon">📊</span>
+                    <span class="feature-icon" style="font-size: 2.2rem;">📊</span>
                     <h3>Analytics Dashboard</h3>
                     <p>Track event performance, attendee engagement, and booking metrics.</p>
                 </div>

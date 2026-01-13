@@ -46,7 +46,7 @@ router.get('/', async (req, res) => {
     params.push(limit, offset);
     
     const result = await query(
-      `SELECT 
+      `SELECT
         e.id,
         e.host_id,
         e.title,
@@ -56,21 +56,23 @@ router.get('/', async (req, res) => {
         e.latitude,
         e.longitude,
         e.ticket_price,
+        e.ticket_price_cents,
         e.capacity,
         e.tags,
         e.is_featured,
         e.images,
+        e.status,
         u.name as host_name
       FROM events e
       JOIN users u ON e.host_id = u.id
-      ${whereClause}
+      ${whereClause} AND e.status = 'published'
       ORDER BY e.is_featured DESC, e.date ASC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
       params
     );
     
     const countResult = await query(
-      `SELECT COUNT(*) FROM events e ${whereClause}`,
+      `SELECT COUNT(*) FROM events e ${whereClause} AND e.status = 'published'`,
       params.slice(0, -2) // Remove limit and offset
     );
     
@@ -284,10 +286,12 @@ router.post('/', authenticate, [
       images,
     } = req.body;
     
+    const ticketPriceCents = ticketPrice ? Math.round(ticketPrice * 100) : null;
+
     const result = await query(
-      `INSERT INTO events 
-       (host_id, title, description, date, location, latitude, longitude, ticket_price, capacity, tags, is_featured, images, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
+      `INSERT INTO events
+       (host_id, title, description, date, location, latitude, longitude, ticket_price, ticket_price_cents, capacity, tags, is_featured, images, status, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'draft', NOW(), NOW())
        RETURNING id, host_id, title, date, location, created_at`,
       [
         req.user.id,
@@ -298,6 +302,7 @@ router.post('/', authenticate, [
         latitude || null,
         longitude || null,
         ticketPrice || null,
+        ticketPriceCents,
         capacity || null,
         tags || [],
         isFeatured || false,
@@ -334,6 +339,7 @@ router.post('/', authenticate, [
       lookingForRoles: lookingForRoles || [],
       lookingForNotes: lookingForNotes,
       lookingForTalentType: lookingForTalentType,
+      status: 'draft', // Default to draft status
     };
 
     // Broadcast new event to all connected clients
@@ -491,6 +497,154 @@ router.put('/:id', authenticate, [
   }
 });
 
+// GET /api/events/my-events (host only - includes drafts)
+router.get('/my-events', authenticate, async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT
+        e.id,
+        e.host_id,
+        e.title,
+        e.description,
+        e.date,
+        e.location,
+        e.latitude,
+        e.longitude,
+        e.ticket_price,
+        e.ticket_price_cents,
+        e.capacity,
+        e.tags,
+        e.is_featured,
+        e.images,
+        e.status,
+        e.published_at,
+        u.name as host_name
+      FROM events e
+      JOIN users u ON e.host_id = u.id
+      WHERE e.host_id = $1
+      ORDER BY e.created_at DESC
+    `, [req.user.id]);
+
+    const events = result.rows.map(row => ({
+      id: row.id,
+      hostId: row.host_id,
+      title: row.title,
+      hostName: row.host_name,
+      date: row.date,
+      location: row.location,
+      priceText: row.ticket_price ? `$${row.ticket_price}` : 'Free',
+      imageName: 'party.popper.fill',
+      tags: row.tags || [],
+      isFeatured: row.is_featured,
+      images: row.images || [],
+      status: row.status,
+      publishedAt: row.published_at,
+    }));
+
+    res.json({ events });
+  } catch (error) {
+    console.error('Get my events error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/events/:id (public for published events, host only for drafts)
+router.get('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    let queryStr, params;
+
+    if (req.user) {
+      // Authenticated user - can see their own drafts
+      queryStr = `
+        SELECT
+          e.id,
+          e.host_id,
+          e.title,
+          e.description,
+          e.date,
+          e.location,
+          e.latitude,
+          e.longitude,
+          e.ticket_price,
+          e.ticket_price_cents,
+          e.capacity,
+          e.tags,
+          e.is_featured,
+          e.images,
+          e.status,
+          e.published_at,
+          u.name as host_name,
+          u.stripe_onboarding_complete
+        FROM events e
+        JOIN users u ON e.host_id = u.id
+        WHERE e.id = $1 AND (e.status = 'published' OR e.host_id = $2)
+      `;
+      params = [id, req.user.id];
+    } else {
+      // Unauthenticated user - only published events
+      queryStr = `
+        SELECT
+          e.id,
+          e.host_id,
+          e.title,
+          e.description,
+          e.date,
+          e.location,
+          e.latitude,
+          e.longitude,
+          e.ticket_price,
+          e.ticket_price_cents,
+          e.capacity,
+          e.tags,
+          e.is_featured,
+          e.images,
+          e.status,
+          e.published_at,
+          u.name as host_name,
+          u.stripe_onboarding_complete
+        FROM events e
+        JOIN users u ON e.host_id = u.id
+        WHERE e.id = $1 AND e.status = 'published'
+      `;
+      params = [id];
+    }
+
+    const result = await query(queryStr, params);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Event not found' });
+    }
+
+    const event = result.rows[0];
+    const response = {
+      id: event.id,
+      hostId: event.host_id,
+      title: event.title,
+      description: event.description,
+      hostName: event.host_name,
+      date: event.date,
+      location: event.location,
+      latitude: event.latitude,
+      longitude: event.longitude,
+      ticketPrice: event.ticket_price,
+      ticketPriceCents: event.ticket_price_cents,
+      capacity: event.capacity,
+      tags: event.tags || [],
+      isFeatured: event.is_featured,
+      images: event.images || [],
+      status: event.status,
+      publishedAt: event.published_at,
+    };
+
+    res.json(response);
+  } catch (error) {
+    console.error('Get event error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /api/events/:eventId/attendees
 router.get('/:eventId/attendees', async (req, res) => {
   try {
@@ -521,6 +675,65 @@ router.get('/:eventId/attendees', async (req, res) => {
     res.json({ attendees });
   } catch (error) {
     console.error('Get attendees error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/events/:id/publish (requires auth, host only)
+// Publish an event - requires Stripe Connect onboarding completion
+router.post('/:id/publish', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Verify the event exists and the user is the host
+    const eventCheck = await query(`
+      SELECT e.*, u.stripe_onboarding_complete, u.stripe_account_id
+      FROM events e
+      JOIN users u ON e.host_id = u.id
+      WHERE e.id = $1
+    `, [id]);
+
+    if (eventCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Event not found' });
+    }
+
+    const event = eventCheck.rows[0];
+
+    if (event.host_id !== req.user.id) {
+      return res.status(403).json({ error: 'Only the event host can publish this event' });
+    }
+
+    if (event.status === 'published') {
+      return res.status(400).json({ error: 'Event is already published' });
+    }
+
+    // Check if host has completed Stripe Connect onboarding
+    if (!event.stripe_onboarding_complete || !event.stripe_account_id) {
+      return res.status(400).json({
+        error: 'Payment setup required',
+        message: 'You must complete your payout setup before publishing events.',
+        needs_onboarding: true,
+      });
+    }
+
+    // Publish the event
+    const result = await query(`
+      UPDATE events
+      SET status = 'published', published_at = NOW(), updated_at = NOW()
+      WHERE id = $1
+      RETURNING id, status, published_at
+    `, [id]);
+
+    console.log(`Host ${req.user.id} published event ${id}`);
+
+    res.json({
+      success: true,
+      event_id: result.rows[0].id,
+      status: result.rows[0].status,
+      published_at: result.rows[0].published_at,
+    });
+  } catch (error) {
+    console.error('Publish event error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

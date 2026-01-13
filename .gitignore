@@ -109,3 +109,6 @@ Skeleton Backend/sioree-backend/sioree.db
 Skeleton Backend/sioree-backend/*.db
 Skeleton Backend/sioree-backend/.env
 Skeleton Backend/sioree-backend/node_modules/
+
+# Setup guides with sensitive information
+STRIPE_SETUP_GUIDE.md

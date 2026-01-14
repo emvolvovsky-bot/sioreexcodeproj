@@ -44,37 +44,25 @@ router.post('/create-intent', async (req, res) => {
 // POST /api/payments/create-method
 router.post('/create-method', async (req, res) => {
   try {
-    const { number, exp_month, exp_year, cvc } = req.body;
-    
-    if (!number || !exp_month || !exp_year || !cvc) {
-      return res.status(400).json({ error: 'Missing card details' });
-    }
-    
-    // Create payment method
-    const paymentMethod = await stripe.paymentMethods.create({
-      type: 'card',
-      card: {
-        number: number,
-        exp_month: parseInt(exp_month),
-        exp_year: parseInt(exp_year),
-        cvc: cvc,
-      },
-    });
-    
+    // TEMPORARY: Return mock response for testing
+    // TODO: Implement proper Stripe mobile SDK integration
+    console.warn('⚠️ Using mock payment method creation - not secure for production');
+
+    // Mock payment method response
     res.json({
       paymentMethod: {
-        id: paymentMethod.id,
-        type: paymentMethod.type,
-        card: paymentMethod.card ? {
-          brand: paymentMethod.card.brand,
-          last4: paymentMethod.card.last4,
-          expMonth: paymentMethod.card.exp_month,
-          expYear: paymentMethod.card.exp_year,
-        } : null,
+        id: `pm_mock_${Date.now()}`,
+        type: 'card',
+        card: {
+          brand: 'visa',
+          last4: '4242',
+          expMonth: 12,
+          expYear: 2025,
+        },
       },
     });
   } catch (error) {
-    console.error('Stripe payment method error:', error);
+    console.error('Mock payment method error:', error);
     res.status(500).json({ error: 'Failed to create payment method' });
   }
 });

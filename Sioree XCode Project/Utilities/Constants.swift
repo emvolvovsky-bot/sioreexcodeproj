@@ -56,6 +56,11 @@ struct Constants {
         static let version = "1.0.0"
     }
     
+    // MARK: - Stripe
+    struct Stripe {
+        static let publishableKey = "pk_live_51SbF9DEjdNHR0rzf4SS7qAU1utPrZaoak979aO5U3gFnOKKUmYTxmdK6G2hkOVGawvKGCAnaXePSTp6jT3j19eWH00zndA4EJx"
+    }
+
     // MARK: - Limits
     struct Limits {
         static let maxEventImages = 10

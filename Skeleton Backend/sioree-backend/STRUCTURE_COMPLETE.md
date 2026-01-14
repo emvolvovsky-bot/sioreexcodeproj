@@ -35,7 +35,7 @@ sioree-backend/
 ### 2. `src/services/payments.js`
 - ✅ Stripe service with `createPaymentIntent` function
 - ✅ Supports host Stripe account (for marketplace fees)
-- ✅ Application fee calculation (10%)
+- ✅ Application fee calculation (2%)
 - ✅ ES modules syntax
 
 ### 3. `src/routes/payments.js`

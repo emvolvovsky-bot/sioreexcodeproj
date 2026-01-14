@@ -24,7 +24,7 @@ export async function createPaymentIntent(amount, hostStripeAccountId, metadata 
     if (hostStripeAccountId && typeof hostStripeAccountId === 'string' && hostStripeAccountId.trim() !== '') {
       paymentIntentParams.transfer_data = {
         destination: hostStripeAccountId,
-        amount: Math.floor(amountInCents * 0.9) // 10% platform fee
+        amount: Math.floor(amountInCents * 0.98) // 2% platform fee
       };
     }
     

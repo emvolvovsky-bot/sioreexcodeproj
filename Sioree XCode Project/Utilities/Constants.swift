@@ -59,6 +59,15 @@ struct Constants {
     // MARK: - Stripe
     struct Stripe {
         static let publishableKey = "pk_live_51SbF9DEjdNHR0rzf4SS7qAU1utPrZaoak979aO5U3gFnOKKUmYTxmdK6G2hkOVGawvKGCAnaXePSTp6jT3j19eWH00zndA4EJx"
+
+        // Initialize Stripe SDK
+        static func configure() {
+            #if DEBUG
+            STPAPIClient.shared.publishableKey = "pk_test_YOUR_TEST_KEY" // Use test key for development
+            #else
+            STPAPIClient.shared.publishableKey = publishableKey
+            #endif
+        }
     }
 
     // MARK: - Limits

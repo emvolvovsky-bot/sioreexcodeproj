@@ -44,25 +44,59 @@ router.post('/create-intent', async (req, res) => {
 // POST /api/payments/create-method
 router.post('/create-method', async (req, res) => {
   try {
-    // TEMPORARY: Return mock response for testing
-    // TODO: Implement proper Stripe mobile SDK integration
-    console.warn('⚠️ Using mock payment method creation - not secure for production');
+    const { paymentMethodId } = req.body;
 
-    // Mock payment method response
+    if (!paymentMethodId) {
+      return res.status(400).json({ error: 'Payment method ID required' });
+    }
+
+    // Retrieve the payment method from Stripe to get its details
+    const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
+
+    // Attach payment method to customer (create customer if needed)
+    // In production, you'd want to create/retrieve a Stripe customer for the user
+    let customer;
+    try {
+      // Try to find existing customer by email
+      const customers = await stripe.customers.list({
+        email: req.user.email,
+        limit: 1
+      });
+
+      if (customers.data.length > 0) {
+        customer = customers.data[0];
+      } else {
+        // Create new customer
+        customer = await stripe.customers.create({
+          email: req.user.email,
+          metadata: { userId: req.user.id }
+        });
+      }
+    } catch (customerError) {
+      console.error('Customer creation error:', customerError);
+      return res.status(500).json({ error: 'Failed to create customer' });
+    }
+
+    // Attach payment method to customer
+    await stripe.paymentMethods.attach(paymentMethodId, {
+      customer: customer.id,
+    });
+
+    // Return payment method details
     res.json({
       paymentMethod: {
-        id: `pm_mock_${Date.now()}`,
-        type: 'card',
-        card: {
-          brand: 'visa',
-          last4: '4242',
-          expMonth: 12,
-          expYear: 2025,
-        },
+        id: paymentMethod.id,
+        type: paymentMethod.type,
+        card: paymentMethod.card ? {
+          brand: paymentMethod.card.brand,
+          last4: paymentMethod.card.last4,
+          expMonth: paymentMethod.card.exp_month,
+          expYear: paymentMethod.card.exp_year,
+        } : null,
       },
     });
   } catch (error) {
-    console.error('Mock payment method error:', error);
+    console.error('Stripe payment method error:', error);
     res.status(500).json({ error: 'Failed to create payment method' });
   }
 });

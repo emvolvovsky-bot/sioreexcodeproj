@@ -7,6 +7,8 @@
 
 import SwiftUI
 import Combine
+import Stripe
+import StripeCore
 
 struct PaymentMethodsView: View {
     @StateObject private var paymentMethodService = PaymentMethodService.shared
@@ -69,7 +71,7 @@ struct PaymentMethodsView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button(action: {
-                    showAddPayment = true
+                    showStripeAddCard()
                 }) {
                     Image(systemName: "plus")
                         .foregroundColor(.sioreeIcyBlue)
@@ -136,8 +138,52 @@ struct PaymentMethodsView: View {
             )
             .store(in: &cancellables)
     }
-    
+
+    // MARK: - Stripe Integration
+    private func showStripeAddCard() {
+        // Create Stripe's card collection view controller
+        let addCardViewController = STPAddCardViewController()
+        addCardViewController.delegate = CardDelegate(parentView: self)
+
+        // Present it modally
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let window = windowScene.windows.first,
+           let rootViewController = window.rootViewController {
+            rootViewController.present(addCardViewController, animated: true)
+        }
+    }
+
     @State private var cancellables = Set<AnyCancellable>()
+}
+
+// MARK: - Stripe Card Delegate
+class CardDelegate: NSObject, STPAddCardViewControllerDelegate {
+    private weak var parentView: PaymentMethodsView?
+
+    init(parentView: PaymentMethodsView) {
+        self.parentView = parentView
+    }
+
+    func addCardViewControllerDidCancel(_ addCardViewController: STPAddCardViewController) {
+        addCardViewController.dismiss(animated: true)
+    }
+
+    func addCardViewController(_ addCardViewController: STPAddCardViewController,
+                              didCreatePaymentMethod paymentMethod: STPPaymentMethod,
+                              completion: @escaping STPErrorBlock) {
+
+        // Here you would send the payment method ID to your backend
+        // Instead of raw card data, you now have a secure paymentMethod.stripeId
+        print("✅ Created payment method: \(paymentMethod.stripeId)")
+
+        // For now, just show success and dismiss
+        addCardViewController.dismiss(animated: true) {
+            // TODO: Send paymentMethod.stripeId to backend and refresh payment methods list
+            self.parentView?.loadPaymentMethods()
+        }
+
+        completion(nil) // No error
+    }
 }
 
 struct PaymentMethodItem: Identifiable {

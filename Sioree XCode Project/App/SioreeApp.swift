@@ -6,7 +6,7 @@
 //
 
 import SwiftUI
-import Stripe
+// import Stripe  // Will uncomment after manual framework installation
 
 @main
 struct SioreeApp: App {

@@ -8,7 +8,7 @@
 import SwiftUI
 import PassKit
 import Combine
-import StripePaymentSheet
+// import StripePaymentSheet  // Will uncomment after manual framework installation
 
 struct PaymentCheckoutView: View {
     @Environment(\.dismiss) var dismiss

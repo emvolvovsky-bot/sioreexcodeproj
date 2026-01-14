@@ -7,8 +7,8 @@
 
 import SwiftUI
 import Combine
-import StripePaymentSheet
-import StripePaymentsUI
+// import StripePaymentSheet  // Will uncomment after manual framework installation
+// import StripePaymentsUI     // Will uncomment after manual framework installation
 
 struct PaymentMethodsView: View {
     @StateObject private var paymentMethodService = PaymentMethodService.shared

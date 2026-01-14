@@ -50,9 +50,9 @@ class HostOnboardingViewModel: ObservableObject {
         stripeService.createStripeConnectAccount()
             .receive(on: DispatchQueue.main)
             .sink(
-                receiveCompletion: { [weak self] completion in
+                receiveCompletion: { [weak self] combineCompletion in
                     self?.isLoading = false
-                    if case .failure(let error) = completion {
+                    if case .failure(let error) = combineCompletion {
                         self?.errorMessage = error.localizedDescription
                         completion(.failure(error))
                         print("❌ Failed to create Stripe account: \(error.localizedDescription)")

@@ -9,7 +9,7 @@ import Foundation
 import Combine
 
 // MARK: - Ticket Models
-struct Ticket: Codable, Identifiable {
+struct APITicket: Codable, Identifiable {
     let id: String
     let eventId: String
     let buyerId: String
@@ -38,9 +38,15 @@ struct Ticket: Codable, Identifiable {
 }
 
 struct TicketPurchase: Codable {
-    let tickets: [Ticket]
+    let tickets: [APITicket]
     let totalPaid: Int
     let paymentIntentId: String
+
+    enum CodingKeys: String, CodingKey {
+        case tickets
+        case totalPaid = "total_paid"
+        case paymentIntentId = "payment_intent_id"
+    }
 }
 
 // MARK: - TicketService
@@ -51,17 +57,17 @@ class TicketService: ObservableObject {
     private init() {}
 
     // MARK: - Get User's Tickets
-    func getMyTickets() -> AnyPublisher<[Ticket], Error> {
+    func getMyTickets() -> AnyPublisher<[APITicket], Error> {
         return networkService.request("/api/tickets/my-tickets", method: "GET", body: nil)
     }
 
     // MARK: - Get Event Tickets (for host)
-    func getEventTickets(eventId: String) -> AnyPublisher<[Ticket], Error> {
+    func getEventTickets(eventId: String) -> AnyPublisher<[APITicket], Error> {
         return networkService.request("/api/tickets/event/\(eventId)", method: "GET", body: nil)
     }
 
     // MARK: - Validate Ticket (for check-in)
-    func validateTicket(ticketId: String) -> AnyPublisher<Ticket, Error> {
+    func validateTicket(ticketId: String) -> AnyPublisher<APITicket, Error> {
         return networkService.request("/api/tickets/\(ticketId)/validate", method: "POST", body: nil)
     }
 }

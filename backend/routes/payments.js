@@ -309,6 +309,25 @@ router.delete('/methods/:paymentMethodId', async (req, res) => {
   }
 });
 
+// POST /api/payments/create-setup-intent
+router.post('/create-setup-intent', async (req, res) => {
+  try {
+    // Create a SetupIntent for saving payment methods
+    const setupIntent = await stripe.setupIntents.create({
+      payment_method_types: ['card'],
+      usage: 'off_session', // Allows using saved payment methods later
+    });
+
+    res.json({
+      clientSecret: setupIntent.client_secret,
+      setupIntentId: setupIntent.id,
+    });
+  } catch (error) {
+    console.error('Stripe setup intent error:', error);
+    res.status(500).json({ error: 'Failed to create setup intent' });
+  }
+});
+
 module.exports = router;
 
 

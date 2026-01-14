@@ -63,9 +63,9 @@ struct Constants {
         // Initialize Stripe SDK
         static func configure() {
             #if DEBUG
-            STPAPIClient.shared.publishableKey = "pk_test_YOUR_TEST_KEY" // Use test key for development
+            StripeAPI.defaultPublishableKey = "pk_test_YOUR_TEST_KEY" // Use test key for development
             #else
-            STPAPIClient.shared.publishableKey = publishableKey
+            StripeAPI.defaultPublishableKey = publishableKey
             #endif
         }
     }

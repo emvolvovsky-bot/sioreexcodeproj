@@ -8,6 +8,7 @@
 import SwiftUI
 import PassKit
 import Combine
+import StripePaymentSheet
 
 struct PaymentCheckoutView: View {
     @Environment(\.dismiss) var dismiss
@@ -302,32 +303,58 @@ struct PaymentCheckoutView: View {
         isLoading = true
         errorMessage = nil
         
-        // Create payment intent
-        paymentService.createPaymentIntent(amount: amount, hostStripeAccountId: nil, description: description, bookingId: bookingId)
-            .flatMap { clientSecret -> AnyPublisher<Payment, Error> in
-                // Extract payment intent ID from client secret
-                let paymentIntentId = clientSecret.components(separatedBy: "_secret_").first ?? ""
-                // Confirm payment with saved payment method
-                return self.paymentService.confirmPayment(
-                    paymentIntentId: paymentIntentId,
-                    paymentMethodId: method.id
-                )
+        // Use Payment Sheet for modern payment processing
+        createPaymentIntent { clientSecret in
+            guard let clientSecret = clientSecret else {
+                self.errorMessage = "Failed to create payment"
+                self.isLoading = false
+                return
             }
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { completion in
-                    isLoading = false
-                    if case .failure(let error) = completion {
-                        errorMessage = error.localizedDescription
-                    }
-                },
-                receiveValue: { payment in
-                    isLoading = false
-                    onPaymentSuccess(payment)
-                    dismiss()
-                }
+
+            // Configure Payment Sheet
+            var configuration = PaymentSheet.Configuration()
+            configuration.merchantDisplayName = "Sioree"
+            configuration.allowsDelayedPaymentMethods = false
+            configuration.returnURL = "sioree://stripe-redirect"
+
+            // Initialize Payment Sheet with existing PaymentIntent
+            let paymentSheet = PaymentSheet(
+                paymentIntentClientSecret: clientSecret,
+                configuration: configuration
             )
-            .store(in: &cancellables)
+
+            // Present Payment Sheet
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+               let window = windowScene.windows.first,
+               let rootViewController = window.rootViewController {
+
+                paymentSheet.present(from: rootViewController) { result in
+                    self.isLoading = false
+                    switch result {
+                    case .completed:
+                        print("✅ Payment completed successfully")
+                        // TODO: Fetch the payment details from your backend
+                        // For now, create a mock payment object
+                        let mockPayment = Payment(
+                            id: UUID().uuidString,
+                            amount: self.amount,
+                            method: "card",
+                            status: "paid",
+                            transactionId: clientSecret.components(separatedBy: "_secret_").first ?? "",
+                            description: self.description,
+                            createdAt: Date()
+                        )
+                        self.onPaymentSuccess(mockPayment)
+                        self.dismiss()
+                    case .canceled:
+                        print("Payment canceled")
+                    case .failed(let error):
+                        print("❌ Payment failed: \(error.localizedDescription)")
+                        self.errorMessage = error.localizedDescription
+                    }
+                }
+            }
+        }
     }
     
     @State private var cancellables = Set<AnyCancellable>()
@@ -586,7 +613,28 @@ struct CardPaymentView: View {
             )
             .store(in: &cancellables)
     }
-    
+
+    private func createPaymentIntent(completion: @escaping (String?) -> Void) {
+        // Call your backend to create a PaymentIntent
+        let body: [String: Any] = [
+            "amount": amount,
+            "currency": "usd",
+            "description": description,
+            "bookingId": bookingId
+        ].compactMapValues { $0 }
+
+        NetworkService().request("/api/payments/create-intent", method: "POST", body: body)
+            .sink(receiveCompletion: { _ in }, receiveValue: { (response: [String: Any]) in
+                if let paymentIntent = response["paymentIntent"] as? [String: Any],
+                   let clientSecret = paymentIntent["clientSecret"] as? String {
+                    completion(clientSecret)
+                } else {
+                    completion(nil)
+                }
+            })
+            .store(in: &cancellables)
+    }
+
     @State private var cancellables = Set<AnyCancellable>()
 }
 

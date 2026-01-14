@@ -6,7 +6,7 @@
 //
 
 import SwiftUI
-// import Stripe  // Temporarily commented out - will uncomment after SDK installation
+import Stripe
 
 @main
 struct SioreeApp: App {
@@ -18,7 +18,7 @@ struct SioreeApp: App {
         NotificationService.shared.requestAuthorization()
 
         // Initialize Stripe
-        // Constants.Stripe.configure()  // Temporarily commented out - will uncomment after SDK installation
+        Constants.Stripe.configure()
     }
 
     var body: some Scene {

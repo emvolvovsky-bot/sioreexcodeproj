@@ -7,8 +7,8 @@
 
 import SwiftUI
 import Combine
-// import Stripe     // Temporarily commented out - will uncomment after SDK installation
-// import StripeCore // Temporarily commented out - will uncomment after SDK installation
+import StripePaymentSheet
+import StripePaymentsUI
 
 struct PaymentMethodsView: View {
     @StateObject private var paymentMethodService = PaymentMethodService.shared
@@ -141,57 +141,58 @@ struct PaymentMethodsView: View {
 
     // MARK: - Stripe Integration
     private func showStripeAddCard() {
-        // TODO: Uncomment after Stripe SDK installation
-        /*
-        // Create Stripe's card collection view controller
-        let addCardViewController = STPAddCardViewController()
-        addCardViewController.delegate = CardDelegate(parentView: self)
+        // Create a SetupIntent on your backend to save payment method
+        createSetupIntent { clientSecret in
+            guard let clientSecret = clientSecret else {
+                print("Failed to create setup intent")
+                return
+            }
 
-        // Present it modally
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let window = windowScene.windows.first,
-           let rootViewController = window.rootViewController {
-            rootViewController.present(addCardViewController, animated: true)
+            // Configure Payment Sheet for setup mode
+            var configuration = PaymentSheet.Configuration()
+            configuration.merchantDisplayName = "Sioree"
+            configuration.allowsDelayedPaymentMethods = false
+            configuration.returnURL = "sioree://stripe-redirect"
+
+            // Initialize Payment Sheet
+            let paymentSheet = PaymentSheet(
+                setupIntentClientSecret: clientSecret,
+                configuration: configuration
+            )
+
+            // Present Payment Sheet
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+               let window = windowScene.windows.first,
+               let rootViewController = window.rootViewController {
+                paymentSheet.present(from: rootViewController) { result in
+                    switch result {
+                    case .completed:
+                        print("✅ Payment method saved successfully")
+                        self.loadPaymentMethods()
+                    case .canceled:
+                        print("Payment method setup canceled")
+                    case .failed(let error):
+                        print("❌ Payment method setup failed: \(error.localizedDescription)")
+                    }
+                }
+            }
         }
-        */
-        print("Stripe SDK not installed yet - please install Stripe SDK first")
+    }
+
+    private func createSetupIntent(completion: @escaping (String?) -> Void) {
+        // Call your backend to create a SetupIntent
+        // This should return a client_secret for the SetupIntent
+        NetworkService().request("/api/payments/create-setup-intent", method: "POST", body: nil)
+            .sink(receiveCompletion: { _ in }, receiveValue: { (response: [String: String]) in
+                completion(response["clientSecret"])
+            })
+            .store(in: &cancellables)
     }
 
     @State private var cancellables = Set<AnyCancellable>()
 }
 
-// MARK: - Stripe Card Delegate
-// TODO: Uncomment after Stripe SDK installation
-/*
-class CardDelegate: NSObject, STPAddCardViewControllerDelegate {
-    private weak var parentView: PaymentMethodsView?
-
-    init(parentView: PaymentMethodsView) {
-        self.parentView = parentView
-    }
-
-    func addCardViewControllerDidCancel(_ addCardViewController: STPAddCardViewController) {
-        addCardViewController.dismiss(animated: true)
-    }
-
-    func addCardViewController(_ addCardViewController: STPAddCardViewController,
-                              didCreatePaymentMethod paymentMethod: STPPaymentMethod,
-                              completion: @escaping STPErrorBlock) {
-
-        // Here you would send the payment method ID to your backend
-        // Instead of raw card data, you now have a secure paymentMethod.stripeId
-        print("✅ Created payment method: \(paymentMethod.stripeId)")
-
-        // For now, just show success and dismiss
-        addCardViewController.dismiss(animated: true) {
-            // TODO: Send paymentMethod.stripeId to backend and refresh payment methods list
-            self.parentView?.loadPaymentMethods()
-        }
-
-        completion(nil) // No error
-    }
-}
-*/
+// Payment Sheet handles everything automatically - no custom delegate needed
 
 struct PaymentMethodItem: Identifiable {
     let id: String

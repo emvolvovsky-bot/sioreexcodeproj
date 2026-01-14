@@ -7,8 +7,8 @@
 
 import SwiftUI
 import Combine
-import Stripe
-import StripeCore
+// import Stripe     // Temporarily commented out - will uncomment after SDK installation
+// import StripeCore // Temporarily commented out - will uncomment after SDK installation
 
 struct PaymentMethodsView: View {
     @StateObject private var paymentMethodService = PaymentMethodService.shared
@@ -141,6 +141,8 @@ struct PaymentMethodsView: View {
 
     // MARK: - Stripe Integration
     private func showStripeAddCard() {
+        // TODO: Uncomment after Stripe SDK installation
+        /*
         // Create Stripe's card collection view controller
         let addCardViewController = STPAddCardViewController()
         addCardViewController.delegate = CardDelegate(parentView: self)
@@ -151,12 +153,16 @@ struct PaymentMethodsView: View {
            let rootViewController = window.rootViewController {
             rootViewController.present(addCardViewController, animated: true)
         }
+        */
+        print("Stripe SDK not installed yet - please install Stripe SDK first")
     }
 
     @State private var cancellables = Set<AnyCancellable>()
 }
 
 // MARK: - Stripe Card Delegate
+// TODO: Uncomment after Stripe SDK installation
+/*
 class CardDelegate: NSObject, STPAddCardViewControllerDelegate {
     private weak var parentView: PaymentMethodsView?
 
@@ -185,6 +191,7 @@ class CardDelegate: NSObject, STPAddCardViewControllerDelegate {
         completion(nil) // No error
     }
 }
+*/
 
 struct PaymentMethodItem: Identifiable {
     let id: String

@@ -12,7 +12,8 @@ class CheckoutViewModel: ObservableObject {
     @Published var paymentSheet: PaymentSheet?
     @Published var paymentResult: PaymentSheetResult?
 
-    let backendCheckoutUrl = URL(string: "https://your-render-app.onrender.com/payment-sheet")!
+    let backendCheckoutUrl = URL(string: "https://sioree-api.onrender.com/payment-sheet
+")!
 
     private struct CheckoutResponse: Decodable {
         let paymentIntent: String

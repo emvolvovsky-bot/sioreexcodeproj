@@ -6,6 +6,6 @@ target 'Sioree XCode Project' do
   use_frameworks!
 
   # Pods for Sioree XCode Project
-  pod 'Stripe'
+  pod 'StripePaymentSheet'
 
 end

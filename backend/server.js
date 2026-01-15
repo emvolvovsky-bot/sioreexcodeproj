@@ -7,6 +7,7 @@ const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
+const stripe = require('./lib/stripe');
 
 const authRoutes = require('./routes/auth');
 const messageRoutes = require('./routes/messages');
@@ -15,6 +16,7 @@ const socialRoutes = require('./routes/social');
 const mediaRoutes = require('./routes/media');
 const eventRoutes = require('./routes/events');
 const paymentRoutes = require('./routes/payments');
+// Stripe routes removed - payments not implemented
 const stripeRoutes = require('./routes/stripe');
 const ticketRoutes = require('./routes/tickets');
 const postRoutes = require('./routes/posts');
@@ -67,6 +69,7 @@ app.use('/api/social', socialRoutes);
 app.use('/api/media', mediaRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/payments', paymentRoutes);
+// Stripe routes removed - payments not implemented
 app.use('/api/stripe', stripeRoutes);
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/posts', postRoutes);
@@ -104,6 +107,6 @@ httpServer.listen(PORT, () => {
   console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 
-module.exports = { app, io };
+module.exports = { app, io, stripe };
 
 

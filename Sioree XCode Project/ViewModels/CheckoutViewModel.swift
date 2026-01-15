@@ -2,81 +2,66 @@
 //  CheckoutViewModel.swift
 //  Sioree
 //
-//  Handles ticket checkout with Stripe Connect and Apple Pay
+//  Checkout view model placeholder - payments not implemented
 //
 
 import Foundation
-import SwiftUI
-import Combine
+import StripePaymentSheet
 
 class CheckoutViewModel: ObservableObject {
-    @Published var isLoading = false
-    @Published var errorMessage: String?
-    @Published var paymentIntent: StripeCheckoutIntent?
-    @Published var selectedQuantity = 1
-    @Published var showPaymentSheet = false
+    @Published var paymentSheet: PaymentSheet?
+    @Published var paymentResult: PaymentSheetResult?
 
-    private let stripeService = StripePaymentService.shared
-    private let networkService = NetworkService()
-    private var cancellables = Set<AnyCancellable>()
+    let backendCheckoutUrl = URL(string: "https://your-render-app.onrender.com/payment-sheet")!
 
-    private let eventId: String
-
-    init(eventId: String) {
-        self.eventId = eventId
+    private struct CheckoutResponse: Decodable {
+        let paymentIntent: String
+        let customer: String
+        let customerSessionClientSecret: String
+        let publishableKey: String
     }
 
-    // MARK: - Create Payment Intent
-    func createPaymentIntent(quantity: Int = 1) {
-        isLoading = true
-        errorMessage = nil
-        selectedQuantity = quantity
+    func preparePaymentSheet() {
+        var request = URLRequest(url: backendCheckoutUrl)
+        request.httpMethod = "POST"
 
-        stripeService.createTicketPaymentIntent(eventId: eventId, quantity: quantity)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { [weak self] completion in
-                    self?.isLoading = false
-                    if case .failure(let error) = completion {
-                        self?.errorMessage = error.localizedDescription
-                        print("❌ Failed to create payment intent: \(error.localizedDescription)")
-                    }
-                },
-                receiveValue: { [weak self] checkoutIntent in
-                    self?.paymentIntent = checkoutIntent
-                    self?.showPaymentSheet = true
-                    print("✅ Payment intent created successfully")
+        URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
+            if let error = error {
+                print("PaymentSheet request failed: \(error.localizedDescription)")
+                return
+            }
+
+            guard let data = data else {
+                print("PaymentSheet request returned empty response")
+                return
+            }
+
+            do {
+                let response = try JSONDecoder().decode(CheckoutResponse.self, from: data)
+                STPAPIClient.shared.publishableKey = response.publishableKey
+
+                var configuration = PaymentSheet.Configuration()
+                configuration.merchantDisplayName = "Soirée"
+                configuration.customer = .init(
+                    id: response.customer,
+                    customerSessionClientSecret: response.customerSessionClientSecret
+                )
+                configuration.allowsDelayedPaymentMethods = true
+                configuration.returnURL = "your-app://stripe-redirect"
+
+                DispatchQueue.main.async {
+                    self?.paymentSheet = PaymentSheet(
+                        paymentIntentClientSecret: response.paymentIntent,
+                        configuration: configuration
+                    )
                 }
-            )
-            .store(in: &cancellables)
+            } catch {
+                print("Failed to decode PaymentSheet response: \(error.localizedDescription)")
+            }
+        }.resume()
     }
 
-    // MARK: - Calculate Pricing Display
-    func getPricingBreakdown() -> (ticketPrice: Double, fees: Double, total: Double)? {
-        guard let pricing = paymentIntent?.pricing else { return nil }
-
-        let ticketPrice = Double(pricing.ticket_price_cents) / 100.0
-        let fees = Double(pricing.fees_amount_cents) / 100.0
-        let total = Double(pricing.total_amount_cents) / 100.0
-
-        return (ticketPrice, fees, total)
-    }
-
-    // MARK: - Confirm Payment (called after Stripe payment succeeds)
-    func confirmPayment(paymentIntentId: String, completion: @escaping (Result<Void, Error>) -> Void) {
-        // In the new flow, payment confirmation is handled via webhooks
-        // We can optionally poll for confirmation or just assume success
-        // since Stripe handles the actual payment processing
-
-        // For now, just mark as successful - the webhook will handle the actual ticket creation
-        completion(.success(()))
-    }
-
-    // MARK: - Reset State
-    func reset() {
-        paymentIntent = nil
-        showPaymentSheet = false
-        errorMessage = nil
-        selectedQuantity = 1
+    func onPaymentCompletion(result: PaymentSheetResult) {
+        paymentResult = result
     }
 }

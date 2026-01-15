@@ -2,121 +2,86 @@
 //  HostOnboardingViewModel.swift
 //  Sioree
 //
-//  Handles Stripe Connect onboarding for hosts
+//  Host onboarding placeholder - payments not implemented
 //
 
 import Foundation
 import SwiftUI
 import Combine
 
+struct AccountStatus {
+    let onboarding_complete: Bool
+    let charges_enabled: Bool
+    let payouts_enabled: Bool
+    let needs_onboarding: Bool
+    let account_id: String?
+}
+
 class HostOnboardingViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
-    @Published var accountStatus: StripeAccountStatus?
+    @Published var accountStatus: AccountStatus?
     @Published var onboardingUrl: String?
     @Published var showOnboardingWebView = false
 
-    private let stripeService = StripePaymentService.shared
     private var cancellables = Set<AnyCancellable>()
 
-    // MARK: - Check Onboarding Status
+    // MARK: - Check Onboarding Status (placeholder)
     func checkOnboardingStatus() {
         isLoading = true
         errorMessage = nil
 
-        stripeService.getAccountStatus()
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { [weak self] completion in
-                    self?.isLoading = false
-                    if case .failure(let error) = completion {
-                        self?.errorMessage = error.localizedDescription
-                        print("❌ Failed to check onboarding status: \(error.localizedDescription)")
-                    }
-                },
-                receiveValue: { [weak self] status in
-                    self?.accountStatus = status
-                    print("✅ Onboarding status checked: complete=\(status.onboarding_complete)")
-                }
+        // Simulate checking status - always return "not implemented"
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.isLoading = false
+            self?.accountStatus = AccountStatus(
+                onboarding_complete: false,
+                charges_enabled: false,
+                payouts_enabled: false,
+                needs_onboarding: true,
+                account_id: nil
             )
-            .store(in: &cancellables)
+            self?.errorMessage = "Payment processing is not implemented. This feature is under development."
+        }
     }
 
-    // MARK: - Create Stripe Account
-    func createStripeAccount(completion: @escaping (Result<Void, Error>) -> Void) {
+    // MARK: - Create Account (placeholder)
+    func createAccount(completion: @escaping (Result<Void, Error>) -> Void) {
         isLoading = true
         errorMessage = nil
 
-        stripeService.createStripeConnectAccount()
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { [weak self] combineCompletion in
-                    self?.isLoading = false
-                    if case .failure(let error) = combineCompletion {
-                        self?.errorMessage = error.localizedDescription
-                        completion(.failure(error))
-                        print("❌ Failed to create Stripe account: \(error.localizedDescription)")
-                    }
-                },
-                receiveValue: { [weak self] account in
-                    print("✅ Stripe account created: \(account.account_id)")
-                    // After creating account, start onboarding
-                    self?.startOnboarding()
-                    completion(.success(()))
-                }
-            )
-            .store(in: &cancellables)
+        // Simulate account creation failure
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.isLoading = false
+            self?.errorMessage = "Payment processing is not implemented. This feature is under development."
+            completion(.failure(NSError(domain: "HostOnboardingViewModel", code: -1, userInfo: [NSLocalizedDescriptionKey: "Payment processing is not implemented"])))
+        }
     }
 
-    // MARK: - Start Onboarding
+    // MARK: - Start Onboarding (placeholder)
     func startOnboarding() {
         isLoading = true
         errorMessage = nil
 
-        stripeService.createAccountLink()
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { [weak self] completion in
-                    self?.isLoading = false
-                    if case .failure(let error) = completion {
-                        self?.errorMessage = error.localizedDescription
-                        print("❌ Failed to create onboarding link: \(error.localizedDescription)")
-                    }
-                },
-                receiveValue: { [weak self] link in
-                    self?.onboardingUrl = link.url
-                    self?.showOnboardingWebView = true
-                    print("✅ Onboarding link created: \(link.url)")
-                }
-            )
-            .store(in: &cancellables)
+        // Simulate onboarding link creation failure
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.isLoading = false
+            self?.errorMessage = "Payment processing is not implemented. This feature is under development."
+        }
     }
 
-    // MARK: - Refresh Status After Onboarding
+    // MARK: - Refresh Status After Onboarding (placeholder)
     func refreshStatusAfterOnboarding() {
-        // Add a small delay to allow Stripe to process the onboarding
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-            self?.checkOnboardingStatus()
-        }
+        checkOnboardingStatus()
     }
 
-    // MARK: - Check if Host Can Publish Events
+    // MARK: - Check if Host Can Publish Events (placeholder)
     func canPublishEvents() -> Bool {
-        return accountStatus?.onboarding_complete == true
+        return false // Payments not implemented, so hosts cannot publish events requiring payment
     }
 
-    // MARK: - Get Status Message
+    // MARK: - Get Status Message (placeholder)
     func getStatusMessage() -> String {
-        guard let status = accountStatus else {
-            return "Checking payout setup..."
-        }
-
-        if status.onboarding_complete {
-            return "Payout setup complete ✓"
-        } else if status.needs_onboarding {
-            return "Finish payout setup to publish events"
-        } else {
-            return "Payout setup in progress..."
-        }
+        return "Payment processing not available - feature under development"
     }
 }

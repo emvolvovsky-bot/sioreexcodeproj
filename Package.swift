@@ -12,14 +12,13 @@ let package = Package(
             targets: ["Sioree"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/stripe/stripe-ios.git", from: "23.0.0"),
+        // Stripe dependencies removed - payments not implemented
     ],
     targets: [
         .target(
             name: "Sioree",
             dependencies: [
-                .product(name: "Stripe", package: "stripe-ios"),
-                .product(name: "StripeCore", package: "stripe-ios"),
+                // Stripe dependencies removed - payments not implemented
             ]),
         .testTarget(
             name: "SioreeTests",

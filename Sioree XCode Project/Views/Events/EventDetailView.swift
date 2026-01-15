@@ -224,7 +224,7 @@ struct EventDetailView: View {
                                     }
                                     
                                     if !isTalentMapMode {
-                                        // Price
+                                        // Price + Buy Button
                                         HStack(spacing: Theme.Spacing.m) {
                                             Image(systemName: "dollarsign.circle.fill")
                                                 .foregroundColor(.sioreeIcyBlue)
@@ -242,6 +242,15 @@ struct EventDetailView: View {
                                                         .font(.sioreeBody)
                                                         .foregroundColor(.green)
                                                 }
+                                            }
+                                            Spacer()
+                                            if let price = event.ticketPrice, price > 0, !isHost {
+                                                StripeBuyButtonView(
+                                                    buyButtonId: Constants.Stripe.buyButtonId,
+                                                    publishableKey: Constants.Stripe.publishableKey,
+                                                    height: 44
+                                                )
+                                                .frame(maxWidth: 180)
                                             }
                                         }
                                     }
@@ -375,13 +384,7 @@ struct EventDetailView: View {
                                         viewModel.cancelRSVP()
                                     }
                                 } else if let price = event.ticketPrice, price > 0 {
-                                    CustomButton(
-                                        title: "Buy",
-                                        variant: .primary,
-                                        size: .large
-                                    ) {
-                                        viewModel.showPaymentCheckout = true
-                                    }
+                                    EmptyView()
                                 } else {
                                     CustomButton(
                                         title: "Attend",

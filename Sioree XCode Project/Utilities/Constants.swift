@@ -58,16 +58,9 @@ struct Constants {
     
     // MARK: - Stripe
     struct Stripe {
-        static let publishableKey = "pk_live_51SbF9DEjdNHR0rzf4SS7qAU1utPrZaoak979aO5U3gFnOKKUmYTxmdK6G2hkOVGawvKGCAnaXePSTp6jT3j19eWH00zndA4EJx"
-
-        // Initialize Stripe SDK
-        static func configure() {
-            #if DEBUG
-            StripeAPI.defaultPublishableKey = "pk_test_YOUR_TEST_KEY" // Use test key for development
-            #else
-            StripeAPI.defaultPublishableKey = publishableKey
-            #endif
-        }
+        // Update these values with your Stripe Buy Button settings.
+        static let publishableKey = "pk_test_51SbF9IEZUZFsipCPLKDUFgbVQpowjxWafVJjHZBR9TihnyFHSsZ5yA93lrz4krTsQNNttqwBIrDW0MLKcYDMiD6q00Db2qsWKJ"
+        static let buyButtonId = "{{BUY_BUTTON_ID}}"
     }
 
     // MARK: - Limits

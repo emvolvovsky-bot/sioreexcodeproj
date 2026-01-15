@@ -7,8 +7,7 @@
 
 import SwiftUI
 import Combine
-// import StripePaymentSheet  // Will uncomment after manual framework installation
-// import StripePaymentsUI     // Will uncomment after manual framework installation
+// Stripe imports removed - payments not implemented
 
 struct PaymentMethodsView: View {
     @StateObject private var paymentMethodService = PaymentMethodService.shared
@@ -139,54 +138,9 @@ struct PaymentMethodsView: View {
             .store(in: &cancellables)
     }
 
-    // MARK: - Stripe Integration
+    // MARK: - Payment Method UI (Stripe PaymentSheet disabled)
     private func showStripeAddCard() {
-        // Create a SetupIntent on your backend to save payment method
-        createSetupIntent { clientSecret in
-            guard let clientSecret = clientSecret else {
-                print("Failed to create setup intent")
-                return
-            }
-
-            // Configure Payment Sheet for setup mode
-            var configuration = PaymentSheet.Configuration()
-            configuration.merchantDisplayName = "Sioree"
-            configuration.allowsDelayedPaymentMethods = false
-            configuration.returnURL = "sioree://stripe-redirect"
-
-            // Initialize Payment Sheet
-            let paymentSheet = PaymentSheet(
-                setupIntentClientSecret: clientSecret,
-                configuration: configuration
-            )
-
-            // Present Payment Sheet
-            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-               let window = windowScene.windows.first,
-               let rootViewController = window.rootViewController {
-                paymentSheet.present(from: rootViewController) { result in
-                    switch result {
-                    case .completed:
-                        print("✅ Payment method saved successfully")
-                        self.loadPaymentMethods()
-                    case .canceled:
-                        print("Payment method setup canceled")
-                    case .failed(let error):
-                        print("❌ Payment method setup failed: \(error.localizedDescription)")
-                    }
-                }
-            }
-        }
-    }
-
-    private func createSetupIntent(completion: @escaping (String?) -> Void) {
-        // Call your backend to create a SetupIntent
-        // This should return a client_secret for the SetupIntent
-        NetworkService().request("/api/payments/create-setup-intent", method: "POST", body: nil)
-            .sink(receiveCompletion: { _ in }, receiveValue: { (response: [String: String]) in
-                completion(response["clientSecret"])
-            })
-            .store(in: &cancellables)
+        showAddPayment = true
     }
 
     @State private var cancellables = Set<AnyCancellable>()
@@ -494,6 +448,10 @@ struct AddPaymentMethodView: View {
 
 struct PaymentMethodResponse: Codable {
     let paymentMethod: StripePaymentMethod
+}
+
+struct StripePaymentMethod: Codable {
+    let id: String
 }
 
 #Preview {

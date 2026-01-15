@@ -8,11 +8,13 @@
 import SwiftUI
 import UIKit
 import Combine
+import StripePaymentSheet
 
 struct EventDetailView: View {
     let eventId: String
     let isTalentMapMode: Bool
     @StateObject private var viewModel: EventViewModel
+    @StateObject private var checkoutViewModel = CheckoutViewModel()
     @EnvironmentObject var authViewModel: AuthViewModel
     @Environment(\.dismiss) var dismiss
     @State private var showLocationActionSheet = false
@@ -23,6 +25,7 @@ struct EventDetailView: View {
     @State private var requestSuccess = false
     @State private var cancellables = Set<AnyCancellable>()
     @State private var showEditEvent = false
+    @State private var didPreparePaymentSheet = false
     
     init(eventId: String, isTalentMapMode: Bool = false) {
         self.eventId = eventId
@@ -40,438 +43,9 @@ struct EventDetailView: View {
     
     var body: some View {
         ZStack {
-            // Dark gradient background
-            LinearGradient(
-                colors: [Color.sioreeBlack, Color.sioreeBlack.opacity(0.95), Color.sioreeCharcoal.opacity(0.1)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-            
-            if let event = viewModel.event {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 0) {
-                            // Hero Image - Cover photo ONLY, no fallback
-                            ZStack {
-                                CoverPhotoView(imageURL: event.images.first, height: 300)
-                                
-                                // Brand promotion badge overlay (if featured)
-                                if event.isFeatured {
-                                    VStack {
-                                        HStack {
-                                            Spacer()
-                                            HStack(spacing: Theme.Spacing.xs) {
-                                                Image(systemName: "star.fill")
-                                                    .font(.system(size: 10))
-                                                    .foregroundColor(.sioreeWarmGlow)
-                                                Text("FEATURED")
-                                                    .font(.sioreeCaption)
-                                                    .fontWeight(.bold)
-                                                    .foregroundColor(.sioreeWhite)
-                                            }
-                                            .padding(.horizontal, Theme.Spacing.s)
-                                            .padding(.vertical, 4)
-                                            .background(Color.sioreeIcyBlue.opacity(0.9))
-                                            .cornerRadius(Theme.CornerRadius.small)
-                                            .padding(Theme.Spacing.m)
-                                        }
-                                        Spacer()
-                                    }
-                                }
-                            }
-                            
-                            // Content
-                            VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                                HStack(alignment: .center) {
-                                    Text(event.title)
-                                        .font(.sioreeH1)
-                                        .foregroundColor(.sioreeWhite)
-                                    
-                                    Spacer()
-                                    
-                                    // Edit button for host on upcoming events only
-                                    if isHost, let event = viewModel.event, event.date >= Date() {
-                                        Button(action: {
-                                            showEditEvent = true
-                                        }) {
-                                            Text("✏️")
-                                                .font(.system(size: 24))
-                                        }
-                                        .padding(.leading, Theme.Spacing.s)
-                                    }
-                                }
-
-                                if !isTalentMapMode, let need = event.lookingForSummary ?? event.lookingForTalentType, !need.isEmpty, need.lowercased() != "general talent" {
-                                    HStack(spacing: Theme.Spacing.s) {
-                                        Image(systemName: "person.3.sequence.fill")
-                                            .foregroundColor(.sioreeIcyBlue)
-                                        Text("Looking for \(need)")
-                                            .font(.sioreeBody)
-                                            .foregroundColor(.sioreeWhite)
-                                        Spacer()
-                                    }
-                                    .padding(Theme.Spacing.m)
-                                    .background(Color.sioreeIcyBlue.opacity(0.15))
-                                    .cornerRadius(Theme.CornerRadius.medium)
-                                }
-                                
-                                // Only show host profile and message host button if user is not the host
-                                if !isHost {
-                                    NavigationLink(destination: UserProfileView(userId: event.hostId)) {
-                                        HStack(spacing: Theme.Spacing.s) {
-                                            AvatarView(imageURL: event.hostAvatar, size: .small)
-                                            Text(event.hostName)
-                                                .font(.sioreeBody)
-                                                .foregroundColor(.sioreeWhite)
-                                            Spacer()
-                                            Image(systemName: "chevron.right")
-                                                .font(.system(size: 14))
-                                                .foregroundColor(Color.sioreeIcyBlue)
-                                        }
-                                    }
-                                    .buttonStyle(PlainButtonStyle())
-                                    
-                                    Divider()
-                                    
-                                    // Message Host Button
-                                    NavigationLink(destination: UserProfileView(userId: event.hostId)) {
-                                        HStack {
-                                            Image(systemName: "message.fill")
-                                                .foregroundColor(.sioreeIcyBlue)
-                                            Text("Message Host")
-                                                .font(.sioreeBody)
-                                                .foregroundColor(.sioreeIcyBlue)
-                                            Spacer()
-                                        }
-                                        .padding(Theme.Spacing.m)
-                                        .background(Color.sioreeIcyBlue.opacity(0.1))
-                                        .cornerRadius(Theme.CornerRadius.medium)
-                                    }
-                                    .buttonStyle(PlainButtonStyle())
-                                    
-                                    Divider()
-                                }
-                                
-                                // Brand promotion info (if featured)
-                                if !isTalentMapMode, event.isFeatured {
-                                    Divider()
-                                    
-                                    HStack(spacing: Theme.Spacing.s) {
-                                        Image(systemName: "star.fill")
-                                            .font(.system(size: 14))
-                                            .foregroundColor(.sioreeWarmGlow)
-                                        Text("Promoted by Brand")
-                                            .font(.sioreeCaption)
-                                            .foregroundColor(.sioreeWhite.opacity(0.7))
-                                        Spacer()
-                                    }
-                                    .padding(Theme.Spacing.s)
-                                    .background(Color.sioreeIcyBlue.opacity(0.1))
-                                    .cornerRadius(Theme.CornerRadius.small)
-                                }
-                                
-                                Divider()
-                                
-                                // Event Details Section
-                                VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                                    Text("Event Details")
-                                        .font(.sioreeH3)
-                                        .foregroundColor(.sioreeWhite)
-                                    
-                                    // Place - Tappable to open in Maps
-                                    Button(action: {
-                                        showLocationActionSheet = true
-                                    }) {
-                                        HStack(spacing: Theme.Spacing.m) {
-                                            Image(systemName: "location.fill")
-                                                .foregroundColor(.sioreeIcyBlue)
-                                                .frame(width: 24)
-                                            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                                                Text("Location")
-                                                    .font(.sioreeCaption)
-                                                    .foregroundColor(.sioreeWhite.opacity(0.7))
-                                                Text(event.location)
-                                                    .font(.sioreeBody)
-                                                    .foregroundColor(.sioreeWhite)
-                                                if let locationDetails = event.locationDetails, !locationDetails.isEmpty, !isTalentMapMode {
-                                                    Text(locationDetails)
-                                                        .font(.sioreeBodySmall)
-                                                        .foregroundColor(.sioreeWhite.opacity(0.7))
-                                                        .padding(.top, 2)
-                                                }
-                                            }
-                                            Spacer()
-                                            Image(systemName: "arrow.up.right.square")
-                                                .foregroundColor(.sioreeIcyBlue)
-                                                .font(.system(size: 16))
-                                        }
-                                    }
-                                    .buttonStyle(PlainButtonStyle())
-                                    
-                                    // Time
-                                    HStack(spacing: Theme.Spacing.m) {
-                                        Image(systemName: "clock.fill")
-                                            .foregroundColor(.sioreeIcyBlue)
-                                            .frame(width: 24)
-                                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                                            Text("Date & Time")
-                                                .font(.sioreeCaption)
-                                                .foregroundColor(.sioreeWhite.opacity(0.7))
-                                            Text("\(event.date.formattedEventDate()) at \(event.time.formattedEventTime())")
-                                                .font(.sioreeBody)
-                                                .foregroundColor(.sioreeWhite)
-                                        }
-                                    }
-                                    
-                                    if !isTalentMapMode {
-                                        // Price + Buy Button
-                                        HStack(spacing: Theme.Spacing.m) {
-                                            Image(systemName: "dollarsign.circle.fill")
-                                                .foregroundColor(.sioreeIcyBlue)
-                                                .frame(width: 24)
-                                            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                                                Text("Price")
-                                                    .font(.sioreeCaption)
-                                                    .foregroundColor(.sioreeWhite.opacity(0.7))
-                                                if let price = event.ticketPrice, price > 0 {
-                                                    Text(Helpers.formatCurrency(price))
-                                                        .font(.sioreeBody)
-                                                        .foregroundColor(.sioreeWhite)
-                                                } else {
-                                                    Text("Free")
-                                                        .font(.sioreeBody)
-                                                        .foregroundColor(.green)
-                                                }
-                                            }
-                                            Spacer()
-                                            if let price = event.ticketPrice, price > 0, !isHost {
-                                                StripeBuyButtonView(
-                                                    buyButtonId: Constants.Stripe.buyButtonId,
-                                                    publishableKey: Constants.Stripe.publishableKey,
-                                                    height: 44
-                                                )
-                                                .frame(maxWidth: 180)
-                                            }
-                                        }
-                                    }
-                                    
-                                    // Attendees
-                                    if isTalentMapMode {
-                                        HStack(spacing: Theme.Spacing.m) {
-                                            Image(systemName: "person.3.fill")
-                                                .foregroundColor(.sioreeIcyBlue)
-                                                .frame(width: 24)
-                                            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                                                Text("Attendees")
-                                                    .font(.sioreeCaption)
-                                                    .foregroundColor(.sioreeWhite.opacity(0.7))
-                                                Text("\(event.attendeeCount) People Going")
-                                                    .font(.sioreeBody)
-                                                    .foregroundColor(Color.sioreeIcyBlue)
-                                            }
-                                            Spacer()
-                                        }
-                                    } else {
-                                        NavigationLink(destination: EventAttendeesView(eventId: event.id, eventName: event.title)) {
-                                            HStack(spacing: Theme.Spacing.m) {
-                                                Image(systemName: "person.3.fill")
-                                                    .foregroundColor(.sioreeIcyBlue)
-                                                    .frame(width: 24)
-                                                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                                                    Text("Attendees")
-                                                        .font(.sioreeCaption)
-                                                        .foregroundColor(.sioreeWhite.opacity(0.7))
-                                                    Text("\(event.attendeeCount) People Going")
-                                                        .font(.sioreeBody)
-                                                        .foregroundColor(Color.sioreeIcyBlue)
-                                                }
-                                                Spacer()
-                                                Image(systemName: "chevron.right")
-                                                    .font(.system(size: 14))
-                                                    .foregroundColor(Color.sioreeIcyBlue)
-                                            }
-                                        }
-                                        .buttonStyle(PlainButtonStyle())
-                                    }
-                                }
-
-                                // Talent for this Event (Host only)
-                                if isHost && !viewModel.eventBookings.isEmpty {
-                                    Divider()
-
-                                    VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                                        HStack {
-                                            Text("Talent for this Event")
-                                                .font(.sioreeH3)
-                                                .foregroundColor(.sioreeWhite)
-
-                                            Spacer()
-
-                                            Text("\(viewModel.eventBookings.count) booking\(viewModel.eventBookings.count == 1 ? "" : "s")")
-                                                .font(.sioreeCaption)
-                                                .foregroundColor(.sioreeCharcoal.opacity(0.7))
-                                        }
-
-                                        ForEach(viewModel.eventBookings, id: \.id) { booking in
-                                            EventTalentBookingRow(booking: booking) {
-                                                // Handle booking actions here
-                                            }
-                                        }
-                                    }
-                                }
-
-                                if !isTalentMapMode {
-                                    Divider()
-
-                                    // Description
-                                    VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                                        Text("About")
-                                            .font(.sioreeH3)
-                                            .foregroundColor(.sioreeWhite)
-                                        Text(event.description.isEmpty ? "No description provided." : event.description)
-                                            .font(.sioreeBody)
-                                            .foregroundColor(.sioreeWhite.opacity(0.9))
-                                            .lineSpacing(4)
-                                    }
-                                    
-                                    // Capacity info (if available)
-                                    if let capacity = event.capacity, capacity > 0 {
-                                        Divider()
-                                        HStack(spacing: Theme.Spacing.m) {
-                                            Image(systemName: "person.2.fill")
-                                                .foregroundColor(.sioreeIcyBlue)
-                                                .frame(width: 24)
-                                            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                                                Text("Capacity")
-                                                    .font(.sioreeCaption)
-                                                    .foregroundColor(.sioreeWhite.opacity(0.7))
-                                                Text("\(event.attendeeCount) / \(capacity) spots")
-                                                    .font(.sioreeBody)
-                                                    .foregroundColor(.sioreeWhite)
-                                            }
-                                            Spacer()
-                                        }
-                                    }
-                                }
-                            }
-                            .padding(Theme.Spacing.l)
-                        }
-                    }
-                    .safeAreaInset(edge: .bottom) {
-                        // Sticky RSVP/Pay Button
-                        VStack(spacing: 0) {
-                            Divider()
-                            Group {
-                                // Host controls - no special buttons for host since edit is in header
-                                if isHost {
-                                    // Host sees nothing special in bottom bar
-                                    EmptyView()
-                                } else if authViewModel.currentUser?.userType == .talent {
-                                    CustomButton(
-                                        title: isRequestingHelp ? "Sending..." : (isTalentMapMode ? "Request to Work" : "Request to Help"),
-                                        variant: .primary,
-                                        size: .large
-                                    ) {
-                                        requestToHelp(event: event)
-                                    }
-                                    .disabled(isRequestingHelp)
-                                } else if viewModel.isRSVPed || event.isRSVPed {
-                                    CustomButton(
-                                        title: "Cancel RSVP",
-                                        variant: .secondary,
-                                        size: .large
-                                    ) {
-                                        viewModel.cancelRSVP()
-                                    }
-                                } else if let price = event.ticketPrice, price > 0 {
-                                    EmptyView()
-                                } else {
-                                    CustomButton(
-                                        title: "Attend",
-                                        variant: .primary,
-                                        size: .large
-                                    ) {
-                                        viewModel.rsvpToEvent()
-                                    }
-                                }
-                            }
-                            .padding(.horizontal, Theme.Spacing.m)
-                            .padding(.top, Theme.Spacing.m)
-                            .padding(.bottom, Theme.Spacing.s)
-                            .background(Color.sioreeWhite)
-                        }
-                    }
-                    .sheet(isPresented: $viewModel.showPaymentCheckout) {
-                        if let price = event.ticketPrice {
-                            PaymentCheckoutView(
-                                amount: price,
-                                description: "Ticket for \(event.title)",
-                                bookingId: nil,
-                                onPaymentSuccess: { payment in
-                                    // After successful payment, RSVP to event
-                                    // This will add user to event_attendees and move event to "Upcoming"
-                                    viewModel.showPaymentCheckout = false
-                                    // Small delay to ensure payment is processed
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                                        viewModel.rsvpToEvent()
-                                    }
-                                }
-                            )
-                        }
-                    }
-                    .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("EventRSVPSuccess"))) { notification in
-                        // Auto-dismiss after a short delay to show the confirmation
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                            if viewModel.showRSVPSheet {
-                                viewModel.showRSVPSheet = false
-                                dismiss()
-                            }
-                        }
-                    }
-                } else if viewModel.isLoading {
-                    LoadingView()
-                } else {
-                    // Error or empty state
-                    VStack(spacing: Theme.Spacing.l) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: 60))
-                            .foregroundColor(.sioreeIcyBlue.opacity(0.5))
-                        
-                        if let errorMessage = viewModel.errorMessage {
-                            Text("Failed to load event")
-                                .font(.sioreeH3)
-                                .foregroundColor(.sioreeWhite)
-                            Text(errorMessage)
-                                .font(.sioreeBody)
-                                .foregroundColor(.sioreeWhite.opacity(0.7))
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, Theme.Spacing.l)
-                        } else {
-                            Text("Event not found")
-                                .font(.sioreeH3)
-                                .foregroundColor(.sioreeWhite)
-                            Text("This event may have been removed or doesn't exist.")
-                                .font(.sioreeBody)
-                                .foregroundColor(.sioreeWhite.opacity(0.7))
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, Theme.Spacing.l)
-                        }
-                        
-                        Button(action: {
-                            viewModel.loadEvent()
-                        }) {
-                            Text("Retry")
-                                .font(.sioreeBody)
-                                .foregroundColor(.sioreeWhite)
-                                .padding(.horizontal, Theme.Spacing.l)
-                                .padding(.vertical, Theme.Spacing.m)
-                                .background(Color.sioreeIcyBlue)
-                                .cornerRadius(Theme.CornerRadius.medium)
-                        }
-                    }
-                    .padding(Theme.Spacing.xl)
-                }
-            }
+            backgroundView
+            contentView
+        }
             .navigationTitle("Event Details")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -491,6 +65,17 @@ struct EventDetailView: View {
                 if isHost {
                     viewModel.fetchEventBookings()
                 }
+            }
+            .onChange(of: viewModel.event) { newEvent in
+                guard let event = newEvent,
+                      !didPreparePaymentSheet,
+                      let price = event.ticketPrice,
+                      price > 0,
+                      !isHost else {
+                    return
+                }
+                didPreparePaymentSheet = true
+                checkoutViewModel.preparePaymentSheet(amount: price)
             }
             .confirmationDialog("Open Location", isPresented: $showLocationActionSheet, titleVisibility: .visible) {
                 if let event = viewModel.event {
@@ -545,6 +130,456 @@ struct EventDetailView: View {
                 )
             }
         }
+
+    private var backgroundView: some View {
+        // Dark gradient background
+        LinearGradient(
+            colors: [Color.sioreeBlack, Color.sioreeBlack.opacity(0.95), Color.sioreeCharcoal.opacity(0.1)],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
+    }
+
+    @ViewBuilder
+    private var contentView: some View {
+        if let event = viewModel.event {
+            eventScrollView(event)
+        } else if viewModel.isLoading {
+            LoadingView()
+        } else {
+            errorView
+        }
+    }
+
+    private func eventScrollView(_ event: Event) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                // Hero Image - Cover photo ONLY, no fallback
+                ZStack {
+                    CoverPhotoView(imageURL: event.images.first, height: 300)
+
+                    // Brand promotion badge overlay (if featured)
+                    if event.isFeatured {
+                        VStack {
+                            HStack {
+                                Spacer()
+                                HStack(spacing: Theme.Spacing.xs) {
+                                    Image(systemName: "star.fill")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.sioreeWarmGlow)
+                                    Text("FEATURED")
+                                        .font(.sioreeCaption)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.sioreeWhite)
+                                }
+                                .padding(.horizontal, Theme.Spacing.s)
+                                .padding(.vertical, 4)
+                                .background(Color.sioreeIcyBlue.opacity(0.9))
+                                .cornerRadius(Theme.CornerRadius.small)
+                                .padding(Theme.Spacing.m)
+                            }
+                            Spacer()
+                        }
+                    }
+                }
+
+                // Content
+                VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                    HStack(alignment: .center) {
+                        Text(event.title)
+                            .font(.sioreeH1)
+                            .foregroundColor(.sioreeWhite)
+
+                        Spacer()
+
+                        // Edit button for host on upcoming events only
+                        if isHost, let event = viewModel.event, event.date >= Date() {
+                            Button(action: {
+                                showEditEvent = true
+                            }) {
+                                Text("✏️")
+                                    .font(.system(size: 24))
+                            }
+                            .padding(.leading, Theme.Spacing.s)
+                        }
+                    }
+
+                    if !isTalentMapMode, let need = event.lookingForSummary ?? event.lookingForTalentType, !need.isEmpty, need.lowercased() != "general talent" {
+                        HStack(spacing: Theme.Spacing.s) {
+                            Image(systemName: "person.3.sequence.fill")
+                                .foregroundColor(.sioreeIcyBlue)
+                            Text("Looking for \(need)")
+                                .font(.sioreeBody)
+                                .foregroundColor(.sioreeWhite)
+                            Spacer()
+                        }
+                        .padding(Theme.Spacing.m)
+                        .background(Color.sioreeIcyBlue.opacity(0.15))
+                        .cornerRadius(Theme.CornerRadius.medium)
+                    }
+
+                    // Only show host profile and message host button if user is not the host
+                    if !isHost {
+                        NavigationLink(destination: UserProfileView(userId: event.hostId)) {
+                            HStack(spacing: Theme.Spacing.s) {
+                                AvatarView(imageURL: event.hostAvatar, size: .small)
+                                Text(event.hostName)
+                                    .font(.sioreeBody)
+                                    .foregroundColor(.sioreeWhite)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(Color.sioreeIcyBlue)
+                            }
+                        }
+                        .buttonStyle(PlainButtonStyle())
+
+                        Divider()
+
+                        // Message Host Button
+                        NavigationLink(destination: UserProfileView(userId: event.hostId)) {
+                            HStack {
+                                Image(systemName: "message.fill")
+                                    .foregroundColor(.sioreeIcyBlue)
+                                Text("Message Host")
+                                    .font(.sioreeBody)
+                                    .foregroundColor(.sioreeIcyBlue)
+                                Spacer()
+                            }
+                            .padding(Theme.Spacing.m)
+                            .background(Color.sioreeIcyBlue.opacity(0.1))
+                            .cornerRadius(Theme.CornerRadius.medium)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+
+                        Divider()
+                    }
+
+                    // Brand promotion info (if featured)
+                    if !isTalentMapMode, event.isFeatured {
+                        Divider()
+
+                        HStack(spacing: Theme.Spacing.s) {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 14))
+                                .foregroundColor(.sioreeWarmGlow)
+                            Text("Promoted by Brand")
+                                .font(.sioreeCaption)
+                                .foregroundColor(.sioreeWhite.opacity(0.7))
+                            Spacer()
+                        }
+                        .padding(Theme.Spacing.s)
+                        .background(Color.sioreeIcyBlue.opacity(0.1))
+                        .cornerRadius(Theme.CornerRadius.small)
+                    }
+
+                    Divider()
+
+                    // Event Details Section
+                    VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                        Text("Event Details")
+                            .font(.sioreeH3)
+                            .foregroundColor(.sioreeWhite)
+
+                        // Place - Tappable to open in Maps
+                        Button(action: {
+                            showLocationActionSheet = true
+                        }) {
+                            HStack(spacing: Theme.Spacing.m) {
+                                Image(systemName: "location.fill")
+                                    .foregroundColor(.sioreeIcyBlue)
+                                    .frame(width: 24)
+                                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                                    Text("Location")
+                                        .font(.sioreeCaption)
+                                        .foregroundColor(.sioreeWhite.opacity(0.7))
+                                    Text(event.location)
+                                        .font(.sioreeBody)
+                                        .foregroundColor(.sioreeWhite)
+                                    if let locationDetails = event.locationDetails, !locationDetails.isEmpty, !isTalentMapMode {
+                                        Text(locationDetails)
+                                            .font(.sioreeBodySmall)
+                                            .foregroundColor(.sioreeWhite.opacity(0.7))
+                                            .padding(.top, 2)
+                                    }
+                                }
+                                Spacer()
+                                Image(systemName: "arrow.up.right.square")
+                                    .foregroundColor(.sioreeIcyBlue)
+                                    .font(.system(size: 16))
+                            }
+                        }
+                        .buttonStyle(PlainButtonStyle())
+
+                        // Time
+                        HStack(spacing: Theme.Spacing.m) {
+                            Image(systemName: "clock.fill")
+                                .foregroundColor(.sioreeIcyBlue)
+                                .frame(width: 24)
+                            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                                Text("Date & Time")
+                                    .font(.sioreeCaption)
+                                    .foregroundColor(.sioreeWhite.opacity(0.7))
+                                Text("\(event.date.formattedEventDate()) at \(event.time.formattedEventTime())")
+                                    .font(.sioreeBody)
+                                    .foregroundColor(.sioreeWhite)
+                            }
+                        }
+
+                        if !isTalentMapMode {
+                            // Price + Buy Button
+                            HStack(spacing: Theme.Spacing.m) {
+                                Image(systemName: "dollarsign.circle.fill")
+                                    .foregroundColor(.sioreeIcyBlue)
+                                    .frame(width: 24)
+                                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                                    Text("Price")
+                                        .font(.sioreeCaption)
+                                        .foregroundColor(.sioreeWhite.opacity(0.7))
+                                    if let price = event.ticketPrice, price > 0 {
+                                        Text(Helpers.formatCurrency(price))
+                                            .font(.sioreeBody)
+                                            .foregroundColor(.sioreeWhite)
+                                    } else {
+                                        Text("Free")
+                                            .font(.sioreeBody)
+                                            .foregroundColor(.green)
+                                    }
+                                }
+                                Spacer()
+                            }
+                        }
+
+                        // Attendees
+                        if isTalentMapMode {
+                            HStack(spacing: Theme.Spacing.m) {
+                                Image(systemName: "person.3.fill")
+                                    .foregroundColor(.sioreeIcyBlue)
+                                    .frame(width: 24)
+                                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                                    Text("Attendees")
+                                        .font(.sioreeCaption)
+                                        .foregroundColor(.sioreeWhite.opacity(0.7))
+                                    Text("\(event.attendeeCount) People Going")
+                                        .font(.sioreeBody)
+                                        .foregroundColor(Color.sioreeIcyBlue)
+                                }
+                                Spacer()
+                            }
+                        } else {
+                            NavigationLink(destination: EventAttendeesView(eventId: event.id, eventName: event.title)) {
+                                HStack(spacing: Theme.Spacing.m) {
+                                    Image(systemName: "person.3.fill")
+                                        .foregroundColor(.sioreeIcyBlue)
+                                        .frame(width: 24)
+                                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                                        Text("Attendees")
+                                            .font(.sioreeCaption)
+                                            .foregroundColor(.sioreeWhite.opacity(0.7))
+                                        Text("\(event.attendeeCount) People Going")
+                                            .font(.sioreeBody)
+                                            .foregroundColor(Color.sioreeIcyBlue)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(Color.sioreeIcyBlue)
+                                }
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+
+                    // Talent for this Event (Host only)
+                    if isHost && !viewModel.eventBookings.isEmpty {
+                        Divider()
+
+                        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                            HStack {
+                                Text("Talent for this Event")
+                                    .font(.sioreeH3)
+                                    .foregroundColor(.sioreeWhite)
+
+                                Spacer()
+
+                                Text("\(viewModel.eventBookings.count) booking\(viewModel.eventBookings.count == 1 ? "" : "s")")
+                                    .font(.sioreeCaption)
+                                    .foregroundColor(.sioreeCharcoal.opacity(0.7))
+                            }
+
+                            ForEach(viewModel.eventBookings, id: \.id) { booking in
+                                EventTalentBookingRow(booking: booking) {
+                                    // Handle booking actions here
+                                }
+                            }
+                        }
+                    }
+
+                    if !isTalentMapMode {
+                        Divider()
+
+                        // Description
+                        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                            Text("About")
+                                .font(.sioreeH3)
+                                .foregroundColor(.sioreeWhite)
+                            Text(event.description.isEmpty ? "No description provided." : event.description)
+                                .font(.sioreeBody)
+                                .foregroundColor(.sioreeWhite.opacity(0.9))
+                                .lineSpacing(4)
+                        }
+
+                        if !isHost,
+                           let price = event.ticketPrice,
+                           price > 0,
+                           checkoutViewModel.paymentSheet == nil {
+                            if let errorMessage = checkoutViewModel.paymentSheetErrorMessage {
+                                Button(action: {
+                                    checkoutViewModel.preparePaymentSheet(amount: price)
+                                }) {
+                                    buyButtonLabel(
+                                        title: "Payment unavailable",
+                                        subtitle: errorMessage,
+                                        showsSpinner: false
+                                    )
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                            } else {
+                                buyButtonLabel(
+                                    title: "Preparing payment...",
+                                    subtitle: Helpers.formatCurrency(price),
+                                    showsSpinner: checkoutViewModel.isPreparingPaymentSheet
+                                )
+                            }
+                        }
+
+                        // Capacity info (if available)
+                        if let capacity = event.capacity, capacity > 0 {
+                            Divider()
+                            HStack(spacing: Theme.Spacing.m) {
+                                Image(systemName: "person.2.fill")
+                                    .foregroundColor(.sioreeIcyBlue)
+                                    .frame(width: 24)
+                                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                                    Text("Capacity")
+                                        .font(.sioreeCaption)
+                                        .foregroundColor(.sioreeWhite.opacity(0.7))
+                                    Text("\(event.attendeeCount) / \(capacity) spots")
+                                        .font(.sioreeBody)
+                                        .foregroundColor(.sioreeWhite)
+                                }
+                                Spacer()
+                            }
+                        }
+                    }
+                }
+                .padding(Theme.Spacing.l)
+            }
+        }
+        .safeAreaInset(edge: .bottom) {
+            if shouldShowBottomAction(for: event) {
+                // Sticky RSVP/Pay Button
+                VStack(spacing: 0) {
+                    Divider()
+                    Group {
+                        // Host controls - no special buttons for host since edit is in header
+                        if isHost {
+                            // Host sees nothing special in bottom bar
+                            EmptyView()
+                        } else if authViewModel.currentUser?.userType == .talent {
+                            CustomButton(
+                                title: isRequestingHelp ? "Sending..." : (isTalentMapMode ? "Request to Work" : "Request to Help"),
+                                variant: .primary,
+                                size: .large
+                            ) {
+                                requestToHelp(event: event)
+                            }
+                            .disabled(isRequestingHelp)
+                        } else if viewModel.isRSVPed || event.isRSVPed {
+                            CustomButton(
+                                title: "Cancel RSVP",
+                                variant: .secondary,
+                                size: .large
+                            ) {
+                                viewModel.cancelRSVP()
+                            }
+                        } else if let price = event.ticketPrice, price > 0 {
+                            buyButton(price: price)
+                        } else {
+                            CustomButton(
+                                title: "Attend",
+                                variant: .primary,
+                                size: .large
+                            ) {
+                                viewModel.rsvpToEvent()
+                            }
+                        }
+                    }
+                    .padding(.horizontal, Theme.Spacing.m)
+                    .padding(.top, Theme.Spacing.m)
+                    .padding(.bottom, Theme.Spacing.s)
+                    .background(Color.sioreeWhite)
+                }
+            }
+        }
+        .onReceive(checkoutViewModel.$paymentResult.compactMap { $0 }) { result in
+            if case .completed = result {
+                viewModel.rsvpToEvent()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("EventRSVPSuccess"))) { _ in
+            // Auto-dismiss after a short delay to show the confirmation
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                if viewModel.showRSVPSheet {
+                    viewModel.showRSVPSheet = false
+                    dismiss()
+                }
+            }
+        }
+    }
+
+    private var errorView: some View {
+        // Error or empty state
+        VStack(spacing: Theme.Spacing.l) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 60))
+                .foregroundColor(.sioreeIcyBlue.opacity(0.5))
+
+            if let errorMessage = viewModel.errorMessage {
+                Text("Failed to load event")
+                    .font(.sioreeH3)
+                    .foregroundColor(.sioreeWhite)
+                Text(errorMessage)
+                    .font(.sioreeBody)
+                    .foregroundColor(.sioreeWhite.opacity(0.7))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, Theme.Spacing.l)
+            } else {
+                Text("Event not found")
+                    .font(.sioreeH3)
+                    .foregroundColor(.sioreeWhite)
+                Text("This event may have been removed or doesn't exist.")
+                    .font(.sioreeBody)
+                    .foregroundColor(.sioreeWhite.opacity(0.7))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, Theme.Spacing.l)
+            }
+
+            Button(action: {
+                viewModel.loadEvent()
+            }) {
+                Text("Retry")
+                    .font(.sioreeBody)
+                    .foregroundColor(.sioreeWhite)
+                    .padding(.horizontal, Theme.Spacing.l)
+                    .padding(.vertical, Theme.Spacing.m)
+                    .background(Color.sioreeIcyBlue)
+                    .cornerRadius(Theme.CornerRadius.medium)
+            }
+        }
+        .padding(Theme.Spacing.xl)
+    }
 
     // MARK: - Helpers
     private func openLocationInMaps(location: String) {
@@ -613,6 +648,65 @@ struct EventDetailView: View {
                 requestAlertMessage = "The host will see your request in their messages."
             }
             .store(in: &cancellables)
+    }
+
+    @ViewBuilder
+    private func buyButton(price: Double) -> some View {
+        if let paymentSheet = checkoutViewModel.paymentSheet {
+            PaymentSheet.PaymentButton(
+                paymentSheet: paymentSheet,
+                onCompletion: checkoutViewModel.onPaymentCompletion
+            ) {
+                buyButtonLabel(
+                    title: "Buy Ticket",
+                    subtitle: Helpers.formatCurrency(price),
+                    showsSpinner: false
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+        }
+    }
+
+    private func buyButtonLabel(title: String, subtitle: String, showsSpinner: Bool) -> some View {
+        HStack(spacing: Theme.Spacing.m) {
+            if showsSpinner {
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .sioreeWhite))
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.sioreeBody)
+                    .foregroundColor(.sioreeWhite)
+                Text(subtitle)
+                    .font(.sioreeBodySmall)
+                    .foregroundColor(.sioreeWhite.opacity(0.8))
+            }
+            Spacer()
+            Image(systemName: "creditcard.fill")
+                .foregroundColor(.sioreeWhite)
+        }
+        .padding(Theme.Spacing.m)
+        .frame(maxWidth: .infinity, minHeight: 60)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                .fill(Color.sioreeIcyBlue)
+        )
+    }
+
+    private func shouldShowBottomAction(for event: Event) -> Bool {
+        if isHost {
+            return false
+        }
+        if authViewModel.currentUser?.userType == .talent {
+            return true
+        }
+        if viewModel.isRSVPed || event.isRSVPed {
+            return true
+        }
+        if let price = event.ticketPrice, price > 0 {
+            return checkoutViewModel.paymentSheet != nil
+        }
+        return true
     }
 }
 

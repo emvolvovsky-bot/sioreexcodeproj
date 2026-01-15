@@ -11,29 +11,65 @@ import StripePaymentSheet
 class CheckoutViewModel: ObservableObject {
     @Published var paymentSheet: PaymentSheet?
     @Published var paymentResult: PaymentSheetResult?
+    @Published var paymentSheetErrorMessage: String?
+    @Published var isPreparingPaymentSheet = false
 
-    let backendCheckoutUrl = URL(string: "https://sioree-api.onrender.com/payment-sheet
-")!
+    private var backendCheckoutUrl: URL {
+        let urlString = "\(Constants.API.baseURL)/api/stripe/payment-sheet"
+        return URL(string: urlString)!
+    }
 
     private struct CheckoutResponse: Decodable {
         let paymentIntent: String
         let customer: String
-        let customerSessionClientSecret: String
+        let ephemeralKey: String
         let publishableKey: String
     }
 
-    func preparePaymentSheet() {
+    func preparePaymentSheet(amount: Double) {
+        DispatchQueue.main.async {
+            self.paymentSheetErrorMessage = nil
+            self.isPreparingPaymentSheet = true
+        }
+
         var request = URLRequest(url: backendCheckoutUrl)
         request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
+        let payload = ["amount": amount, "currency": "usd"] as [String: Any]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             if let error = error {
-                print("PaymentSheet request failed: \(error.localizedDescription)")
+                DispatchQueue.main.async {
+                    self?.paymentSheetErrorMessage = "Payment setup failed. \(error.localizedDescription)"
+                    self?.isPreparingPaymentSheet = false
+                }
+                return
+            }
+
+            guard let httpResponse = response as? HTTPURLResponse else {
+                DispatchQueue.main.async {
+                    self?.paymentSheetErrorMessage = "Payment setup failed. Invalid server response."
+                    self?.isPreparingPaymentSheet = false
+                }
                 return
             }
 
             guard let data = data else {
-                print("PaymentSheet request returned empty response")
+                DispatchQueue.main.async {
+                    self?.paymentSheetErrorMessage = "Payment setup failed. Empty response."
+                    self?.isPreparingPaymentSheet = false
+                }
+                return
+            }
+
+            guard (200...299).contains(httpResponse.statusCode) else {
+                let serverMessage = String(data: data, encoding: .utf8) ?? "Server error."
+                DispatchQueue.main.async {
+                    self?.paymentSheetErrorMessage = "Payment setup failed. \(serverMessage)"
+                    self?.isPreparingPaymentSheet = false
+                }
                 return
             }
 
@@ -45,7 +81,7 @@ class CheckoutViewModel: ObservableObject {
                 configuration.merchantDisplayName = "Soirée"
                 configuration.customer = .init(
                     id: response.customer,
-                    customerSessionClientSecret: response.customerSessionClientSecret
+                    ephemeralKeySecret: response.ephemeralKey
                 )
                 configuration.allowsDelayedPaymentMethods = true
                 configuration.returnURL = "your-app://stripe-redirect"
@@ -55,9 +91,13 @@ class CheckoutViewModel: ObservableObject {
                         paymentIntentClientSecret: response.paymentIntent,
                         configuration: configuration
                     )
+                    self?.isPreparingPaymentSheet = false
                 }
             } catch {
-                print("Failed to decode PaymentSheet response: \(error.localizedDescription)")
+                DispatchQueue.main.async {
+                    self?.paymentSheetErrorMessage = "Payment setup failed. \(error.localizedDescription)"
+                    self?.isPreparingPaymentSheet = false
+                }
             }
         }.resume()
     }

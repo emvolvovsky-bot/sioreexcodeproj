@@ -10,6 +10,7 @@ import StripePaymentSheet
 
 struct CheckoutView: View {
     @StateObject private var model = CheckoutViewModel()
+    private let sampleAmount = 10.00
 
     var body: some View {
         VStack(spacing: 16) {
@@ -27,7 +28,7 @@ struct CheckoutView: View {
             }
         }
         .onAppear {
-            model.preparePaymentSheet()
+            model.preparePaymentSheet(amount: sampleAmount)
         }
     }
 

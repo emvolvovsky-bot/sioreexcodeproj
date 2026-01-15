@@ -430,16 +430,25 @@ struct EventDetailView: View {
                                 .lineSpacing(4)
                         }
 
-                        if !isHost,
-                           let price = event.ticketPrice,
-                           price > 0,
-                           checkoutViewModel.paymentSheet == nil {
-                            if let errorMessage = checkoutViewModel.paymentSheetErrorMessage {
+                        if !isHost, let price = event.ticketPrice, price > 0 {
+                            if let paymentSheet = checkoutViewModel.paymentSheet {
+                                PaymentSheet.PaymentButton(
+                                    paymentSheet: paymentSheet,
+                                    onCompletion: checkoutViewModel.onPaymentCompletion
+                                ) {
+                                    buyButtonLabel(
+                                        title: "Buy Ticket",
+                                        subtitle: Helpers.formatCurrency(price),
+                                        showsSpinner: false
+                                    )
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                            } else if let errorMessage = checkoutViewModel.paymentSheetErrorMessage {
                                 Button(action: {
                                     checkoutViewModel.preparePaymentSheet(amount: price)
                                 }) {
                                     buyButtonLabel(
-                                        title: "Payment unavailable",
+                                        title: "Tap to retry payment",
                                         subtitle: errorMessage,
                                         showsSpinner: false
                                     )

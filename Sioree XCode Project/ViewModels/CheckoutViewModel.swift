@@ -26,10 +26,13 @@ class CheckoutViewModel: ObservableObject {
         let publishableKey: String
     }
 
-    func preparePaymentSheet(amount: Double) {
-        DispatchQueue.main.async {
-            self.paymentSheetErrorMessage = nil
-            self.isPreparingPaymentSheet = true
+    func preparePaymentSheet(amount: Double, retryCount: Int = 0) {
+        let maxRetries = 2
+        if retryCount == 0 {
+            DispatchQueue.main.async {
+                self.paymentSheetErrorMessage = nil
+                self.isPreparingPaymentSheet = true
+            }
         }
 
         var request = URLRequest(url: backendCheckoutUrl)
@@ -40,36 +43,39 @@ class CheckoutViewModel: ObservableObject {
         request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
 
         URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
-            if let error = error {
-                DispatchQueue.main.async {
-                    self?.paymentSheetErrorMessage = "Payment setup failed. \(error.localizedDescription)"
-                    self?.isPreparingPaymentSheet = false
+            let handleFailure: (String) -> Void = { message in
+                guard let self = self else { return }
+                if retryCount < maxRetries {
+                    let delay = Double(retryCount + 1)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                        self.preparePaymentSheet(amount: amount, retryCount: retryCount + 1)
+                    }
+                } else {
+                    DispatchQueue.main.async {
+                        self.paymentSheetErrorMessage = message
+                        self.isPreparingPaymentSheet = false
+                    }
                 }
+            }
+
+            if let error = error {
+                handleFailure("Payment setup failed. \(error.localizedDescription)")
                 return
             }
 
             guard let httpResponse = response as? HTTPURLResponse else {
-                DispatchQueue.main.async {
-                    self?.paymentSheetErrorMessage = "Payment setup failed. Invalid server response."
-                    self?.isPreparingPaymentSheet = false
-                }
+                handleFailure("Payment setup failed. Invalid server response.")
                 return
             }
 
             guard let data = data else {
-                DispatchQueue.main.async {
-                    self?.paymentSheetErrorMessage = "Payment setup failed. Empty response."
-                    self?.isPreparingPaymentSheet = false
-                }
+                handleFailure("Payment setup failed. Empty response.")
                 return
             }
 
             guard (200...299).contains(httpResponse.statusCode) else {
                 let serverMessage = String(data: data, encoding: .utf8) ?? "Server error."
-                DispatchQueue.main.async {
-                    self?.paymentSheetErrorMessage = "Payment setup failed. \(serverMessage)"
-                    self?.isPreparingPaymentSheet = false
-                }
+                handleFailure("Payment setup failed. \(serverMessage)")
                 return
             }
 
@@ -91,13 +97,11 @@ class CheckoutViewModel: ObservableObject {
                         paymentIntentClientSecret: response.paymentIntent,
                         configuration: configuration
                     )
+                    self?.paymentSheetErrorMessage = nil
                     self?.isPreparingPaymentSheet = false
                 }
             } catch {
-                DispatchQueue.main.async {
-                    self?.paymentSheetErrorMessage = "Payment setup failed. \(error.localizedDescription)"
-                    self?.isPreparingPaymentSheet = false
-                }
+                handleFailure("Payment setup failed. \(error.localizedDescription)")
             }
         }.resume()
     }

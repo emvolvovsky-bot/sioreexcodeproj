@@ -18,6 +18,7 @@ import reviewRoutes from "./routes/reviews.js";
 import followRoutes from "./routes/follow.js";
 import mediaRoutes from "./routes/media.js";
 import earningsRoutes from "./routes/earnings.js";
+import stripeRoutes from "./routes/stripe.js";
 
 dotenv.config();
 
@@ -50,6 +51,7 @@ app.use("/api/reviews", reviewRoutes);
 app.use("/api", followRoutes);
 app.use("/api/media", mediaRoutes);
 app.use("/api/earnings", earningsRoutes);
+app.use("/api/stripe", stripeRoutes);
 
 app.get("/health", (req, res) => {
   res.json({ status: "Backend running", database: "Supabase Postgres" });

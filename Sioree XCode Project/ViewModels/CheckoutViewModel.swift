@@ -15,14 +15,61 @@ class CheckoutViewModel: ObservableObject {
     @Published var isPreparingPaymentSheet = false
 
     private var backendCheckoutUrl: URL {
-        let urlString = "\(Constants.API.baseURL)/api/stripe/payment-sheet"
-        return URL(string: urlString)!
+        makeCheckoutURL(baseURL: Constants.API.baseURL, path: "api/stripe/payment-sheet")
+    }
+
+    private var fallbackCheckoutUrl: URL {
+        makeCheckoutURL(baseURL: Constants.API.baseURL, path: "stripe/payment-sheet")
+    }
+
+    private var onrenderFallbackCheckoutUrls: [URL] {
+        let baseCandidates = inferredBaseURLCandidates(from: Constants.API.baseURL)
+        return baseCandidates.flatMap { baseURL in
+            [
+                makeCheckoutURL(baseURL: baseURL, path: "api/stripe/payment-sheet"),
+                makeCheckoutURL(baseURL: baseURL, path: "stripe/payment-sheet")
+            ]
+        }
+    }
+
+    private var hardcodedFallbackCheckoutUrls: [URL] {
+        [
+            makeCheckoutURL(baseURL: "https://sioree-api.onrender.com", path: "api/stripe/payment-sheet"),
+            makeCheckoutURL(baseURL: "https://sioree-api.onrender.com", path: "stripe/payment-sheet")
+        ]
+    }
+
+    private func makeCheckoutURL(baseURL: String, path: String) -> URL {
+        var base = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        if base.hasSuffix("/") {
+            base.removeLast()
+        }
+        if base.hasSuffix("/api") {
+            base = String(base.dropLast(4))
+        }
+        return URL(string: base)!.appendingPathComponent(path)
+    }
+
+    private func inferredBaseURLCandidates(from baseURL: String) -> [String] {
+        guard let url = URL(string: baseURL),
+              let host = url.host,
+              host.hasSuffix(".onrender.com"),
+              !host.contains("-api") else {
+            return []
+        }
+
+        let apiHost = host.replacingOccurrences(of: ".onrender.com", with: "-api.onrender.com")
+        var components = URLComponents()
+        components.scheme = url.scheme
+        components.host = apiHost
+        return [components.string].compactMap { $0 }
     }
 
     private struct CheckoutResponse: Decodable {
         let paymentIntent: String
         let customer: String
-        let ephemeralKey: String
+        let customerSessionClientSecret: String?
+        let ephemeralKey: String?
         let publishableKey: String
     }
 
@@ -34,8 +81,33 @@ class CheckoutViewModel: ObservableObject {
                 self.isPreparingPaymentSheet = true
             }
         }
+        var urlsToTry = [backendCheckoutUrl, fallbackCheckoutUrl]
+        urlsToTry.append(contentsOf: onrenderFallbackCheckoutUrls)
+        urlsToTry.append(contentsOf: hardcodedFallbackCheckoutUrls)
+        urlsToTry = dedupe(urlsToTry)
+        requestPaymentSheet(amount: amount, urlsToTry: urlsToTry, retryCount: retryCount, maxRetries: maxRetries)
+    }
 
-        var request = URLRequest(url: backendCheckoutUrl)
+    private func dedupe(_ urls: [URL]) -> [URL] {
+        var seen = Set<URL>()
+        return urls.filter { seen.insert($0).inserted }
+    }
+
+    private func requestPaymentSheet(
+        amount: Double,
+        urlsToTry: [URL],
+        retryCount: Int,
+        maxRetries: Int
+    ) {
+        guard let checkoutURL = urlsToTry.first else {
+            DispatchQueue.main.async {
+                self.paymentSheetErrorMessage = "Payment setup failed. Checkout URL is missing."
+                self.isPreparingPaymentSheet = false
+            }
+            return
+        }
+
+        var request = URLRequest(url: checkoutURL)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
@@ -75,6 +147,15 @@ class CheckoutViewModel: ObservableObject {
 
             guard (200...299).contains(httpResponse.statusCode) else {
                 let serverMessage = String(data: data, encoding: .utf8) ?? "Server error."
+                if httpResponse.statusCode == 404, urlsToTry.count > 1 {
+                    self?.requestPaymentSheet(
+                        amount: amount,
+                        urlsToTry: Array(urlsToTry.dropFirst()),
+                        retryCount: retryCount,
+                        maxRetries: maxRetries
+                    )
+                    return
+                }
                 handleFailure("Payment setup failed. \(serverMessage)")
                 return
             }
@@ -85,12 +166,22 @@ class CheckoutViewModel: ObservableObject {
 
                 var configuration = PaymentSheet.Configuration()
                 configuration.merchantDisplayName = "Soirée"
-                configuration.customer = .init(
-                    id: response.customer,
-                    ephemeralKeySecret: response.ephemeralKey
-                )
+                if let customerSessionClientSecret = response.customerSessionClientSecret {
+                    configuration.customer = .init(
+                        id: response.customer,
+                        customerSessionClientSecret: customerSessionClientSecret
+                    )
+                } else if let ephemeralKey = response.ephemeralKey {
+                    configuration.customer = .init(
+                        id: response.customer,
+                        ephemeralKeySecret: ephemeralKey
+                    )
+                } else {
+                    handleFailure("Payment setup failed. Missing customer session.")
+                    return
+                }
                 configuration.allowsDelayedPaymentMethods = true
-                configuration.returnURL = "your-app://stripe-redirect"
+                configuration.returnURL = "sioree://stripe-redirect"
 
                 DispatchQueue.main.async {
                     self?.paymentSheet = PaymentSheet(

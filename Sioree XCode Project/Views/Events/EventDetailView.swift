@@ -26,6 +26,7 @@ struct EventDetailView: View {
     @State private var cancellables = Set<AnyCancellable>()
     @State private var showEditEvent = false
     @State private var didPreparePaymentSheet = false
+    @State private var paymentAlertMessage: String?
     
     init(eventId: String, isTalentMapMode: Bool = false) {
         self.eventId = eventId
@@ -126,6 +127,16 @@ struct EventDetailView: View {
                 Alert(
                     title: Text(requestSuccess ? "Request Sent" : "Request Failed"),
                     message: Text(requestAlertMessage ?? ""),
+                    dismissButton: .default(Text("OK"))
+                )
+            }
+            .alert(isPresented: Binding(
+                get: { paymentAlertMessage != nil },
+                set: { _ in paymentAlertMessage = nil }
+            )) {
+                Alert(
+                    title: Text("Payment Failed"),
+                    message: Text(paymentAlertMessage ?? ""),
                     dismissButton: .default(Text("OK"))
                 )
             }
@@ -349,6 +360,10 @@ struct EventDetailView: View {
                                 }
                                 Spacer()
                             }
+
+                            if let price = event.ticketPrice, price > 0, !isHost {
+                                paymentSection(price: price)
+                            }
                         }
 
                         // Attendees
@@ -430,39 +445,6 @@ struct EventDetailView: View {
                                 .lineSpacing(4)
                         }
 
-                        if !isHost, let price = event.ticketPrice, price > 0 {
-                            if let paymentSheet = checkoutViewModel.paymentSheet {
-                                PaymentSheet.PaymentButton(
-                                    paymentSheet: paymentSheet,
-                                    onCompletion: checkoutViewModel.onPaymentCompletion
-                                ) {
-                                    buyButtonLabel(
-                                        title: "Buy Ticket",
-                                        subtitle: Helpers.formatCurrency(price),
-                                        showsSpinner: false
-                                    )
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                            } else if let errorMessage = checkoutViewModel.paymentSheetErrorMessage {
-                                Button(action: {
-                                    checkoutViewModel.preparePaymentSheet(amount: price)
-                                }) {
-                                    buyButtonLabel(
-                                        title: "Tap to retry payment",
-                                        subtitle: errorMessage,
-                                        showsSpinner: false
-                                    )
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                            } else {
-                                buyButtonLabel(
-                                    title: "Preparing payment...",
-                                    subtitle: Helpers.formatCurrency(price),
-                                    showsSpinner: checkoutViewModel.isPreparingPaymentSheet
-                                )
-                            }
-                        }
-
                         // Capacity info (if available)
                         if let capacity = event.capacity, capacity > 0 {
                             Divider()
@@ -486,6 +468,8 @@ struct EventDetailView: View {
                 .padding(Theme.Spacing.l)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .contentShape(Rectangle())
         .safeAreaInset(edge: .bottom) {
             if shouldShowBottomAction(for: event) {
                 // Sticky RSVP/Pay Button
@@ -533,8 +517,13 @@ struct EventDetailView: View {
             }
         }
         .onReceive(checkoutViewModel.$paymentResult.compactMap { $0 }) { result in
-            if case .completed = result {
+            switch result {
+            case .completed:
                 viewModel.rsvpToEvent()
+            case .failed(let error):
+                paymentAlertMessage = "Payment failed. \(error.localizedDescription)"
+            case .canceled:
+                break
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("EventRSVPSuccess"))) { _ in
@@ -661,11 +650,20 @@ struct EventDetailView: View {
 
     @ViewBuilder
     private func buyButton(price: Double) -> some View {
+        paymentActionButton(price: price, showErrorDetail: false)
+    }
+
+    @ViewBuilder
+    private func paymentSection(price: Double) -> some View {
+        paymentActionButton(price: price, showErrorDetail: true)
+    }
+
+    @ViewBuilder
+    private func paymentActionButton(price: Double, showErrorDetail: Bool) -> some View {
         if let paymentSheet = checkoutViewModel.paymentSheet {
-            PaymentSheet.PaymentButton(
-                paymentSheet: paymentSheet,
-                onCompletion: checkoutViewModel.onPaymentCompletion
-            ) {
+            Button(action: {
+                presentPaymentSheet(paymentSheet)
+            }) {
                 buyButtonLabel(
                     title: "Buy Ticket",
                     subtitle: Helpers.formatCurrency(price),
@@ -673,7 +671,50 @@ struct EventDetailView: View {
                 )
             }
             .buttonStyle(PlainButtonStyle())
+        } else if let errorMessage = checkoutViewModel.paymentSheetErrorMessage {
+            Button(action: {
+                checkoutViewModel.preparePaymentSheet(amount: price)
+            }) {
+                buyButtonLabel(
+                    title: "Tap to retry payment",
+                    subtitle: showErrorDetail ? errorMessage : Helpers.formatCurrency(price),
+                    showsSpinner: false
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+        } else {
+            buyButtonLabel(
+                title: "Preparing payment...",
+                subtitle: Helpers.formatCurrency(price),
+                showsSpinner: checkoutViewModel.isPreparingPaymentSheet
+            )
         }
+    }
+
+    private func presentPaymentSheet(_ paymentSheet: PaymentSheet) {
+        guard let viewController = topViewController() else {
+            paymentAlertMessage = "Unable to present payment sheet. Please try again."
+            return
+        }
+
+        paymentSheet.present(from: viewController) { result in
+            checkoutViewModel.onPaymentCompletion(result: result)
+        }
+    }
+
+    private func topViewController() -> UIViewController? {
+        guard let scene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first(where: { $0.activationState == .foregroundActive }),
+              let root = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController else {
+            return nil
+        }
+
+        var top = root
+        while let presented = top.presentedViewController {
+            top = presented
+        }
+        return top
     }
 
     private func buyButtonLabel(title: String, subtitle: String, showsSpinner: Bool) -> some View {

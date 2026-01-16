@@ -660,6 +660,16 @@ struct EventDetailView: View {
 
     @ViewBuilder
     private func paymentActionButton(price: Double, showErrorDetail: Bool) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            paymentActionContent(price: price, showErrorDetail: showErrorDetail)
+            if showErrorDetail {
+                paymentDebugInfoView
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func paymentActionContent(price: Double, showErrorDetail: Bool) -> some View {
         if let paymentSheet = checkoutViewModel.paymentSheet {
             Button(action: {
                 presentPaymentSheet(paymentSheet)
@@ -741,6 +751,30 @@ struct EventDetailView: View {
             RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
                 .fill(Color.sioreeIcyBlue)
         )
+    }
+
+    private var paymentDebugInfoView: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Payment Debug")
+                .font(.sioreeCaption)
+                .foregroundColor(.sioreeWhite.opacity(0.8))
+            Text("Backend status: \(checkoutViewModel.lastBackendStatus ?? "n/a")")
+            Text("Backend body: \(truncatedDebugBody(checkoutViewModel.lastBackendBody ?? "n/a"))")
+            Text("Stripe error: \(checkoutViewModel.lastStripeError ?? "n/a")")
+        }
+        .font(.sioreeCaption)
+        .foregroundColor(.sioreeWhite.opacity(0.8))
+        .padding(Theme.Spacing.s)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                .fill(Color.sioreeCharcoal.opacity(0.2))
+        )
+    }
+
+    private func truncatedDebugBody(_ body: String, limit: Int = 500) -> String {
+        guard body.count > limit else { return body }
+        return String(body.prefix(limit)) + "..."
     }
 
     private func shouldShowBottomAction(for event: Event) -> Bool {

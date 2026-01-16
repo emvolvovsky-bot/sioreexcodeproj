@@ -14,6 +14,9 @@ class CheckoutViewModel: ObservableObject {
     @Published var paymentResult: PaymentSheetResult?
     @Published var paymentSheetErrorMessage: String?
     @Published var isPreparingPaymentSheet = false
+    @Published var lastBackendStatus: String?
+    @Published var lastBackendBody: String?
+    @Published var lastStripeError: String?
 
     private var backendCheckoutUrl: URL {
         makeCheckoutURL(baseURL: Constants.API.baseURL, path: "api/stripe/payment-sheet")
@@ -86,7 +89,87 @@ class CheckoutViewModel: ObservableObject {
     }
 
     private func logPaymentSheetDebug(_ message: String) {
+        #if DEBUG
         print("[CheckoutViewModel] \(message)")
+        #endif
+    }
+
+    private func redactedValue(_ value: String, prefixLength: Int = 6, suffixLength: Int = 6) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > prefixLength + suffixLength else {
+            return trimmed
+        }
+        let prefix = trimmed.prefix(prefixLength)
+        let suffix = trimmed.suffix(suffixLength)
+        return "\(prefix)...\(suffix)"
+    }
+
+    private func redactedJSONPayload(from data: Data) -> String? {
+        guard let jsonObject = try? JSONSerialization.jsonObject(with: data) else {
+            return nil
+        }
+        let redactedObject = redactSensitiveFields(in: jsonObject)
+        guard let prettyData = try? JSONSerialization.data(withJSONObject: redactedObject, options: [.prettyPrinted]) else {
+            return nil
+        }
+        return String(data: prettyData, encoding: .utf8)
+    }
+
+    private func redactSensitiveFields(in jsonObject: Any) -> Any {
+        if var dict = jsonObject as? [String: Any] {
+            if let paymentIntent = dict["paymentIntent"] as? String {
+                dict["paymentIntent"] = redactedValue(paymentIntent)
+            }
+            if let publishableKey = dict["publishableKey"] as? String {
+                dict["publishableKey"] = redactedValue(publishableKey)
+            }
+            return dict
+        }
+        if let array = jsonObject as? [Any] {
+            return array.map { redactSensitiveFields(in: $0) }
+        }
+        return jsonObject
+    }
+
+    private func redactedResponseBody(from data: Data) -> String {
+        if let redactedJSON = redactedJSONPayload(from: data) {
+            return redactedJSON
+        }
+        return String(data: data, encoding: .utf8) ?? "<non-utf8 body length=\(data.count)>"
+    }
+
+    private func publishableKeyMode(_ key: String) -> String {
+        if key.hasPrefix("pk_test_") {
+            return "test"
+        }
+        if key.hasPrefix("pk_live_") {
+            return "live"
+        }
+        return "unknown"
+    }
+
+    private func validateCheckoutResponse(_ response: CheckoutResponse) -> String? {
+        if response.paymentIntent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Missing paymentIntent."
+        }
+        if !response.paymentIntent.contains("_secret_") {
+            return "paymentIntent is not a client secret."
+        }
+        if response.customer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Missing customer."
+        }
+        guard let ephemeralKey = response.ephemeralKey,
+              !ephemeralKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return "Missing ephemeralKey."
+        }
+        if response.publishableKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Missing publishableKey."
+        }
+        let publishableKeyPrefixValid = response.publishableKey.hasPrefix("pk_test_") || response.publishableKey.hasPrefix("pk_live_")
+        if !publishableKeyPrefixValid {
+            return "publishableKey is not a Stripe publishable key."
+        }
+        return nil
     }
 
     func preparePaymentSheet(amount: Double, retryCount: Int = 0) {
@@ -95,6 +178,9 @@ class CheckoutViewModel: ObservableObject {
             DispatchQueue.main.async {
                 self.paymentSheetErrorMessage = nil
                 self.isPreparingPaymentSheet = true
+                self.lastBackendStatus = nil
+                self.lastBackendBody = nil
+                self.lastStripeError = nil
             }
         }
         var urlsToTry = [backendCheckoutUrl, fallbackCheckoutUrl]
@@ -169,9 +255,17 @@ class CheckoutViewModel: ObservableObject {
                 return
             }
 
-            let rawResponseBody = String(data: data, encoding: .utf8) ?? "<non-utf8 body length=\(data.count)>"
+            let rawResponseBody = self?.redactedResponseBody(from: data) ?? "<unavailable>"
+            let statusText = "HTTP \(httpResponse.statusCode)"
+            DispatchQueue.main.async {
+                self?.lastBackendStatus = statusText
+                self?.lastBackendBody = rawResponseBody
+            }
             self?.logPaymentSheetDebug("Response status: \(httpResponse.statusCode)")
             self?.logPaymentSheetDebug("Raw response body: \(rawResponseBody)")
+            if let prettyJSON = self?.redactedJSONPayload(from: data) {
+                self?.logPaymentSheetDebug("Decoded JSON body:\n\(prettyJSON)")
+            }
 
             guard (200...299).contains(httpResponse.statusCode) else {
                 let serverMessage = String(data: data, encoding: .utf8) ?? "Server error."
@@ -190,13 +284,33 @@ class CheckoutViewModel: ObservableObject {
                     )
                     return
                 }
-                handleFailure("Payment setup failed. \(serverMessage)")
+                let snippet = String(serverMessage.prefix(500))
+                handleFailure("Payment setup failed (HTTP \(httpResponse.statusCode)). Response: \(snippet)")
                 return
             }
 
             do {
                 let response = try JSONDecoder().decode(CheckoutResponse.self, from: data)
-                self?.logPaymentSheetDebug("Decoded response values: paymentIntent=\(response.paymentIntent), customer=\(response.customer), customerSessionClientSecret=\(response.customerSessionClientSecret ?? "nil"), ephemeralKey=\(response.ephemeralKey ?? "nil"), publishableKey=\(response.publishableKey)")
+                let redactedPaymentIntent = self?.redactedValue(response.paymentIntent) ?? "<unavailable>"
+                let redactedPublishableKey = self?.redactedValue(response.publishableKey) ?? "<unavailable>"
+                self?.logPaymentSheetDebug("Decoded response values: paymentIntent=\(redactedPaymentIntent), customer=\(response.customer), customerSessionClientSecret=\(response.customerSessionClientSecret ?? "nil"), ephemeralKey=\(response.ephemeralKey ?? "nil"), publishableKey=\(redactedPublishableKey)")
+                if let validationError = self?.validateCheckoutResponse(response) {
+                    self?.logPaymentSheetDebug("Payment sheet payload validation failed: \(validationError)")
+                    self?.logPaymentSheetDebug("Full payload (redacted): \(rawResponseBody)")
+                    handleFailure("Payment setup failed. \(validationError)")
+                    return
+                }
+
+                let mode = self?.publishableKeyMode(response.publishableKey) ?? "unknown"
+                self?.logPaymentSheetDebug("Stripe mode from publishable key: \(mode)")
+                if Constants.API.environment == .production, mode == "test" {
+                    self?.logPaymentSheetDebug("Warning: Production environment using test publishable key.")
+                } else if Constants.API.environment == .development, mode == "live" {
+                    self?.logPaymentSheetDebug("Warning: Development environment using live publishable key.")
+                } else if mode == "unknown" {
+                    self?.logPaymentSheetDebug("Warning: Publishable key prefix is not recognized.")
+                }
+
                 StripeAPI.defaultPublishableKey = response.publishableKey
                 STPAPIClient.shared.publishableKey = response.publishableKey
 
@@ -232,5 +346,24 @@ class CheckoutViewModel: ObservableObject {
 
     func onPaymentCompletion(result: PaymentSheetResult) {
         paymentResult = result
+        switch result {
+        case .completed:
+            logPaymentSheetDebug("PaymentSheet result: completed")
+            DispatchQueue.main.async {
+                self.lastStripeError = nil
+            }
+        case .canceled:
+            logPaymentSheetDebug("PaymentSheet result: canceled")
+            DispatchQueue.main.async {
+                self.lastStripeError = "Payment canceled."
+            }
+        case .failed(let error):
+            logPaymentSheetDebug("PaymentSheet result: failed")
+            logPaymentSheetDebug("Stripe error localizedDescription: \(error.localizedDescription)")
+            logPaymentSheetDebug("Stripe error full: \(String(describing: error))")
+            DispatchQueue.main.async {
+                self.lastStripeError = "Payment failed: \(error.localizedDescription)"
+            }
+        }
     }
 }

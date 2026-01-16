@@ -61,6 +61,16 @@ If you want migrations to run automatically when the server starts, you can modi
 
 ---
 
+## Stripe PaymentSheet curl test (optional)
+
+Quick smoke test for the payment-sheet endpoint:
+
+```bash
+curl -i https://<YOUR-RENDER-DOMAIN>/payment-sheet
+```
+
+---
+
 ## Verify Migration Success
 
 After running the migration, verify it worked by connecting to your database and running:

@@ -205,13 +205,9 @@ class CheckoutViewModel: ObservableObject {
                         id: response.customer,
                         ephemeralKeySecret: ephemeralKey
                     )
-                } else if let customerSessionClientSecret = response.customerSessionClientSecret {
-                    configuration.customer = .init(
-                        id: response.customer,
-                        customerSessionClientSecret: customerSessionClientSecret
-                    )
                 } else {
-                    handleFailure("Payment setup failed. Missing customer session.")
+                    self?.logPaymentSheetDebug("Missing ephemeralKey in checkout response.")
+                    handleFailure("Payment setup failed. Missing ephemeral key.")
                     return
                 }
                 configuration.allowsDelayedPaymentMethods = true

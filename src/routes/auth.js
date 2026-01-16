@@ -2,7 +2,8 @@ import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { db } from "../db/database.js";
-import { sendWelcomeEmail, sendLoginEmail } from "../services/email.js";
+import { sendLoginEmail } from "../services/email.js";
+import { sendWelcomeEmail } from "../email/resend.js";
 
 const router = express.Router();
 
@@ -96,17 +97,16 @@ router.post("/signup", async (req, res) => {
       badges: []
     };
 
+    await sendWelcomeEmail({
+      to: user.email,
+      firstName: nameValue,
+    });
+
     console.log("✅ Signup successful for user:", email);
-    
-    // Send response immediately (don't wait for email)
+
     res.json({
       token,
       user
-    });
-    
-    // Send welcome email after response (completely async, won't block)
-    sendWelcomeEmail(email, nameValue).catch(err => {
-      console.error("⚠️ Failed to send welcome email:", err);
     });
   } catch (err) {
     console.error("❌ Signup error:", err);

@@ -2,6 +2,7 @@ import express from "express";
 import { db } from "../db/database.js";
 import jwt from "jsonwebtoken";
 import { createPaymentIntent } from "../services/payments.js";
+import { sendPaymentEmail } from "../email/resend.js";
 
 const router = express.Router();
 
@@ -199,6 +200,38 @@ router.post("/:id/confirm-payment", async (req, res) => {
          VALUES ($1, $2, $3, 'available')`,
         [booking.talent_id, bookingId, booking.price]
       );
+    }
+
+    try {
+      const hostResult = await db.query(
+        `SELECT email, name, username FROM users WHERE id = $1`,
+        [booking.host_id]
+      );
+      const hostUser = hostResult.rows[0];
+
+      if (hostUser?.email) {
+        let talentName;
+        if (booking.talent_user_id) {
+          const talentResult = await db.query(
+            `SELECT name, username FROM users WHERE id = $1`,
+            [booking.talent_user_id]
+          );
+          const talentUser = talentResult.rows[0];
+          talentName = talentUser?.name || talentUser?.username;
+        }
+
+        const itemName = talentName ? `Booking with ${talentName}` : "Booking confirmation";
+        const amountTotalCents = Math.round(Number(booking.price || 0) * 100);
+
+        await sendPaymentEmail({
+          to: hostUser.email,
+          firstName: hostUser.name || hostUser.username,
+          itemName,
+          amountUsd: (amountTotalCents / 100).toFixed(2),
+        });
+      }
+    } catch (emailError) {
+      console.error("⚠️ Failed to send payment email:", emailError);
     }
 
     res.json({ success: true, status: "confirmed" });

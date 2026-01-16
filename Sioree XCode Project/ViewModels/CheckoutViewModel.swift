@@ -148,6 +148,17 @@ class CheckoutViewModel: ObservableObject {
         return "unknown"
     }
 
+    private func preferredStripeMode() -> String? {
+        let key = Constants.Stripe.publishableKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if key.hasPrefix("pk_test_") {
+            return "test"
+        }
+        if key.hasPrefix("pk_live_") {
+            return "live"
+        }
+        return nil
+    }
+
     private func validateCheckoutResponse(_ response: CheckoutResponse) -> String? {
         if response.paymentIntent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return "Missing paymentIntent."
@@ -158,9 +169,10 @@ class CheckoutViewModel: ObservableObject {
         if response.customer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return "Missing customer."
         }
-        guard let ephemeralKey = response.ephemeralKey,
-              !ephemeralKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return "Missing ephemeralKey."
+        let hasEphemeralKey = !(response.ephemeralKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+        let hasCustomerSession = !(response.customerSessionClientSecret?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+        if !hasEphemeralKey && !hasCustomerSession {
+            return "Missing ephemeralKey or customer session."
         }
         if response.publishableKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return "Missing publishableKey."
@@ -213,7 +225,10 @@ class CheckoutViewModel: ObservableObject {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let payload = ["amount": amount, "currency": "usd"] as [String: Any]
+        var payload: [String: Any] = ["amount": amount, "currency": "usd"]
+        if let mode = preferredStripeMode() {
+            payload["mode"] = mode
+        }
         request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
 
         logPaymentSheetDebug("Preparing payment sheet setup request.")
@@ -303,6 +318,13 @@ class CheckoutViewModel: ObservableObject {
 
                 let mode = self?.publishableKeyMode(response.publishableKey) ?? "unknown"
                 self?.logPaymentSheetDebug("Stripe mode from publishable key: \(mode)")
+                if let preferredMode = self?.preferredStripeMode(),
+                   mode != "unknown",
+                   preferredMode != mode {
+                    self?.logPaymentSheetDebug("Stripe mode mismatch: preferred=\(preferredMode), response=\(mode)")
+                    handleFailure("Payment setup failed. Backend returned \(mode) publishable key but app expects \(preferredMode).")
+                    return
+                }
                 if Constants.API.environment == .production, mode == "test" {
                     self?.logPaymentSheetDebug("Warning: Production environment using test publishable key.")
                 } else if Constants.API.environment == .development, mode == "live" {

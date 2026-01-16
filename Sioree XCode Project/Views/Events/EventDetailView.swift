@@ -9,6 +9,7 @@ import SwiftUI
 import UIKit
 import Combine
 import StripePaymentSheet
+import StripeCore
 
 struct EventDetailView: View {
     let eventId: String
@@ -672,6 +673,7 @@ struct EventDetailView: View {
     private func paymentActionContent(price: Double, showErrorDetail: Bool) -> some View {
         if let paymentSheet = checkoutViewModel.paymentSheet {
             Button(action: {
+                logStripePublishableKey()
                 presentPaymentSheet(paymentSheet)
             }) {
                 buyButtonLabel(
@@ -710,6 +712,13 @@ struct EventDetailView: View {
         paymentSheet.present(from: viewController) { result in
             checkoutViewModel.onPaymentCompletion(result: result)
         }
+    }
+
+    private func logStripePublishableKey() {
+        let currentKey = StripeAPI.defaultPublishableKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let fallbackKey = Constants.Stripe.publishableKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let keyToLog = currentKey.isEmpty ? fallbackKey : currentKey
+        print("Stripe publishable key: \(keyToLog)")
     }
 
     private func topViewController() -> UIViewController? {

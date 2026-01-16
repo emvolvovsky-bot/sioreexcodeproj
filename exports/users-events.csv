@@ -1,0 +1,7 @@
+user_id,username,email,name,bio,avatar,user_type,location,verified,follower_count,following_count,event_count,created_at,updated_at,upcoming_events_created_count,upcoming_events_created,upcoming_events_attending_count,upcoming_events_attending
+1,successuser,success@test.com,Success User,,,partier,,False,0,0,0,2025-12-06 18:23:06.003003,2025-12-06 18:23:06.003003,0,,0,
+2,phonetest,phone@test.com,Phone Test,,,partier,,False,1,0,0,2025-12-06 18:23:21.044279,2025-12-06 18:23:21.044279,0,,0,
+6,Emvo,emvolvovsky@gmail.com,Emil Volvovsky,NYC,,partier,,False,1,2,0,2025-12-08 01:24:52.935353,2026-01-08 20:47:57.114434,1,46:D|2026-01-22T14:24:00,0,
+7,alexv,av740@yahoo.com,Alex Volvovsky,,,partier,,False,1,1,0,2025-12-08 02:13:09.710269,2025-12-08 02:13:09.710269,0,,0,
+8,dhdh,trial@gmail.com,she,,,host,,False,0,0,0,2026-01-08 00:55:43.123168,2026-01-08 00:55:43.123168,0,,0,
+9,Born Alt,av74@yahoo.com,Shah,,,host,,False,0,0,0,2026-01-08 20:52:07.995831,2026-01-08 20:52:07.995831,1,54:payment trial|2026-01-21T13:45:00,0,

@@ -17,13 +17,16 @@ struct Constants {
         var baseURL: String {
             switch self {
             case .development:
-                // Use environment variable or fallback to localhost
-                // Never hardcode IP addresses in production code
-                if let devURL = ProcessInfo.processInfo.environment["DEV_API_URL"] {
-                    return devURL
+                // RUN_LOCAL overrides all other settings when present.
+                if let runLocalValue = ProcessInfo.processInfo.environment["RUN_LOCAL"]?.lowercased() {
+                    if runLocalValue == "true" {
+                        return "http://localhost:4000"
+                    } else {
+                        return "https://sioree-api.onrender.com"
+                    }
                 }
-                // Default to Render API so simulators/dev builds point at hosted backend
                 return "https://sioree-api.onrender.com"
+                // Render deployment as backup
             case .production:
                 return "https://sioree-api.onrender.com"  // Render deployment
             }
@@ -33,7 +36,7 @@ struct Constants {
     // MARK: - API
     struct API {
         // Change this to .production when ready for App Store
-        static let environment: Environment = .production
+        static let environment: Environment = .development
         
         static var baseURL: String {
             environment.baseURL
@@ -60,7 +63,6 @@ struct Constants {
     struct Stripe {
         // Update these values with your Stripe Buy Button settings.
         static let publishableKey = "pk_test_51SbF9IEZUZFsipCPLKDUFgbVQpowjxWafVJjHZBR9TihnyFHSsZ5yA93lrz4krTsQNNttqwBIrDW0MLKcYDMiD6q00Db2qsWKJ"
-        static let buyButtonId = "{{BUY_BUTTON_ID}}"
     }
 
     // MARK: - Limits

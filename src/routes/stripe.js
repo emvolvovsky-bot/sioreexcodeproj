@@ -30,6 +30,10 @@ router.post("/payment-sheet", async (req, res) => {
         }
       }
     });
+    const ephemeralKey = await stripe.ephemeralKeys.create(
+      { customer: customer.id },
+      { apiVersion: "2023-10-16" }
+    );
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(parsedAmount * 100),
       currency,
@@ -40,6 +44,7 @@ router.post("/payment-sheet", async (req, res) => {
     return res.json({
       paymentIntent: paymentIntent.client_secret,
       customer: customer.id,
+      ephemeralKey: ephemeralKey.secret,
       customerSessionClientSecret: customerSession.client_secret,
       publishableKey: process.env.STRIPE_PUBLISHABLE_KEY
     });

@@ -7,6 +7,7 @@
 
 import Foundation
 import StripePaymentSheet
+import StripeCore
 
 class CheckoutViewModel: ObservableObject {
     @Published var paymentSheet: PaymentSheet?
@@ -196,24 +197,19 @@ class CheckoutViewModel: ObservableObject {
             do {
                 let response = try JSONDecoder().decode(CheckoutResponse.self, from: data)
                 self?.logPaymentSheetDebug("Decoded response values: paymentIntent=\(response.paymentIntent), customer=\(response.customer), customerSessionClientSecret=\(response.customerSessionClientSecret ?? "nil"), ephemeralKey=\(response.ephemeralKey ?? "nil"), publishableKey=\(response.publishableKey)")
+                StripeAPI.defaultPublishableKey = response.publishableKey
                 STPAPIClient.shared.publishableKey = response.publishableKey
 
                 var configuration = PaymentSheet.Configuration()
                 configuration.merchantDisplayName = "Soirée"
-                if let customerSessionClientSecret = response.customerSessionClientSecret {
-                    configuration.customer = .init(
-                        id: response.customer,
-                        customerSessionClientSecret: customerSessionClientSecret
-                    )
-                } else if let ephemeralKey = response.ephemeralKey {
+                configuration.apiClient = STPAPIClient.shared
+                if let ephemeralKey = response.ephemeralKey {
                     configuration.customer = .init(
                         id: response.customer,
                         ephemeralKeySecret: ephemeralKey
                     )
-                } else {
-                    self?.logPaymentSheetDebug("Missing customerSessionClientSecret and ephemeralKey in checkout response.")
-                    handleFailure("Payment setup failed. Missing customer authentication.")
-                    return
+                } else if response.customerSessionClientSecret != nil {
+                    self?.logPaymentSheetDebug("Customer session provided but not used; presenting without customer.")
                 }
                 configuration.allowsDelayedPaymentMethods = true
                 configuration.returnURL = "sioree://stripe-redirect"

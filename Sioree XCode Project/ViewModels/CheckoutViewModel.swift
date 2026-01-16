@@ -73,6 +73,21 @@ class CheckoutViewModel: ObservableObject {
         let publishableKey: String
     }
 
+    private struct StripeErrorResponse: Decodable {
+        struct StripeError: Decodable {
+            let message: String?
+            let type: String?
+            let code: String?
+            let param: String?
+        }
+
+        let error: StripeError?
+    }
+
+    private func logPaymentSheetDebug(_ message: String) {
+        print("[CheckoutViewModel] \(message)")
+    }
+
     func preparePaymentSheet(amount: Double, retryCount: Int = 0) {
         let maxRetries = 2
         if retryCount == 0 {
@@ -114,6 +129,11 @@ class CheckoutViewModel: ObservableObject {
         let payload = ["amount": amount, "currency": "usd"] as [String: Any]
         request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
 
+        logPaymentSheetDebug("Preparing payment sheet setup request.")
+        logPaymentSheetDebug("Request URL: \(checkoutURL.absoluteString)")
+        logPaymentSheetDebug("Request headers: \(request.allHTTPHeaderFields ?? [:])")
+        logPaymentSheetDebug("Request payload: \(payload)")
+
         URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             let handleFailure: (String) -> Void = { message in
                 guard let self = self else { return }
@@ -131,22 +151,35 @@ class CheckoutViewModel: ObservableObject {
             }
 
             if let error = error {
+                self?.logPaymentSheetDebug("Request failed with Swift error: \(error.localizedDescription)")
                 handleFailure("Payment setup failed. \(error.localizedDescription)")
                 return
             }
 
             guard let httpResponse = response as? HTTPURLResponse else {
+                self?.logPaymentSheetDebug("Missing or invalid HTTP response object.")
                 handleFailure("Payment setup failed. Invalid server response.")
                 return
             }
 
             guard let data = data else {
+                self?.logPaymentSheetDebug("HTTP \(httpResponse.statusCode) with empty response body.")
                 handleFailure("Payment setup failed. Empty response.")
                 return
             }
 
+            let rawResponseBody = String(data: data, encoding: .utf8) ?? "<non-utf8 body length=\(data.count)>"
+            self?.logPaymentSheetDebug("Response status: \(httpResponse.statusCode)")
+            self?.logPaymentSheetDebug("Raw response body: \(rawResponseBody)")
+
             guard (200...299).contains(httpResponse.statusCode) else {
                 let serverMessage = String(data: data, encoding: .utf8) ?? "Server error."
+                if let stripeError = try? JSONDecoder().decode(StripeErrorResponse.self, from: data).error {
+                    let decodedMessage = stripeError.message ?? "Unknown Stripe error"
+                    self?.logPaymentSheetDebug("Decoded Stripe error: message=\(decodedMessage), type=\(stripeError.type ?? "nil"), code=\(stripeError.code ?? "nil"), param=\(stripeError.param ?? "nil")")
+                } else {
+                    self?.logPaymentSheetDebug("Stripe error could not be decoded from response.")
+                }
                 if httpResponse.statusCode == 404, urlsToTry.count > 1 {
                     self?.requestPaymentSheet(
                         amount: amount,
@@ -162,19 +195,20 @@ class CheckoutViewModel: ObservableObject {
 
             do {
                 let response = try JSONDecoder().decode(CheckoutResponse.self, from: data)
+                self?.logPaymentSheetDebug("Decoded response values: paymentIntent=\(response.paymentIntent), customer=\(response.customer), customerSessionClientSecret=\(response.customerSessionClientSecret ?? "nil"), ephemeralKey=\(response.ephemeralKey ?? "nil"), publishableKey=\(response.publishableKey)")
                 STPAPIClient.shared.publishableKey = response.publishableKey
 
                 var configuration = PaymentSheet.Configuration()
                 configuration.merchantDisplayName = "Soirée"
-                if let customerSessionClientSecret = response.customerSessionClientSecret {
-                    configuration.customer = .init(
-                        id: response.customer,
-                        customerSessionClientSecret: customerSessionClientSecret
-                    )
-                } else if let ephemeralKey = response.ephemeralKey {
+                if let ephemeralKey = response.ephemeralKey {
                     configuration.customer = .init(
                         id: response.customer,
                         ephemeralKeySecret: ephemeralKey
+                    )
+                } else if let customerSessionClientSecret = response.customerSessionClientSecret {
+                    configuration.customer = .init(
+                        id: response.customer,
+                        customerSessionClientSecret: customerSessionClientSecret
                     )
                 } else {
                     handleFailure("Payment setup failed. Missing customer session.")
@@ -184,6 +218,7 @@ class CheckoutViewModel: ObservableObject {
                 configuration.returnURL = "sioree://stripe-redirect"
 
                 DispatchQueue.main.async {
+                    self?.logPaymentSheetDebug("Initializing PaymentSheet with client secret and configuration.")
                     self?.paymentSheet = PaymentSheet(
                         paymentIntentClientSecret: response.paymentIntent,
                         configuration: configuration
@@ -192,6 +227,7 @@ class CheckoutViewModel: ObservableObject {
                     self?.isPreparingPaymentSheet = false
                 }
             } catch {
+                self?.logPaymentSheetDebug("JSON decode failed with Swift error: \(error.localizedDescription)")
                 handleFailure("Payment setup failed. \(error.localizedDescription)")
             }
         }.resume()

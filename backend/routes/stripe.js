@@ -48,6 +48,10 @@ router.post('/payment-sheet', async (req, res) => {
     }
 
     const customer = await stripe.customers.create();
+    const ephemeralKey = await stripe.ephemeralKeys.create(
+      { customer: customer.id },
+      { apiVersion: '2023-10-16' }
+    );
     const customerSession = await stripe.customerSessions.create({
       customer: customer.id,
       components: {
@@ -72,6 +76,7 @@ router.post('/payment-sheet', async (req, res) => {
       paymentIntent: paymentIntent.client_secret,
       customer: customer.id,
       customerSessionClientSecret: customerSession.client_secret,
+      ephemeralKey: ephemeralKey.secret,
       publishableKey: process.env.STRIPE_PUBLISHABLE_KEY
     });
   } catch (error) {

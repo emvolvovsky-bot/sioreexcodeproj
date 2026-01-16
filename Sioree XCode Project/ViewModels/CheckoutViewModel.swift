@@ -200,14 +200,19 @@ class CheckoutViewModel: ObservableObject {
 
                 var configuration = PaymentSheet.Configuration()
                 configuration.merchantDisplayName = "Soirée"
-                if let ephemeralKey = response.ephemeralKey {
+                if let customerSessionClientSecret = response.customerSessionClientSecret {
+                    configuration.customer = .init(
+                        id: response.customer,
+                        customerSessionClientSecret: customerSessionClientSecret
+                    )
+                } else if let ephemeralKey = response.ephemeralKey {
                     configuration.customer = .init(
                         id: response.customer,
                         ephemeralKeySecret: ephemeralKey
                     )
                 } else {
-                    self?.logPaymentSheetDebug("Missing ephemeralKey in checkout response.")
-                    handleFailure("Payment setup failed. Missing ephemeral key.")
+                    self?.logPaymentSheetDebug("Missing customerSessionClientSecret and ephemeralKey in checkout response.")
+                    handleFailure("Payment setup failed. Missing customer authentication.")
                     return
                 }
                 configuration.allowsDelayedPaymentMethods = true

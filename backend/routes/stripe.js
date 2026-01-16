@@ -52,19 +52,6 @@ router.post('/payment-sheet', async (req, res) => {
       { customer: customer.id },
       { apiVersion: '2023-10-16' }
     );
-    const customerSession = await stripe.customerSessions.create({
-      customer: customer.id,
-      components: {
-        mobile_payment_element: {
-          enabled: true,
-          features: {
-            payment_method_save: 'enabled',
-            payment_method_redisplay: 'enabled',
-            payment_method_remove: 'enabled'
-          }
-        }
-      }
-    });
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(parsedAmount * 100),
       currency,
@@ -75,7 +62,6 @@ router.post('/payment-sheet', async (req, res) => {
     return res.json({
       paymentIntent: paymentIntent.client_secret,
       customer: customer.id,
-      customerSessionClientSecret: customerSession.client_secret,
       ephemeralKey: ephemeralKey.secret,
       publishableKey: process.env.STRIPE_PUBLISHABLE_KEY
     });

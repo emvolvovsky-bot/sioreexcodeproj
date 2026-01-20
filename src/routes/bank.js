@@ -124,7 +124,11 @@ router.post("/onboarding-link", async (req, res) => {
     return res.json({ url: accountLink.url });
   } catch (error) {
     console.error("Stripe onboarding link error:", error);
-    return res.status(500).json({ error: "Failed to create onboarding link" });
+    const stripeMessage =
+      error?.raw?.message ||
+      error?.message ||
+      "Failed to create onboarding link";
+    return res.status(500).json({ error: stripeMessage });
   }
 });
 

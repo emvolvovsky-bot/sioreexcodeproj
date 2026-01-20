@@ -34,7 +34,7 @@ struct Constants {
     // MARK: - API
     struct API {
         // Change this to .production when ready for App Store
-        static let environment: Environment = .development
+        static let environment: Environment = .production
         
         static var baseURL: String {
             environment.baseURL

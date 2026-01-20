@@ -11,15 +11,12 @@ const normalizeMode = (mode) => {
 
 const resolveSecretKey = (mode) => {
   const normalized = normalizeMode(mode);
-  //COme back to this later, make sure to substitute with real secret key
-  return process.env.STRIPE_TEST_SECRET_KEY
+  return process.env.STRIPE_SECRET_KEY;
 };
 
 const resolvePublishableKey = (mode) => {
   const normalized = normalizeMode(mode);
-  //COme back to this later, make sure to substitute with real secret key
-  return process.env.STRIPE_TEST_PUBLISHABLE_KEY
-
+  return process.env.STRIPE_PUBLISHABLE_KEY;
 };
 
 const clients = new Map();

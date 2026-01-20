@@ -11,31 +11,21 @@ const normalizeMode = (mode) => {
 
 const resolveSecretKey = (mode) => {
   const normalized = normalizeMode(mode);
-  if (normalized === "test") {
-    return process.env.STRIPE_TEST_SECRET_KEY || process.env.STRIPE_SECRET_KEY;
-  }
   if (normalized === "live") {
-    return process.env.STRIPE_LIVE_SECRET_KEY || process.env.STRIPE_SECRET_KEY;
+    return process.env.STRIPE_SECRET_KEY || process.env.STRIPE_LIVE_SECRET_KEY;
   }
   return (
-    process.env.STRIPE_SECRET_KEY ||
-    process.env.STRIPE_LIVE_SECRET_KEY ||
-    process.env.STRIPE_TEST_SECRET_KEY
+    process.env.STRIPE_SECRET_KEY || process.env.STRIPE_LIVE_SECRET_KEY
   );
 };
 
 const resolvePublishableKey = (mode) => {
   const normalized = normalizeMode(mode);
-  if (normalized === "test") {
-    return process.env.STRIPE_TEST_PUBLISHABLE_KEY || process.env.STRIPE_PUBLISHABLE_KEY;
-  }
   if (normalized === "live") {
-    return process.env.STRIPE_LIVE_PUBLISHABLE_KEY || process.env.STRIPE_PUBLISHABLE_KEY;
+    return process.env.STRIPE_PUBLISHABLE_KEY || process.env.STRIPE_LIVE_PUBLISHABLE_KEY;
   }
   return (
-    process.env.STRIPE_PUBLISHABLE_KEY ||
-    process.env.STRIPE_LIVE_PUBLISHABLE_KEY ||
-    process.env.STRIPE_TEST_PUBLISHABLE_KEY
+    process.env.STRIPE_PUBLISHABLE_KEY || process.env.STRIPE_LIVE_PUBLISHABLE_KEY
   );
 };
 
@@ -62,7 +52,7 @@ if (!defaultClient) {
   console.warn("Stripe secret key is not configured; Stripe calls will fail.");
 }
 
-const stripe = defaultClient || new Stripe("");
+const stripe = defaultClient || {};
 stripe.getStripeClient = getStripeClient;
 stripe.getPublishableKey = resolvePublishableKey;
 stripe.getStripeMode = normalizeMode;

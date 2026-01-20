@@ -1,19 +1,100 @@
 import express from "express";
 import stripe from "../lib/stripe.js";
+import { db } from "../db/database.js";
 
 const router = express.Router();
 
+const respondStripeError = (res, status, message, details = {}) => {
+  const error = {
+    message,
+    type: details.type,
+    code: details.code,
+    param: details.param
+  };
+  return res.status(status).json({ error });
+};
+
+const toStripeErrorDetails = (error) => {
+  if (!error || typeof error !== "object") {
+    return { message: "Stripe error", type: "api_error" };
+  }
+  return {
+    message: error.message || "Stripe error",
+    type: error.type || "api_error",
+    code: error.code,
+    param: error.param
+  };
+};
+
 router.post("/payment-sheet", async (req, res) => {
   try {
-    if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_PUBLISHABLE_KEY) {
-      return res.status(500).json({ error: "Stripe keys are not configured" });
+    console.log("💳 Stripe payment-sheet:", req.body);
+    const secretKey =
+      process.env.STRIPE_SECRET_KEY || process.env.STRIPE_LIVE_SECRET_KEY;
+    const publishableKey =
+      process.env.STRIPE_PUBLISHABLE_KEY || process.env.STRIPE_LIVE_PUBLISHABLE_KEY;
+
+    if (!secretKey || !publishableKey) {
+      return respondStripeError(res, 500, "Stripe keys are not configured", {
+        type: "configuration_error"
+      });
     }
 
-    const { amount, currency = "usd" } = req.body;
+    const { amount, currency = "usd", eventId } = req.body;
     const parsedAmount = Number(amount);
 
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      return res.status(400).json({ error: "Invalid amount" });
+      return respondStripeError(res, 400, "Invalid amount", {
+        type: "invalid_request_error",
+        param: "amount"
+      });
+    }
+
+    let eventRow = null;
+    let totalAmount = parsedAmount;
+    let hostStripeAccountId = null;
+    let ticketPrice = null;
+
+    if (eventId && typeof eventId === "string") {
+      const eventResult = await db.query(
+        "SELECT creator_id, ticket_price FROM events WHERE id = $1",
+        [eventId]
+      );
+      if (eventResult.rows.length === 0) {
+        return respondStripeError(res, 404, "Event not found", {
+          type: "invalid_request_error",
+          param: "eventId"
+        });
+      }
+
+      eventRow = eventResult.rows[0];
+      ticketPrice = Number(eventRow.ticket_price);
+      if (!Number.isFinite(ticketPrice) || ticketPrice <= 0) {
+        return respondStripeError(res, 400, "Event ticket price is invalid", {
+          type: "invalid_request_error",
+          param: "ticketPrice"
+        });
+      }
+
+      const hostResult = await db.query(
+        "SELECT stripe_account_id FROM users WHERE id = $1",
+        [eventRow.creator_id]
+      );
+      hostStripeAccountId = hostResult.rows[0]?.stripe_account_id;
+      if (!hostStripeAccountId) {
+        return respondStripeError(res, 400, "Host Stripe account is not connected", {
+          type: "invalid_request_error",
+          param: "stripe_account_id"
+        });
+      }
+
+      totalAmount = ticketPrice * 1.05;
+      if (Math.abs(parsedAmount - totalAmount) > 0.01) {
+        console.warn(
+          "Stripe payment-sheet amount mismatch:",
+          { parsedAmount, totalAmount, ticketPrice, eventId }
+        );
+      }
     }
 
     const customer = await stripe.customers.create();
@@ -30,22 +111,44 @@ router.post("/payment-sheet", async (req, res) => {
         }
       }
     });
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(parsedAmount * 100),
+    const totalAmountInCents = Math.round(totalAmount * 100);
+    const paymentIntentParams = {
+      amount: totalAmountInCents,
       currency,
       customer: customer.id,
       automatic_payment_methods: { enabled: true }
-    });
+    };
+
+    if (hostStripeAccountId && ticketPrice && eventRow) {
+      const stripeFee = ticketPrice * 0.029 + 0.3;
+      const hostPayout = Math.max(0, ticketPrice - stripeFee);
+      const unclampedHostPayoutCents = Math.round(hostPayout * 100);
+      const hostPayoutCents = Math.min(totalAmountInCents, unclampedHostPayoutCents);
+      const applicationFeeAmount = Math.max(0, totalAmountInCents - hostPayoutCents);
+
+      paymentIntentParams.application_fee_amount = applicationFeeAmount;
+      paymentIntentParams.transfer_data = {
+        destination: hostStripeAccountId,
+        amount: hostPayoutCents
+      };
+      paymentIntentParams.metadata = {
+        eventId,
+        hostId: eventRow.creator_id?.toString() || ""
+      };
+    }
+
+    const paymentIntent = await stripe.paymentIntents.create(paymentIntentParams);
 
     return res.json({
       paymentIntent: paymentIntent.client_secret,
       customer: customer.id,
       customerSessionClientSecret: customerSession.client_secret,
-      publishableKey: process.env.STRIPE_PUBLISHABLE_KEY
+      publishableKey
     });
   } catch (error) {
     console.error("Stripe payment-sheet error:", error);
-    return res.status(500).json({ error: error.message });
+    const details = toStripeErrorDetails(error);
+    return respondStripeError(res, 500, details.message, details);
   }
 });
 

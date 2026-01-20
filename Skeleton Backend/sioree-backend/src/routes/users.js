@@ -17,6 +17,18 @@ function getUserIdFromToken(req) {
   }
 }
 
+const normalizeImages = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.filter(Boolean);
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map(item => item.trim())
+      .filter(item => item.length > 0);
+  }
+  return [value.toString()].filter(Boolean);
+};
+
 // GET search users - MUST be before /:id route to avoid route conflict
 router.get("/search", async (req, res) => {
   try {
@@ -418,7 +430,7 @@ router.get("/:id/attended", async (req, res) => {
       hostAvatar: row.host_avatar || null,
       date: toISOString(row.event_date),
       location: row.location || "",
-      images: [],
+      images: normalizeImages(row.images),
       ticketPrice: row.ticket_price > 0 ? row.ticket_price : null,
       capacity: row.capacity || null,
       attendees: row.attendee_count || 0,
@@ -460,7 +472,7 @@ router.get("/:id/events", async (req, res) => {
       hostAvatar: row.host_avatar || null,
       date: new Date(row.event_date).toISOString(),
       location: row.location || "",
-      images: [],
+      images: normalizeImages(row.images),
       ticketPrice: row.ticket_price || 0,
       capacity: row.capacity || null,
       attendees: row.attendee_count || 0,

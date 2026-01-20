@@ -1,9 +1,16 @@
 import Stripe from "stripe";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
+const stripeApiKey = process.env.STRIPE_SECRET_KEY;
+const stripe = stripeApiKey ? new Stripe(stripeApiKey) : null;
+if (!stripeApiKey) {
+  console.warn("⚠️ STRIPE_SECRET_KEY is missing. Payments are disabled.");
+}
 
 export async function createPaymentIntent(amount, hostStripeAccountId, metadata = {}) {
   try {
+    if (!stripe) {
+      throw new Error("Stripe is not configured");
+    }
     // Convert amount to cents (Stripe uses smallest currency unit)
     const amountInCents = Math.round(amount * 100);
     

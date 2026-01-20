@@ -22,6 +22,24 @@ struct BankAccountResponse: Codable {
     let linkToken: String?
 }
 
+struct BankOnboardingLinkResponse: Codable {
+    let url: String
+}
+
+struct BankConnectStatus: Codable {
+    let isReady: Bool
+    let needsOnboarding: Bool
+    let requirements: [String]
+}
+
+struct BankAccountConnectRequest: Codable {
+    let bankName: String
+    let accountHolderName: String
+    let routingNumber: String
+    let accountNumber: String
+    let accountType: String
+}
+
 class BankAccountService: ObservableObject {
     static let shared = BankAccountService()
     private let networkService = NetworkService()
@@ -47,6 +65,31 @@ class BankAccountService: ObservableObject {
         
         // Call backend to exchange Plaid public token for access token
         return networkService.request("/api/bank/exchange-token", method: "POST", body: jsonData)
+    }
+
+    // MARK: - Add Bank Account (manual entry)
+    func addBankAccount(_ request: BankAccountConnectRequest) -> AnyPublisher<BankAccount, Error> {
+        guard let jsonData = try? JSONEncoder().encode(request) else {
+            return Fail(error: NetworkError.unknown).eraseToAnyPublisher()
+        }
+        return networkService.request("/api/bank/manual", method: "POST", body: jsonData)
+    }
+
+    // MARK: - Stripe Connect Onboarding Link
+    func createOnboardingLink() -> AnyPublisher<URL, Error> {
+        return networkService.request("/api/bank/onboarding-link", method: "POST")
+            .tryMap { (response: BankOnboardingLinkResponse) in
+                guard let url = URL(string: response.url) else {
+                    throw NetworkError.invalidURL
+                }
+                return url
+            }
+            .eraseToAnyPublisher()
+    }
+
+    // MARK: - Stripe Connect Onboarding Status
+    func fetchOnboardingStatus() -> AnyPublisher<BankConnectStatus, Error> {
+        return networkService.request("/api/bank/onboarding-status", method: "GET")
     }
     
     // MARK: - Get Connected Accounts

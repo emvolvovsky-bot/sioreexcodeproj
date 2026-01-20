@@ -73,6 +73,19 @@ class StorageService {
         userDefaults.removeObject(forKey: Constants.UserDefaultsKeys.userType)
     }
 
+    // MARK: - Bank Connect Prompt
+    func setNeedsBankConnect(_ needsConnect: Bool) {
+        userDefaults.set(needsConnect, forKey: Constants.UserDefaultsKeys.needsBankConnect)
+    }
+
+    func needsBankConnect() -> Bool {
+        return userDefaults.bool(forKey: Constants.UserDefaultsKeys.needsBankConnect)
+    }
+
+    func clearNeedsBankConnect() {
+        userDefaults.removeObject(forKey: Constants.UserDefaultsKeys.needsBankConnect)
+    }
+
     // MARK: - Following Cache
     func saveFollowingIds(_ ids: [String]) {
         userDefaults.set(ids, forKey: Constants.UserDefaultsKeys.followingIdsCache)

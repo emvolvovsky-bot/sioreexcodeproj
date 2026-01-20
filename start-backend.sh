@@ -22,7 +22,7 @@ if pm2 list | grep -q "sioree-backend"; then
 else
     # Start backend with PM2
     echo "🔄 Starting backend with PM2..."
-    pm2 start ecosystem.config.js
+    pm2 start ecosystem.config.cjs
     
     # Save PM2 process list (so it restarts on reboot)
     pm2 save

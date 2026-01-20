@@ -1,6 +1,7 @@
 import express from "express";
 import { db } from "../db/database.js";
 import jwt from "jsonwebtoken";
+import stripe from "../lib/stripe.js";
 
 const router = express.Router();
 
@@ -15,6 +16,14 @@ function getUserIdFromToken(req) {
     return null;
   }
 }
+
+const resolveStripeClient = (req) => {
+  const mode = req.body?.mode || req.query?.mode || req.headers["x-stripe-mode"];
+  if (typeof stripe.getStripeClient === "function") {
+    return stripe.getStripeClient(mode);
+  }
+  return stripe;
+};
 
 // GET current user's earnings and withdrawals
 router.get("/", async (req, res) => {
@@ -38,7 +47,11 @@ router.get("/", async (req, res) => {
     );
 
     const withdrawalsResult = await db.query(
-      `SELECT * FROM withdrawals WHERE user_id = $1 ORDER BY created_at DESC`,
+      `SELECT w.*, b.institution_name, b.last4
+       FROM withdrawals w
+       LEFT JOIN bank_accounts b ON w.bank_account_id = b.id
+       WHERE w.user_id = $1
+       ORDER BY w.created_at DESC`,
       [userId]
     );
 
@@ -53,7 +66,9 @@ router.get("/", async (req, res) => {
     const withdrawals = withdrawalsResult.rows.map(row => ({
       id: row.id.toString(),
       amount: parseFloat(row.amount) || 0,
-      bankAccountName: row.bank_account_id ? `Account #${row.bank_account_id}` : "Bank Account",
+      bankAccountName: row.institution_name
+        ? `${row.institution_name}${row.last4 ? ` •••• ${row.last4}` : ""}`
+        : "Bank Account",
       date: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
       status: row.status || "pending"
     }));
@@ -89,7 +104,10 @@ router.post("/withdraw", async (req, res) => {
 
     await client.query("BEGIN");
 
-    const talentResult = await client.query(`SELECT id FROM talent WHERE user_id = $1`, [userId]);
+    const talentResult = await client.query(
+      `SELECT id FROM talent WHERE user_id = $1`,
+      [userId]
+    );
     if (talentResult.rows.length === 0) {
       await client.query("ROLLBACK");
       client.release();
@@ -138,13 +156,86 @@ router.post("/withdraw", async (req, res) => {
     const withdrawal = withdrawalResult.rows[0];
     client.release();
 
+    try {
+      const stripeClient = resolveStripeClient(req);
+      if (!stripeClient || !stripeClient.payouts || !stripeClient.accounts) {
+        throw new Error("Stripe is not configured");
+      }
+
+      const userResult = await db.query(
+        "SELECT stripe_account_id FROM users WHERE id = $1",
+        [userId]
+      );
+      const stripeAccountId = userResult.rows[0]?.stripe_account_id;
+      if (!stripeAccountId) {
+        throw new Error("No connected Stripe account for user");
+      }
+
+      if (bankAccountId) {
+        const bankResult = await db.query(
+          `SELECT stripe_external_account_id
+           FROM bank_accounts
+           WHERE id = $1 AND user_id = $2`,
+          [bankAccountId, userId]
+        );
+        const externalId = bankResult.rows[0]?.stripe_external_account_id;
+        if (externalId) {
+          await stripeClient.accounts.updateExternalAccount(
+            stripeAccountId,
+            externalId,
+            { default_for_currency: true }
+          );
+        }
+      }
+
+      const payout = await stripeClient.payouts.create(
+        {
+          amount: Math.round(parsedAmount * 100),
+          currency: "usd",
+          method: "standard"
+        },
+        { stripeAccount: stripeAccountId }
+      );
+
+      await db.query(
+        `UPDATE withdrawals
+         SET stripe_payout_id = $1
+         WHERE id = $2`,
+        [payout.id, withdrawal.id]
+      );
+    } catch (stripeError) {
+      console.error("Stripe payout error:", stripeError);
+      await db.query(
+        `UPDATE withdrawals
+         SET status = 'failed'
+         WHERE id = $1`,
+        [withdrawal.id]
+      );
+    }
+
+    let bankAccountName = "Bank Account";
+    if (bankAccountId) {
+      const bankResult = await db.query(
+        `SELECT institution_name, last4
+         FROM bank_accounts
+         WHERE id = $1 AND user_id = $2`,
+        [bankAccountId, userId]
+      );
+      const bankRow = bankResult.rows[0];
+      if (bankRow?.institution_name) {
+        bankAccountName = `${bankRow.institution_name}${
+          bankRow.last4 ? ` •••• ${bankRow.last4}` : ""
+        }`;
+      }
+    }
+
     res.json({
       success: true,
       withdrawal: {
         id: withdrawal.id.toString(),
         amount: parseFloat(withdrawal.amount) || 0,
         status: withdrawal.status,
-        bankAccountName: bankAccountId ? `Account #${bankAccountId}` : "Bank Account",
+        bankAccountName,
         date: withdrawal.created_at ? new Date(withdrawal.created_at).toISOString() : new Date().toISOString()
       }
     });

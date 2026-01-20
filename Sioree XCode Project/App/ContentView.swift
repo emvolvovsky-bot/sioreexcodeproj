@@ -11,6 +11,7 @@ struct ContentView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @EnvironmentObject var talentViewModel: TalentViewModel
     @State private var showSplash = false
+    @State private var showBankConnectSheet = false
     
     private var activeRole: UserRole? {
         if let userType = authViewModel.currentUser?.userType {
@@ -65,6 +66,27 @@ struct ContentView: View {
 
             // Show splash on launch - always show for 2 seconds
             showSplash = true
+            presentBankConnectIfNeeded()
+        }
+        .onChange(of: authViewModel.isAuthenticated) { _, _ in
+            presentBankConnectIfNeeded()
+        }
+        .onChange(of: authViewModel.currentUser?.userType) { _, _ in
+            presentBankConnectIfNeeded()
+        }
+        .sheet(isPresented: $showBankConnectSheet, onDismiss: {
+            StorageService.shared.clearNeedsBankConnect()
+        }) {
+            BankConnectOnboardingView(onConnect: { _ in })
+        }
+    }
+
+    private func presentBankConnectIfNeeded() {
+        guard authViewModel.isAuthenticated else { return }
+        guard StorageService.shared.needsBankConnect() else { return }
+        let userType = authViewModel.currentUser?.userType ?? StorageService.shared.getUserType()
+        if userType == .host || userType == .talent {
+            showBankConnectSheet = true
         }
     }
 }

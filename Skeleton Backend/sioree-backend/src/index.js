@@ -116,6 +116,18 @@ async function ensureCoreSchema() {
       ALTER TABLE events ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT false;
     `);
 
+    // Stripe Connect fields (payout readiness)
+    await db.query(`
+      ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS stripe_account_id TEXT;
+      ALTER TABLE bank_accounts
+        ADD COLUMN IF NOT EXISTS stripe_external_account_id TEXT,
+        ADD COLUMN IF NOT EXISTS account_type VARCHAR(20),
+        ADD COLUMN IF NOT EXISTS last4 VARCHAR(4);
+      ALTER TABLE withdrawals
+        ADD COLUMN IF NOT EXISTS stripe_payout_id TEXT;
+    `);
+
     console.log("✅ Core schema guard executed");
   } catch (err) {
     console.error("⚠️ Core schema guard failed (non-blocking):", err.message);
@@ -307,12 +319,18 @@ io.on("connection", socket => {
 
 const PORT = process.env.PORT || 4000;
 const API_URL = process.env.API_URL || `https://sioree-api.onrender.com`;
+const HOST =
+  process.env.HOST ||
+  (process.env.RENDER || process.env.NODE_ENV === "production"
+    ? "0.0.0.0"
+    : "127.0.0.1");
 
-// Listen on all interfaces (required for Render)
-server.listen(PORT, "0.0.0.0", () => {
+// Listen on all interfaces for Render, localhost for dev
+server.listen(PORT, HOST, () => {
   console.log("═══════════════════════════════════════════════════════════");
   console.log(`✅ Sioree Backend Server is RUNNING`);
   console.log(`📡 Port: ${PORT}`);
+  console.log(`🖥️ Host: ${HOST}`);
   console.log(`🌐 API URL: ${API_URL}`);
   console.log(`📊 Database: ${process.env.DATABASE_URL ? "Connected" : "Not connected"}`);
   console.log(`💳 Stripe: ${process.env.STRIPE_SECRET_KEY ? "Configured" : "Not configured"}`);

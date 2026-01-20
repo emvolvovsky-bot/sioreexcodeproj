@@ -28,6 +28,7 @@ struct EventDetailView: View {
     @State private var showEditEvent = false
     @State private var didPreparePaymentSheet = false
     @State private var paymentAlertMessage: String?
+    private let ticketFeeRate = 0.05
     
     init(eventId: String, isTalentMapMode: Bool = false) {
         self.eventId = eventId
@@ -71,13 +72,13 @@ struct EventDetailView: View {
             .onChange(of: viewModel.event) { newEvent in
                 guard let event = newEvent,
                       !didPreparePaymentSheet,
-                      let price = event.ticketPrice,
-                      price > 0,
+                      let ticketPrice = event.ticketPrice,
+                      ticketPrice > 0,
                       !isHost else {
                     return
                 }
                 didPreparePaymentSheet = true
-                checkoutViewModel.preparePaymentSheet(amount: price)
+                checkoutViewModel.preparePaymentSheet(amount: totalPrice(for: ticketPrice), eventId: event.id)
             }
             .confirmationDialog("Open Location", isPresented: $showLocationActionSheet, titleVisibility: .visible) {
                 if let event = viewModel.event {
@@ -346,11 +347,11 @@ struct EventDetailView: View {
                                     .foregroundColor(.sioreeIcyBlue)
                                     .frame(width: 24)
                                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                                    Text("Price")
+                                    Text("Total (incl. 5% fee)")
                                         .font(.sioreeCaption)
                                         .foregroundColor(.sioreeWhite.opacity(0.7))
-                                    if let price = event.ticketPrice, price > 0 {
-                                        Text(Helpers.formatCurrency(price))
+                                    if let ticketPrice = event.ticketPrice, ticketPrice > 0 {
+                                        Text(Helpers.formatCurrency(totalPrice(for: ticketPrice)))
                                             .font(.sioreeBody)
                                             .foregroundColor(.sioreeWhite)
                                     } else {
@@ -362,8 +363,8 @@ struct EventDetailView: View {
                                 Spacer()
                             }
 
-                            if let price = event.ticketPrice, price > 0, !isHost {
-                                paymentSection(price: price)
+                            if let ticketPrice = event.ticketPrice, ticketPrice > 0, !isHost {
+                                paymentSection(ticketPrice: ticketPrice, eventId: event.id)
                             }
                         }
 
@@ -498,8 +499,6 @@ struct EventDetailView: View {
                             ) {
                                 viewModel.cancelRSVP()
                             }
-                        } else if let price = event.ticketPrice, price > 0 {
-                            buyButton(price: price)
                         } else {
                             CustomButton(
                                 title: "Attend",
@@ -521,6 +520,7 @@ struct EventDetailView: View {
             switch result {
             case .completed:
                 viewModel.rsvpToEvent()
+                NotificationCenter.default.post(name: .switchToTicketsTab, object: nil)
             case .failed(let error):
                 paymentAlertMessage = "Payment failed. \(error.localizedDescription)"
             case .canceled:
@@ -581,6 +581,10 @@ struct EventDetailView: View {
     }
 
     // MARK: - Helpers
+    private func totalPrice(for ticketPrice: Double) -> Double {
+        ticketPrice * (1 + ticketFeeRate)
+    }
+
     private func openLocationInMaps(location: String) {
         let encodedLocation = location.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
         let urlString = "http://maps.apple.com/?q=\(encodedLocation)"
@@ -650,27 +654,18 @@ struct EventDetailView: View {
     }
 
     @ViewBuilder
-    private func buyButton(price: Double) -> some View {
-        paymentActionButton(price: price, showErrorDetail: false)
+    private func paymentSection(ticketPrice: Double, eventId: String) -> some View {
+        let total = totalPrice(for: ticketPrice)
+        return paymentActionButton(totalPrice: total, eventId: eventId)
     }
 
     @ViewBuilder
-    private func paymentSection(price: Double) -> some View {
-        paymentActionButton(price: price, showErrorDetail: true)
+    private func paymentActionButton(totalPrice: Double, eventId: String) -> some View {
+        paymentActionContent(totalPrice: totalPrice, eventId: eventId)
     }
 
     @ViewBuilder
-    private func paymentActionButton(price: Double, showErrorDetail: Bool) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            paymentActionContent(price: price, showErrorDetail: showErrorDetail)
-            if showErrorDetail {
-                paymentDebugInfoView
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func paymentActionContent(price: Double, showErrorDetail: Bool) -> some View {
+    private func paymentActionContent(totalPrice: Double, eventId: String) -> some View {
         if let paymentSheet = checkoutViewModel.paymentSheet {
             Button(action: {
                 logStripePublishableKey()
@@ -678,18 +673,18 @@ struct EventDetailView: View {
             }) {
                 buyButtonLabel(
                     title: "Buy Ticket",
-                    subtitle: Helpers.formatCurrency(price),
+                    subtitle: Helpers.formatCurrency(totalPrice),
                     showsSpinner: false
                 )
             }
             .buttonStyle(PlainButtonStyle())
-        } else if let errorMessage = checkoutViewModel.paymentSheetErrorMessage {
+        } else if checkoutViewModel.paymentSheetErrorMessage != nil {
             Button(action: {
-                checkoutViewModel.preparePaymentSheet(amount: price)
+                checkoutViewModel.preparePaymentSheet(amount: totalPrice, eventId: eventId)
             }) {
                 buyButtonLabel(
                     title: "Tap to retry payment",
-                    subtitle: showErrorDetail ? errorMessage : Helpers.formatCurrency(price),
+                    subtitle: Helpers.formatCurrency(totalPrice),
                     showsSpinner: false
                 )
             }
@@ -697,7 +692,7 @@ struct EventDetailView: View {
         } else {
             buyButtonLabel(
                 title: "Preparing payment...",
-                subtitle: Helpers.formatCurrency(price),
+                subtitle: Helpers.formatCurrency(totalPrice),
                 showsSpinner: checkoutViewModel.isPreparingPaymentSheet
             )
         }
@@ -762,30 +757,6 @@ struct EventDetailView: View {
         )
     }
 
-    private var paymentDebugInfoView: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Payment Debug")
-                .font(.sioreeCaption)
-                .foregroundColor(.sioreeWhite.opacity(0.8))
-            Text("Backend status: \(checkoutViewModel.lastBackendStatus ?? "n/a")")
-            Text("Backend body: \(truncatedDebugBody(checkoutViewModel.lastBackendBody ?? "n/a"))")
-            Text("Stripe error: \(checkoutViewModel.lastStripeError ?? "n/a")")
-        }
-        .font(.sioreeCaption)
-        .foregroundColor(.sioreeWhite.opacity(0.8))
-        .padding(Theme.Spacing.s)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .fill(Color.sioreeCharcoal.opacity(0.2))
-        )
-    }
-
-    private func truncatedDebugBody(_ body: String, limit: Int = 500) -> String {
-        guard body.count > limit else { return body }
-        return String(body.prefix(limit)) + "..."
-    }
-
     private func shouldShowBottomAction(for event: Event) -> Bool {
         if isHost {
             return false
@@ -797,7 +768,7 @@ struct EventDetailView: View {
             return true
         }
         if let price = event.ticketPrice, price > 0 {
-            return checkoutViewModel.paymentSheet != nil
+            return false
         }
         return true
     }

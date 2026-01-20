@@ -172,7 +172,7 @@ struct HostMyEventsView: View {
                     }
                 }
                 .padding(.trailing, Theme.Spacing.l)
-                .padding(.bottom, 100)
+                .padding(.bottom, 40)
             }
             .sheet(isPresented: $showNewEvent) {
                 EventCreateView(onEventCreated: { event in

@@ -17,8 +17,8 @@ struct EventCreateView: View {
     
     @State private var title = ""
     @State private var description = ""
-    @State private var date = Date()
-    @State private var time = Date()
+    @State private var startDate = Date()
+    @State private var endDate = Date()
     @State private var location = ""
     @State private var showMap = false
     @State private var selectedCoordinate: CLLocationCoordinate2D?
@@ -29,6 +29,10 @@ struct EventCreateView: View {
     @State private var isPublishing = false
     @State private var showError = false
     @State private var errorMessage = ""
+    @State private var showStripeSetupPrompt = false
+    @State private var stripeSetupMessage = ""
+    private let bankService = BankAccountService.shared
+    @Environment(\.openURL) private var openURL
     
     @State private var coverPhoto: UIImage?
     @State private var showPhotoPicker = false
@@ -143,12 +147,12 @@ struct EventCreateView: View {
                     }
                     
                     Section {
-                        DatePicker("Date", selection: $date, displayedComponents: .date)
+                        DatePicker("Start", selection: $startDate, displayedComponents: [.date, .hourAndMinute])
                             .foregroundColor(.sioreeWhite)
-                        DatePicker("Time", selection: $time, displayedComponents: .hourAndMinute)
+                        DatePicker("End", selection: $endDate, displayedComponents: [.date, .hourAndMinute])
                             .foregroundColor(.sioreeWhite)
                     } header: {
-                        Text("Date & Time")
+                        Text("Dates")
                             .foregroundColor(.sioreeWhite)
                     }
                     
@@ -298,6 +302,14 @@ struct EventCreateView: View {
             } message: {
                 Text(errorMessage.isEmpty ? "Please try again." : errorMessage)
             }
+            .alert("Stripe Setup Required", isPresented: $showStripeSetupPrompt) {
+                Button("Complete Stripe Setup") {
+                    startStripeOnboarding()
+                }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text(stripeSetupMessage.isEmpty ? "Complete Stripe setup to publish ticketed events." : stripeSetupMessage)
+            }
             .sheet(isPresented: $showCategoryPicker) {
                 CategoryPickerView(selectedCategory: $selectedCategory)
             }
@@ -344,8 +356,8 @@ struct EventCreateView: View {
         viewModel.createEvent(
             title: title,
             description: description,
-            date: date,
-            time: time,
+            date: startDate,
+            time: startDate,
             location: location,
             images: images,
             ticketPrice: ticketPrice,
@@ -362,11 +374,39 @@ struct EventCreateView: View {
                     onEventCreated?(event)
                     dismiss()
                 case .failure(let error):
-                    errorMessage = error.localizedDescription
-                    showError = true
+                    let message = error.localizedDescription
+                    if shouldPromptStripeSetup(message) {
+                        stripeSetupMessage = "Complete Stripe setup to publish ticketed events."
+                        showStripeSetupPrompt = true
+                    } else {
+                        errorMessage = message
+                        showError = true
+                    }
                 }
             }
         }
+    }
+
+    private func shouldPromptStripeSetup(_ message: String) -> Bool {
+        message.contains("STRIPE_ONBOARDING_REQUIRED") ||
+        message.contains("STRIPE_CONNECT_URLS_NOT_CONFIGURED")
+    }
+
+    private func startStripeOnboarding() {
+        bankService.createOnboardingLink()
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    if case .failure(let error) = completion {
+                        errorMessage = error.localizedDescription
+                        showError = true
+                    }
+                },
+                receiveValue: { url in
+                    openURL(url)
+                }
+            )
+            .store(in: &cancellables)
     }
     
     private var backgroundGlow: some View {

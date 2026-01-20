@@ -176,6 +176,10 @@ This is an automated message. Please do not reply to this email.
       `,
     };
 
+    console.log("📧 Sending welcome email:", {
+      to: email,
+      subject: mailOptions.subject
+    });
     const info = await transporter.sendMail(mailOptions);
     console.log("✅ Welcome email sent to:", email);
     console.log("📧 Message ID:", info.messageId);
@@ -297,6 +301,10 @@ This is an automated message. Please do not reply to this email.
       `,
     };
 
+    console.log("📧 Sending login email:", {
+      to: email,
+      subject: mailOptions.subject
+    });
     const info = await transporter.sendMail(mailOptions);
     console.log("✅ Login email sent to:", email);
     console.log("📧 Message ID:", info.messageId);

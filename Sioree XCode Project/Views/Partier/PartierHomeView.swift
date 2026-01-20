@@ -1,7 +1,7 @@
 //
 //  PartierHomeView.swift
 //  Sioree
-//
+//hello
 //  Created by Sioree Team
 //
 //
@@ -24,6 +24,14 @@ struct PartierHomeView: View {
     @State private var showCodeEntry = false
     @State private var selectedEvent: Event?
     @State private var enteredCodes: [String: String] = [:] // eventId -> entered code
+    @State private var cardFrames: [String: CGRect] = [:]
+    @State private var animatingEvent: Event?
+    @State private var animationPosition: CGPoint = .zero
+    @State private var animationScale: CGFloat = 1.0
+    @State private var animationOpacity: Double = 0.0
+    @State private var animationSize: CGSize = .zero
+    @State private var favoritesTargetPoint: CGPoint = .zero
+    @State private var hiddenEventIds: Set<String> = []
     
     var body: some View {
         NavigationStack {
@@ -40,6 +48,27 @@ struct PartierHomeView: View {
                         tabContent
                     }
                     .padding(.vertical, Theme.Spacing.l)
+                }
+                
+                GeometryReader { proxy in
+                    Color.clear
+                        .onAppear {
+                            updateFavoritesTargetPoint(in: proxy)
+                        }
+                        .onChange(of: proxy.size) { _ in
+                            updateFavoritesTargetPoint(in: proxy)
+                        }
+                    
+                    if let animatingEvent {
+                        EventSaveThumbnail(event: animatingEvent, accent: .sioreeIcyBlue)
+                            .frame(width: animationSize.width, height: animationSize.height)
+                            .scaleEffect(animationScale)
+                            .opacity(animationOpacity)
+                            .position(animationPosition)
+                            .shadow(color: Color.sioreeIcyBlue.opacity(0.4), radius: 18, x: 0, y: 10)
+                            .allowsHitTesting(false)
+                            .zIndex(10)
+                    }
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -305,8 +334,9 @@ private extension PartierHomeView {
                             if let savedCode = enteredCodes[event.id], savedCode == requiredCode {
                                 NavigationLink(destination: EventDetailView(eventId: event.id)) {
                                     NightEventCard(event: event, accent: .sioreeIcyBlue) {
-                                        viewModel.toggleSaveEvent(event)
+                                        handleSave(event)
                                     }
+                                    .anchorPreference(key: EventCardFrameKey.self, value: .bounds) { [event.id: $0] }
                                 }
                                 .buttonStyle(.plain)
                             } else {
@@ -315,20 +345,34 @@ private extension PartierHomeView {
                                     showCodeEntry = true
                                 }) {
                                     NightEventCard(event: event, accent: .sioreeIcyBlue) {
-                                        viewModel.toggleSaveEvent(event)
+                                        handleSave(event)
                                     }
+                                    .anchorPreference(key: EventCardFrameKey.self, value: .bounds) { [event.id: $0] }
                                 }
                                 .buttonStyle(.plain)
                             }
                         } else {
                             NavigationLink(destination: EventDetailView(eventId: event.id)) {
                                 NightEventCard(event: event, accent: .sioreeIcyBlue) {
-                                    viewModel.toggleSaveEvent(event)
+                                    handleSave(event)
                                 }
+                                .anchorPreference(key: EventCardFrameKey.self, value: .bounds) { [event.id: $0] }
                             }
                             .buttonStyle(.plain)
                         }
                     }
+                }
+            }
+            .overlayPreferenceValue(EventCardFrameKey.self) { anchors in
+                GeometryReader { proxy in
+                    let frames = anchors.mapValues { proxy[$0] }
+                    Color.clear
+                        .onAppear {
+                            cardFrames = frames
+                        }
+                        .onChange(of: frames) { newFrames in
+                            cardFrames = newFrames
+                        }
                 }
             }
             .padding(.horizontal, listPadding)
@@ -357,14 +401,14 @@ private extension PartierHomeView {
         if !viewModel.featuredEvents.isEmpty {
             return viewModel.featuredEvents
         }
-        return viewModel.hasLoaded ? viewModel.generatePlaceholderFeaturedEvents() : []
+        return []
     }
     
     var nearbyDataSource: [Event] {
         if !filteredNearbyEvents.isEmpty {
             return filteredNearbyEvents
         }
-        return viewModel.hasLoaded ? viewModel.generatePlaceholderNearbyEvents() : []
+        return []
     }
     
     var currentLocationLabel: String {
@@ -381,7 +425,7 @@ private extension PartierHomeView {
         let events: [Event] = baseEvents.filter { event in
             matchesCategory(event) && matchesSearch(event)
         }
-        return events
+        return events.filter { !hiddenEventIds.contains($0.id) }
     }
     
     var baseEvents: [Event] {
@@ -407,7 +451,82 @@ private extension PartierHomeView {
             return titleMatch || locationMatch || lookingMatch
         }
     }
+    
+    func handleSave(_ event: Event) {
+        if !event.isSaved {
+            startSaveAnimation(for: event)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+                hiddenEventIds.insert(event.id)
+            }
+        }
+        viewModel.toggleSaveEvent(event)
+    }
+    
+    func startSaveAnimation(for event: Event) {
+        guard let frame = cardFrames[event.id] else { return }
+        let targetPoint = favoritesTargetPoint == .zero
+        ? CGPoint(x: UIScreen.main.bounds.width * 0.7, y: UIScreen.main.bounds.height - 100)
+        : favoritesTargetPoint
+        
+        animatingEvent = event
+        animationSize = frame.size
+        animationPosition = CGPoint(x: frame.midX, y: frame.midY)
+        animationScale = 1.0
+        animationOpacity = 1.0
+        
+        withAnimation(.spring(response: 0.55, dampingFraction: 0.82)) {
+            animationPosition = targetPoint
+            animationScale = 0.1
+            animationOpacity = 0.0
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            animatingEvent = nil
+        }
+    }
+    
+    func updateFavoritesTargetPoint(in geometry: GeometryProxy) {
+        let tabWidth = geometry.size.width / 5
+        let x = tabWidth * 3.5
+        let y = geometry.size.height - geometry.safeAreaInsets.bottom - 30
+        favoritesTargetPoint = CGPoint(x: x, y: y)
+    }
 
+}
+
+private struct EventCardFrameKey: PreferenceKey {
+    static var defaultValue: [String: Anchor<CGRect>] = [:]
+    
+    static func reduce(value: inout [String: Anchor<CGRect>], nextValue: () -> [String: Anchor<CGRect>]) {
+        value.merge(nextValue(), uniquingKeysWith: { $1 })
+    }
+}
+
+private struct EventSaveThumbnail: View {
+    let event: Event
+    let accent: Color
+    
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [Color.sioreeCharcoal.opacity(0.8), Color.sioreeBlack.opacity(0.95)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                )
+            
+            Image(systemName: "heart.fill")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundColor(accent)
+                .shadow(color: accent.opacity(0.6), radius: 8, x: 0, y: 4)
+        }
+    }
 }
 
 private struct GlassChip: View {
@@ -459,7 +578,15 @@ private struct GlassChip: View {
 struct NightEventCard: View {
     let event: Event
     let accent: Color
+    let actionLabel: String
     var onSave: (() -> Void)? = nil
+    
+    init(event: Event, accent: Color, actionLabel: String = "Get Now", onSave: (() -> Void)? = nil) {
+        self.event = event
+        self.accent = accent
+        self.actionLabel = actionLabel
+        self.onSave = onSave
+    }
     
     private var priceText: String {
         if let price = event.ticketPrice, price > 0 {
@@ -551,7 +678,7 @@ struct NightEventCard: View {
                                 .padding(.leading, Theme.Spacing.xs)
                         }
                         Spacer()
-                        Text("Get Now")
+                        Text(actionLabel)
                             .font(.sioreeBody)
                             .foregroundColor(.sioreeWhite)
                             .padding(.horizontal, Theme.Spacing.xxl * 1.6)

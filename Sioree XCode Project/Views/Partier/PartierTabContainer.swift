@@ -80,24 +80,50 @@ struct PartierTabContainer: View {
                 hideTabBar = false
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .switchToTicketsTab)) { _ in
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
+                selectedTab = .tickets
+                hideTabBar = false
+            }
+        }
     }
 }
 
 private struct PartierBottomBar: View {
     @Binding var selectedTab: PartierTab
     @Namespace private var tabAnimation
+    @State private var indicatorStretch: CGFloat = 1.0
     
     var body: some View {
         GeometryReader { geometry in
             let safeAreaBottom = geometry.safeAreaInsets.bottom
             let totalHeight = 70 + safeAreaBottom
-            let tabWidth = (geometry.size.width - 76 - Theme.Spacing.s * 2) / 4 // Account for center notch and padding
+            let tabWidth = geometry.size.width / 5
             
             ZStack(alignment: .bottom) {
+                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.05),
+                                Color.sioreeBlack.opacity(0.55)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 26, style: .continuous)
+                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                    )
+                    .shadow(color: Color.sioreeIcyBlue.opacity(0.22), radius: 16, x: 0, y: 10)
+                    .frame(width: geometry.size.width, height: totalHeight)
+                
                 HStack(spacing: 0) {
                     tabButton(.tickets, tabWidth: tabWidth, geometry: geometry)
                     tabButton(.inbox, tabWidth: tabWidth, geometry: geometry)
-                    Spacer().frame(width: 76) // space for center notch
+                    tabButton(.home, tabWidth: tabWidth, geometry: geometry)
                     tabButton(.favorites, tabWidth: tabWidth, geometry: geometry)
                     tabButton(.profile, tabWidth: tabWidth, geometry: geometry)
                 }
@@ -105,38 +131,18 @@ private struct PartierBottomBar: View {
                 .padding(.top, Theme.Spacing.xs)
                 .padding(.bottom, safeAreaBottom + Theme.Spacing.xs)
                 .frame(width: geometry.size.width, height: totalHeight)
-                .background(
-                    NotchedBarShape()
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    Color.white.opacity(0.05),
-                                    Color.sioreeBlack.opacity(0.55)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .background(.ultraThinMaterial, in: NotchedBarShape())
-                        .overlay(
-                            NotchedBarShape()
-                                .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                        )
-                        .shadow(color: Color.sioreeIcyBlue.opacity(0.22), radius: 16, x: 0, y: 10)
-                )
-                .overlay(alignment: .top) {
-                    // Sliding indicator for regular tabs - overlay on top of HStack
-                    if selectedTab != .home {
-                        slidingIndicator(tabWidth: tabWidth, geometry: geometry)
-                            .offset(y: 8) // Positioned lower, centered on icons
-                    }
-                }
-                
-                homeButton
-                    .offset(y: -14 - safeAreaBottom)
             }
             .frame(width: geometry.size.width, height: totalHeight)
             .frame(maxHeight: .infinity, alignment: .bottom)
+            .onChange(of: selectedTab) { newValue in
+                indicatorStretch = 1.0
+                withAnimation(.spring(response: 0.25, dampingFraction: 0.55, blendDuration: 0.1)) {
+                    indicatorStretch = 1.22
+                }
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.75, blendDuration: 0.2).delay(0.08)) {
+                    indicatorStretch = 1.0
+                }
+            }
         }
         .ignoresSafeArea(edges: .bottom)
     }
@@ -150,10 +156,17 @@ private struct PartierBottomBar: View {
             }
         } label: {
             ZStack {
-                Image(systemName: tab.systemIcon)
-                    .font(.system(size: isSelected ? 20 : 18, weight: isSelected ? .bold : .semibold))
-                    .foregroundColor(.sioreeWhite.opacity(isSelected ? 1.0 : 0.65))
-                    .scaleEffect(isSelected ? 1.15 : 1.0)
+                if isSelected {
+                    Circle()
+                        .fill(Color.sioreeWhite)
+                        .frame(width: 44, height: 44)
+                        .shadow(color: Color.white.opacity(0.2), radius: 10, x: 0, y: 4)
+                }
+                
+                Image(systemName: iconName(for: tab, isSelected: isSelected))
+                    .font(.system(size: isSelected ? 22 : 21, weight: isSelected ? .bold : .semibold))
+                    .foregroundColor(isSelected ? .sioreeBlack : .sioreeWhite.opacity(0.7))
+                    .scaleEffect(isSelected ? 1.05 : 1.0)
             }
             .frame(width: tabWidth, height: 40)
             .contentShape(Rectangle())
@@ -161,102 +174,19 @@ private struct PartierBottomBar: View {
         .buttonStyle(.plain)
     }
     
-    private func slidingIndicator(tabWidth: CGFloat, geometry: GeometryProxy) -> some View {
-        let padding = Theme.Spacing.s
-        let centerNotchWidth: CGFloat = 76
-        
-        // Calculate the center X position of the selected tab
-        let centerX: CGFloat = {
-            switch selectedTab {
-            case .tickets:
-                // First tab on left: padding + tabWidth/2
-                return padding + tabWidth / 2
-            case .inbox:
-                // Second tab on left: padding + tabWidth + tabWidth/2
-                return padding + tabWidth * 1.5
-            case .favorites:
-                // First tab on right: padding + 2*tabWidth + centerNotch + tabWidth/2
-                return padding + tabWidth * 2 + centerNotchWidth + tabWidth / 2
-            case .profile:
-                // Second tab on right: padding + 2*tabWidth + centerNotch + tabWidth + tabWidth/2
-                return padding + tabWidth * 2 + centerNotchWidth + tabWidth * 1.5
-            case .home:
-                return geometry.size.width / 2 // Center (shouldn't be used, but fallback)
-            }
-        }()
-        
-        return RoundedRectangle(cornerRadius: 28)
-            .fill(
-                LinearGradient(
-                    colors: [
-                        Color.sioreeIcyBlue.opacity(0.06),
-                        Color.sioreeIcyBlue.opacity(0.04)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .background(
-                RoundedRectangle(cornerRadius: 28)
-                    .fill(.ultraThinMaterial.opacity(0.3))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 28)
-                    .stroke(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.2),
-                                Color.white.opacity(0.1)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 0.5
-                    )
-            )
-            .frame(width: 56, height: 48)
-            .offset(x: centerX - geometry.size.width / 2) // Offset from center of screen
-            .matchedGeometryEffect(id: "tabIndicator", in: tabAnimation)
-    }
-    
-    private var homeButton: some View {
-        let isSelected = selectedTab == .home
-        
-        return Button {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
-                selectedTab = .home
-            }
-        } label: {
-            Image(systemName: PartierTab.home.systemIcon)
-                .font(.system(size: isSelected ? 24 : 22, weight: .bold))
-                .foregroundColor(.sioreeWhite)
-                .scaleEffect(isSelected ? 1.1 : 1.0)
-                .frame(width: 64, height: 64)
-                .background(
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    Color.sioreeIcyBlue.opacity(isSelected ? 1.0 : 0.9),
-                                    Color.sioreeIcyBlue.opacity(isSelected ? 0.95 : 1.0)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                )
-                .shadow(
-                    color: Color.sioreeIcyBlue.opacity(isSelected ? 0.55 : 0.45),
-                    radius: isSelected ? 28 : 24,
-                    x: 0,
-                    y: isSelected ? 12 : 10
-                )
-                .overlay(
-                    Circle()
-                        .stroke(Color.white.opacity(isSelected ? 0.3 : 0.25), lineWidth: isSelected ? 1.5 : 1)
-                )
+    private func iconName(for tab: PartierTab, isSelected: Bool) -> String {
+        switch tab {
+        case .tickets:
+            return isSelected ? "ticket.fill" : "ticket"
+        case .inbox:
+            return isSelected ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right"
+        case .home:
+            return isSelected ? "house.fill" : "house"
+        case .favorites:
+            return isSelected ? "heart.fill" : "heart"
+        case .profile:
+            return isSelected ? "person.fill" : "person"
         }
-        .buttonStyle(.plain)
     }
 }
 
@@ -358,6 +288,16 @@ class FavoritesViewModel: ObservableObject {
     private let networkService = NetworkService()
     private var cancellables = Set<AnyCancellable>()
     
+    init() {
+        NotificationCenter.default.publisher(for: .favoriteStatusChanged)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                guard let event = notification.userInfo?["event"] as? Event else { return }
+                self?.applyFavoriteChange(event)
+            }
+            .store(in: &cancellables)
+    }
+    
     func loadFavorites() {
         isLoading = true
         errorMessage = nil
@@ -417,6 +357,18 @@ class FavoritesViewModel: ObservableObject {
             )
             .store(in: &cancellables)
     }
+    
+    private func applyFavoriteChange(_ event: Event) {
+        if event.isSaved {
+            if let index = events.firstIndex(where: { $0.id == event.id }) {
+                events[index] = event
+            } else {
+                events.insert(event, at: 0)
+            }
+        } else if let index = events.firstIndex(where: { $0.id == event.id }) {
+            events.remove(at: index)
+        }
+    }
 }
 
 private struct FavoritesPlaceholderView: View {
@@ -427,12 +379,16 @@ private struct FavoritesPlaceholderView: View {
 
 // Custom shape with center notch for the floating home button
 private struct NotchedBarShape: Shape {
+    var notchCenterX: CGFloat? = nil
+    
     func path(in rect: CGRect) -> Path {
         let notchRadius: CGFloat = 36
         let notchWidth: CGFloat = notchRadius * 2 + 16
         let cornerRadius: CGFloat = 26
         let notchDepth: CGFloat = 20
-        let notchCenterX = rect.midX
+        let minCenterX = rect.minX + notchWidth / 2
+        let maxCenterX = rect.maxX - notchWidth / 2
+        let notchCenterX = min(max(notchCenterX ?? rect.midX, minCenterX), maxCenterX)
         
         var path = Path()
         
@@ -485,5 +441,7 @@ extension Notification.Name {
     static let hideTabBar = Notification.Name("HideTabBar")
     static let showTabBar = Notification.Name("ShowTabBar")
     static let refreshInbox = Notification.Name("RefreshInbox")
+    static let favoriteStatusChanged = Notification.Name("FavoriteStatusChanged")
+    static let switchToTicketsTab = Notification.Name("SwitchToTicketsTab")
 }
 

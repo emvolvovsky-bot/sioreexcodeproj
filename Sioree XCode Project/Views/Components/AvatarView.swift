@@ -26,26 +26,47 @@ struct AvatarView: View {
     let size: AvatarSize
     var showBorder: Bool = false
     
+    private let borderWidth: CGFloat = 2
+    private let borderGap: CGFloat = 2
+    
+    private var innerDiameter: CGFloat {
+        guard showBorder else { return size.dimension }
+        return size.dimension - borderWidth - (borderGap * 2)
+    }
+    
+    private var ringDiameter: CGFloat {
+        size.dimension - borderWidth
+    }
+    
     var body: some View {
-        Group {
-            if let imageURL = imageURL, !imageURL.isEmpty {
-                AsyncImage(url: URL(string: imageURL)) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
+        ZStack {
+            Circle()
+                .stroke(showBorder ? Color.sioreeIcyBlue : Color.clear, lineWidth: borderWidth)
+                .frame(width: size.dimension, height: size.dimension)
+            
+            if showBorder {
+                Circle()
+                    .fill(Color.sioreeBlack)
+                    .frame(width: ringDiameter, height: ringDiameter)
+            }
+            
+            Group {
+                if let imageURL = imageURL, !imageURL.isEmpty {
+                    AsyncImage(url: URL(string: imageURL)) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        placeholderView
+                    }
+                } else {
                     placeholderView
                 }
-            } else {
-                placeholderView
             }
+            .frame(width: innerDiameter, height: innerDiameter)
+            .clipShape(Circle())
         }
         .frame(width: size.dimension, height: size.dimension)
-        .clipShape(Circle())
-        .overlay(
-            Circle()
-                .stroke(showBorder ? Color.sioreeIcyBlue : Color.clear, lineWidth: 2)
-        )
     }
     
     private var placeholderView: some View {

@@ -184,7 +184,7 @@ class CheckoutViewModel: ObservableObject {
         return nil
     }
 
-    func preparePaymentSheet(amount: Double, retryCount: Int = 0) {
+    func preparePaymentSheet(amount: Double, eventId: String? = nil, retryCount: Int = 0) {
         let maxRetries = 2
         if retryCount == 0 {
             DispatchQueue.main.async {
@@ -199,7 +199,7 @@ class CheckoutViewModel: ObservableObject {
         urlsToTry.append(contentsOf: onrenderFallbackCheckoutUrls)
         urlsToTry.append(contentsOf: hardcodedFallbackCheckoutUrls)
         urlsToTry = dedupe(urlsToTry)
-        requestPaymentSheet(amount: amount, urlsToTry: urlsToTry, retryCount: retryCount, maxRetries: maxRetries)
+        requestPaymentSheet(amount: amount, eventId: eventId, urlsToTry: urlsToTry, retryCount: retryCount, maxRetries: maxRetries)
     }
 
     private func dedupe(_ urls: [URL]) -> [URL] {
@@ -209,6 +209,7 @@ class CheckoutViewModel: ObservableObject {
 
     private func requestPaymentSheet(
         amount: Double,
+        eventId: String?,
         urlsToTry: [URL],
         retryCount: Int,
         maxRetries: Int
@@ -226,6 +227,9 @@ class CheckoutViewModel: ObservableObject {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         var payload: [String: Any] = ["amount": amount, "currency": "usd"]
+        if let eventId = eventId, !eventId.isEmpty {
+            payload["eventId"] = eventId
+        }
         if let mode = preferredStripeMode() {
             payload["mode"] = mode
         }
@@ -242,7 +246,7 @@ class CheckoutViewModel: ObservableObject {
                 if retryCount < maxRetries {
                     let delay = Double(retryCount + 1)
                     DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                        self.preparePaymentSheet(amount: amount, retryCount: retryCount + 1)
+                        self.preparePaymentSheet(amount: amount, eventId: eventId, retryCount: retryCount + 1)
                     }
                 } else {
                     DispatchQueue.main.async {
@@ -293,6 +297,7 @@ class CheckoutViewModel: ObservableObject {
                 if httpResponse.statusCode == 404, urlsToTry.count > 1 {
                     self?.requestPaymentSheet(
                         amount: amount,
+                        eventId: eventId,
                         urlsToTry: Array(urlsToTry.dropFirst()),
                         retryCount: retryCount,
                         maxRetries: maxRetries

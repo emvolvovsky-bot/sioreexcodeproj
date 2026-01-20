@@ -28,7 +28,7 @@ struct CheckoutView: View {
             }
         }
         .onAppear {
-            model.preparePaymentSheet(amount: sampleAmount)
+            model.preparePaymentSheet(amount: sampleAmount, eventId: nil)
         }
     }
 

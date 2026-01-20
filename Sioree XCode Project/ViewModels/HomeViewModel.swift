@@ -140,17 +140,13 @@ class HomeViewModel: ObservableObject {
                 receiveCompletion: { [weak self] completion in
                     if case .failure(let error) = completion {
                         print("❌ Failed to load featured events: \(error)")
-                        // Use placeholder featured events if API fails
-                        self?.allFeaturedEvents = self?.generatePlaceholderFeaturedEvents() ?? []
+                        self?.allFeaturedEvents = []
                         self?.applyDateFilter()
                     }
                 },
                 receiveValue: { [weak self] events in
-                    // Always show placeholders for preview (can be removed later)
-                    // Use real data if available, otherwise use placeholders
                     if events.isEmpty {
-                        self?.allFeaturedEvents = self?.generatePlaceholderFeaturedEvents() ?? []
-                        print("📋 Using \(self?.allFeaturedEvents.count ?? 0) placeholder featured events")
+                        self?.allFeaturedEvents = []
                     } else {
                         // Merge server events with locally created events that might not be in server response yet
                         let serverEventIds = Set(events.map { $0.id })
@@ -160,11 +156,6 @@ class HomeViewModel: ObservableObject {
                     }
                     // Apply date filter if one is selected
                     self?.applyDateFilter()
-                    // Ensure nearby events also get placeholders if empty
-                    if self?.nearbyEvents.isEmpty == true && self?.hasLoaded == false {
-                        self?.allNearbyEvents = self?.generatePlaceholderNearbyEvents() ?? []
-                        self?.applyDateFilter()
-                    }
                 }
             )
             .store(in: &cancellables)
@@ -192,8 +183,7 @@ class HomeViewModel: ObservableObject {
                 self?.isLoading = false
                 if case .failure(let error) = completion {
                     self?.errorMessage = error.localizedDescription
-                    // Use placeholder nearby events if API fails
-                    self?.allNearbyEvents = self?.generatePlaceholderNearbyEvents() ?? []
+                    self?.allNearbyEvents = []
                     self?.applyDateFilter()
                     self?.hasLoaded = true
                 } else {
@@ -201,11 +191,8 @@ class HomeViewModel: ObservableObject {
                 }
             },
             receiveValue: { [weak self] events in
-                // Always show placeholders for preview (can be removed later)
-                // Use real data if available, otherwise use placeholders
                 if events.isEmpty {
-                    self?.allNearbyEvents = self?.generatePlaceholderNearbyEvents() ?? []
-                    print("📋 Using \(self?.allNearbyEvents.count ?? 0) placeholder nearby events")
+                    self?.allNearbyEvents = []
                 } else {
                     // Merge server events with locally created events that might not be in server response yet
                     let serverEventIds = Set(events.map { $0.id })
@@ -450,6 +437,8 @@ class HomeViewModel: ObservableObject {
             allNearbyEvents[index].isSaved.toggle()
         }
         
+        notifyFavoriteChange(for: event.id)
+        
         networkService.toggleEventSave(eventId: event.id)
             .receive(on: DispatchQueue.main)
             .sink(
@@ -466,11 +455,25 @@ class HomeViewModel: ObservableObject {
                         } else if let index = self?.allNearbyEvents.firstIndex(where: { $0.id == event.id }) {
                             self?.allNearbyEvents[index].isSaved.toggle()
                         }
+                        self?.notifyFavoriteChange(for: event.id)
                     }
                 },
                 receiveValue: { _ in }
             )
             .store(in: &cancellables)
+    }
+    
+    private func notifyFavoriteChange(for eventId: String) {
+        if let updated = featuredEvents.first(where: { $0.id == eventId }) ??
+            nearbyEvents.first(where: { $0.id == eventId }) ??
+            allFeaturedEvents.first(where: { $0.id == eventId }) ??
+            allNearbyEvents.first(where: { $0.id == eventId }) {
+            NotificationCenter.default.post(
+                name: .favoriteStatusChanged,
+                object: nil,
+                userInfo: ["event": updated]
+            )
+        }
     }
     
 }

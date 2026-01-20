@@ -17,16 +17,14 @@ struct Constants {
         var baseURL: String {
             switch self {
             case .development:
-                // RUN_LOCAL overrides all other settings when present.
+                // Default to local backend for dev; set RUN_LOCAL=false to force Render.
                 if let runLocalValue = ProcessInfo.processInfo.environment["RUN_LOCAL"]?.lowercased() {
-                    if runLocalValue == "true" {
-                        return "http://localhost:4000"
-                    } else {
+                    if runLocalValue == "false" {
                         return "https://sioree-api.onrender.com"
                     }
+                    return "http://localhost:4000"
                 }
-                return "https://sioree-api.onrender.com"
-                // Render deployment as backup
+                return "http://localhost:4000"
             case .production:
                 return "https://sioree-api.onrender.com"  // Render deployment
             }
@@ -51,6 +49,7 @@ struct Constants {
         static let userId = "userId"
         static let userType = "userType"
         static let followingIdsCache = "followingIdsCache"
+        static let needsBankConnect = "needsBankConnect"
     }
     
     // MARK: - App Info

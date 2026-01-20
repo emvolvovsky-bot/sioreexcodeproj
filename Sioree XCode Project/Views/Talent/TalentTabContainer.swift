@@ -1,58 +1,44 @@
 //
-//  HostTabContainer.swift
+//  TalentTabContainer.swift
 //  Sioree
 //
 //  Created by Sioree Team
 //
-//
+
 import SwiftUI
 
-enum HostTab: CaseIterable {
-    case notifications
+enum TalentTab: CaseIterable {
+    case gigs
+    case map
     case inbox
-    case home
-    case talentRequests
     case profile
-    
-    var systemIcon: String {
-        switch self {
-        case .notifications: return "bell.fill"
-        case .inbox: return "bubble.left.and.bubble.right"
-        case .home: return "house.fill"
-        case .talentRequests: return "person.2.circle.fill"
-        case .profile: return "person"
-        }
-    }
 }
 
-struct HostTabContainer: View {
+struct TalentTabContainer: View {
     @EnvironmentObject var authViewModel: AuthViewModel
-    @State private var selectedTab: HostTab = .home
-    @StateObject private var homeViewModel = HomeViewModel()
-    @StateObject private var sharedLocationManager = LocationManager()
+    @EnvironmentObject var talentViewModel: TalentViewModel
+    @State private var selectedTab: TalentTab = .gigs
     @State private var hideTabBar = false
     
     var body: some View {
         ZStack(alignment: .bottom) {
             TabView(selection: $selectedTab) {
-                HostNotificationsView()
-                    .tag(HostTab.notifications)
+                TalentGigsView()
+                    .environmentObject(talentViewModel)
+                    .tag(TalentTab.gigs)
                     .tabItem { EmptyView() }
                 
-                HostInboxView()
-                    .tag(HostTab.inbox)
+                TalentEventsMapView()
+                    .tag(TalentTab.map)
                     .tabItem { EmptyView() }
                 
-                HostMyEventsView()
-                    .tag(HostTab.home)
+                TalentInboxView()
+                    .tag(TalentTab.inbox)
                     .tabItem { EmptyView() }
                 
-                HostTalentRequestsView()
-                    .tag(HostTab.talentRequests)
-                    .tabItem { EmptyView() }
-                
-                HostProfileView()
-                    .tag(HostTab.profile)
+                TalentProfileView()
+                    .environmentObject(authViewModel)
+                    .tag(TalentTab.profile)
                     .tabItem { EmptyView() }
             }
             .ignoresSafeArea(.keyboard)
@@ -60,7 +46,7 @@ struct HostTabContainer: View {
             .toolbar(.hidden, for: .tabBar)
             
             if !hideTabBar {
-                HostBottomBar(selectedTab: $selectedTab)
+                TalentBottomBar(selectedTab: $selectedTab)
             }
         }
         .onAppear {
@@ -82,14 +68,14 @@ struct HostTabContainer: View {
     }
 }
 
-private struct HostBottomBar: View {
-    @Binding var selectedTab: HostTab
+private struct TalentBottomBar: View {
+    @Binding var selectedTab: TalentTab
     
     var body: some View {
         GeometryReader { geometry in
             let safeAreaBottom = geometry.safeAreaInsets.bottom
             let totalHeight = 70 + safeAreaBottom
-            let tabWidth = geometry.size.width / 5
+            let tabWidth = geometry.size.width / 4
             
             ZStack(alignment: .bottom) {
                 RoundedRectangle(cornerRadius: 26, style: .continuous)
@@ -112,10 +98,9 @@ private struct HostBottomBar: View {
                     .frame(width: geometry.size.width, height: totalHeight)
                 
                 HStack(spacing: 0) {
-                    tabButton(.notifications, tabWidth: tabWidth, geometry: geometry)
+                    tabButton(.gigs, tabWidth: tabWidth, geometry: geometry)
+                    tabButton(.map, tabWidth: tabWidth, geometry: geometry)
                     tabButton(.inbox, tabWidth: tabWidth, geometry: geometry)
-                    tabButton(.home, tabWidth: tabWidth, geometry: geometry)
-                    tabButton(.talentRequests, tabWidth: tabWidth, geometry: geometry)
                     tabButton(.profile, tabWidth: tabWidth, geometry: geometry)
                 }
                 .padding(.horizontal, Theme.Spacing.s)
@@ -129,7 +114,7 @@ private struct HostBottomBar: View {
         .ignoresSafeArea(edges: .bottom)
     }
     
-    private func tabButton(_ tab: HostTab, tabWidth: CGFloat, geometry: GeometryProxy) -> some View {
+    private func tabButton(_ tab: TalentTab, tabWidth: CGFloat, geometry: GeometryProxy) -> some View {
         let isSelected = selectedTab == tab
         
         return Button {
@@ -156,16 +141,14 @@ private struct HostBottomBar: View {
         .buttonStyle(.plain)
     }
     
-    private func iconName(for tab: HostTab, isSelected: Bool) -> String {
+    private func iconName(for tab: TalentTab, isSelected: Bool) -> String {
         switch tab {
-        case .notifications:
-            return isSelected ? "bell.fill" : "bell"
+        case .gigs:
+            return isSelected ? "briefcase.fill" : "briefcase"
+        case .map:
+            return isSelected ? "map.fill" : "map"
         case .inbox:
             return isSelected ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right"
-        case .home:
-            return isSelected ? "house.fill" : "house"
-        case .talentRequests:
-            return isSelected ? "person.2.circle.fill" : "person.2.circle"
         case .profile:
             return isSelected ? "person.fill" : "person"
         }
@@ -173,7 +156,7 @@ private struct HostBottomBar: View {
 }
 
 #Preview {
-    HostTabContainer()
+    TalentTabContainer()
         .environmentObject(AuthViewModel())
+        .environmentObject(TalentViewModel())
 }
-

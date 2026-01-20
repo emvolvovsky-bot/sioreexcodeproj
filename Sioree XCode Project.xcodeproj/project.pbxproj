@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		678466E92F1D04DB00BB3D71 /* StripePaymentSheet in Frameworks */ = {isa = PBXBuildFile; productRef = 778164B72F194A7300F86A1C /* StripePaymentSheet */; };
 		778164AE2F194A7300F86A1C /* Stripe in Frameworks */ = {isa = PBXBuildFile; productRef = 778164AD2F194A7300F86A1C /* Stripe */; };
 		778164B02F194A7300F86A1C /* StripeApplePay in Frameworks */ = {isa = PBXBuildFile; productRef = 778164AF2F194A7300F86A1C /* StripeApplePay */; };
 		778164B22F194A7300F86A1C /* StripeCardScan in Frameworks */ = {isa = PBXBuildFile; productRef = 778164B12F194A7300F86A1C /* StripeCardScan */; };
@@ -73,6 +74,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				678466E92F1D04DB00BB3D71 /* StripePaymentSheet in Frameworks */,
 				778164B62F194A7300F86A1C /* StripeFinancialConnections in Frameworks */,
 				778164B22F194A7300F86A1C /* StripeCardScan in Frameworks */,
 				778164AE2F194A7300F86A1C /* Stripe in Frameworks */,
@@ -436,6 +438,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "Sioree XCode Project/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Soirée";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -468,6 +471,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "Sioree XCode Project/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Soirée";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

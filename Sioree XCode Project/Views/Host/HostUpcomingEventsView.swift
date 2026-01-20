@@ -12,7 +12,6 @@ struct HostUpcomingEventsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var profileViewModel = ProfileViewModel(userId: nil, useAttendedEvents: false)
     @State private var showNewEvent = false
-    @State private var selectedEventForDetail: Event? = nil
     
     private var upcomingEvents: [Event] {
         profileViewModel.upcomingEvents
@@ -62,17 +61,13 @@ struct HostUpcomingEventsView: View {
                 } else if upcomingEvents.isEmpty {
                     emptyStateView
                 } else {
-                    ScrollView {
-                        let columns = Array(repeating: GridItem(.flexible(), spacing: Theme.Spacing.m), count: 2)
-                        
-                        LazyVGrid(columns: columns, spacing: Theme.Spacing.l) {
+                    ScrollView(showsIndicators: false) {
+                        LazyVStack(spacing: Theme.Spacing.m) {
                             ForEach(upcomingEvents) { event in
                                 NavigationLink(destination: EventDetailView(eventId: event.id, isTalentMapMode: false).environmentObject(authViewModel)) {
-                                    HostEventCardGrid(event: event) {
-                                        selectedEventForDetail = event
-                                    }
+                                    NightEventCard(event: event, accent: .sioreeIcyBlue, actionLabel: "Edit Details")
                                 }
-                                .buttonStyle(PlainButtonStyle())
+                                .buttonStyle(.plain)
                             }
                         }
                         .padding(.horizontal, Theme.Spacing.l)

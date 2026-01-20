@@ -96,22 +96,59 @@ const writeCsv = (rows) => {
   fs.writeFileSync(OUTPUT_FILE, [header, ...lines].join("\n"), "utf8");
 };
 
-const main = async () => {
+const exportOnce = async () => {
   const result = await db.query(query);
   writeCsv(result.rows);
   console.log(`✅ CSV exported: ${OUTPUT_FILE}`);
 };
 
-main()
-  .catch((error) => {
+const isWatchMode =
+  process.argv.includes("--watch") || process.env.CSV_WATCH === "true";
+const refreshSeconds = Number(process.env.CSV_REFRESH_SECONDS || 60);
+const refreshMs = Number.isFinite(refreshSeconds) && refreshSeconds > 0
+  ? refreshSeconds * 1000
+  : 60000;
+
+const shutdown = async () => {
+  try {
+    await db.pool.end();
+  } catch (error) {
+    console.error("❌ Failed to close DB pool:", error);
+  } finally {
+    process.exit(0);
+  }
+};
+
+const start = async () => {
+  try {
+    await exportOnce();
+  } catch (error) {
     console.error("❌ Failed to export CSV:", error);
-    process.exitCode = 1;
-  })
-  .finally(async () => {
-    try {
-      await db.pool.end();
-    } catch (error) {
-      console.error("❌ Failed to close DB pool:", error);
+    if (!isWatchMode) {
+      process.exitCode = 1;
+      await shutdown();
     }
-  });
+  }
+
+  if (!isWatchMode) {
+    await shutdown();
+    return;
+  }
+
+  console.log(`🔁 Refreshing every ${Math.round(refreshMs / 1000)}s`);
+  const interval = setInterval(() => {
+    exportOnce().catch((error) => {
+      console.error("❌ Failed to export CSV:", error);
+    });
+  }, refreshMs);
+
+  const handleExit = () => {
+    clearInterval(interval);
+    shutdown();
+  };
+  process.on("SIGINT", handleExit);
+  process.on("SIGTERM", handleExit);
+};
+
+start();
 

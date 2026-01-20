@@ -55,34 +55,47 @@ struct ProfileEditView: View {
                         // Profile Photo Section
                         VStack(spacing: Theme.Spacing.m) {
                             // Profile Photo Circle
+                            let outerSize: CGFloat = 120
+                            let borderWidth: CGFloat = 2
+                            let borderGap: CGFloat = 2
+                            let ringDiameter = outerSize - borderWidth
+                            let innerSize = ringDiameter - (borderGap * 2)
+                            
                             ZStack {
-                                if shouldRemovePhoto {
-                                    placeholderAvatar
-                                } else if let selectedImage = selectedImage {
-                                    Image(uiImage: selectedImage)
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fill)
-                                } else if let avatarURL = user?.avatar, !avatarURL.isEmpty {
-                                    AsyncImage(url: URL(string: avatarURL)) { phase in
-                                        switch phase {
-                                        case .success(let image):
-                                            image
-                                                .resizable()
-                                                .aspectRatio(contentMode: .fill)
-                                        default:
-                                            placeholderAvatar
-                                        }
-                                    }
-                                } else {
-                                    placeholderAvatar
-                                }
-                            }
-                            .frame(width: 120, height: 120)
-                            .clipShape(Circle())
-                            .overlay(
                                 Circle()
-                                    .stroke(Color.sioreeLightGrey.opacity(0.3), lineWidth: 2)
-                            )
+                                    .stroke(Color.sioreeLightGrey.opacity(0.3), lineWidth: borderWidth)
+                                    .frame(width: outerSize, height: outerSize)
+                                
+                                Circle()
+                                    .fill(Color.sioreeBlack)
+                                    .frame(width: ringDiameter, height: ringDiameter)
+                                
+                                Group {
+                                    if shouldRemovePhoto {
+                                        placeholderAvatar
+                                    } else if let selectedImage = selectedImage {
+                                        Image(uiImage: selectedImage)
+                                            .resizable()
+                                            .aspectRatio(contentMode: .fill)
+                                    } else if let avatarURL = user?.avatar, !avatarURL.isEmpty {
+                                        AsyncImage(url: URL(string: avatarURL)) { phase in
+                                            switch phase {
+                                            case .success(let image):
+                                                image
+                                                    .resizable()
+                                                    .aspectRatio(contentMode: .fill)
+                                            default:
+                                                placeholderAvatar
+                                            }
+                                        }
+                                    } else {
+                                        placeholderAvatar
+                                    }
+                                }
+                                .frame(width: innerSize, height: innerSize)
+                                .clipShape(Circle())
+                            }
+                            .frame(width: outerSize, height: outerSize)
                             
                             // Edit Picture Button
                             Button(action: {

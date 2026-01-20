@@ -505,6 +505,8 @@ extension Array {
 struct EventHighlightCircle: View {
     let event: Event
     private let circleSize: CGFloat = 100
+    private let borderGap: CGFloat = 3
+    private var innerSize: CGFloat { circleSize - (borderGap * 2) }
     
     var body: some View {
         ZStack {
@@ -538,6 +540,10 @@ struct EventHighlightCircle: View {
                         .frame(width: circleSize + 6, height: circleSize + 6)
                 )
             
+            Circle()
+                .fill(Color.sioreeBlack)
+                .frame(width: circleSize, height: circleSize)
+            
             // Inner circle with cover photo ONLY, no fallback
             if let coverPhoto = event.images.first, !coverPhoto.isEmpty, let url = URL(string: coverPhoto) {
                 AsyncImage(url: url) { phase in
@@ -545,7 +551,7 @@ struct EventHighlightCircle: View {
                     case .empty:
                         Circle()
                             .fill(Color.sioreeLightGrey.opacity(0.05))
-                            .frame(width: circleSize, height: circleSize)
+                            .frame(width: innerSize, height: innerSize)
                             .overlay(
                                 ProgressView()
                                     .tint(.sioreeIcyBlue)
@@ -555,29 +561,29 @@ struct EventHighlightCircle: View {
                         image
                             .resizable()
                             .scaledToFill()
-                            .frame(width: circleSize, height: circleSize)
+                            .frame(width: innerSize, height: innerSize)
                             .clipShape(Circle())
                             .opacity(1.0) // Explicitly full opacity - no dimming
                             .overlay(
                                 Circle()
                                     .stroke(Color.sioreeBlack, lineWidth: 2)
-                                    .frame(width: circleSize, height: circleSize)
+                                    .frame(width: innerSize, height: innerSize)
                             )
                     case .failure:
                         Circle()
                             .fill(Color.sioreeLightGrey.opacity(0.1))
-                            .frame(width: circleSize, height: circleSize)
+                            .frame(width: innerSize, height: innerSize)
                     @unknown default:
                         Circle()
                             .fill(Color.sioreeLightGrey.opacity(0.1))
-                            .frame(width: circleSize, height: circleSize)
+                            .frame(width: innerSize, height: innerSize)
                     }
                 }
             } else {
                 // No cover photo - show empty space (bug state)
                 Circle()
                     .fill(Color.sioreeLightGrey.opacity(0.1))
-                    .frame(width: circleSize, height: circleSize)
+                    .frame(width: innerSize, height: innerSize)
             }
         }
         .shadow(color: Color.sioreeIcyBlue.opacity(0.3), radius: 8, x: 0, y: 4)

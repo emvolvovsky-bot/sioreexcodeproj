@@ -8,6 +8,8 @@
     "dev": "node src/index.js",
     "start": "node src/index.js",
     "migrate": "node migrations/migrate.js",
+    "export:users-events": "node scripts/export-users-events-csv.js",
+    "export:users-events:watch": "CSV_WATCH=true node scripts/export-users-events-csv.js",
     "pm2:start": "pm2 start ecosystem.config.js",
     "pm2:stop": "pm2 stop sioree-backend",
     "pm2:restart": "pm2 restart sioree-backend",
@@ -31,7 +33,7 @@
     "nodemailer": "^7.0.11",
     "pg": "^8.11.1",
     "resend": "^3.5.0",
-    "sharp": "^0.33.3",
+    "sharp": "^0.33.5",
     "socket.io": "^4.8.1",
     "stripe": "^20.0.0"
   },

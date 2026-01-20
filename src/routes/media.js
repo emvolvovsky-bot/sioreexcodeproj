@@ -72,6 +72,9 @@ const singleUploadHandler = async (req, res) => {
     if (!userId) {
       return res.status(401).json({ error: "Unauthorized" });
     }
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/a26ee9fb-9a8b-4833-8f7f-13ddff24387c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'src/routes/media.js:75',message:'media upload received file',data:{hasFile:!!req.file,fileSize:req.file?.size||0,mimeType:req.file?.mimetype||null},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H4'})}).catch(()=>{});
+    // #endregion agent log
 
     const key = buildFileName(userId, req.file.originalname || "upload.jpg");
 
@@ -81,6 +84,9 @@ const singleUploadHandler = async (req, res) => {
       body: req.file.buffer,
       contentType: req.file.mimetype,
     });
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/a26ee9fb-9a8b-4833-8f7f-13ddff24387c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'src/routes/media.js:84',message:'media upload S3 result',data:{hasLocation:!!uploadResult?.Location,locationPrefix:uploadResult?.Location?uploadResult.Location.slice(0,40):null},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H4'})}).catch(()=>{});
+    // #endregion agent log
 
     // Generate thumbnail for images
     let thumbnailUrl = null;

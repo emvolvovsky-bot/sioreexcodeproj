@@ -116,6 +116,9 @@ class AuthViewModel: ObservableObject {
                     StorageService.shared.saveAuthToken(response.token)
                     StorageService.shared.saveUserId(response.user.id)
                     StorageService.shared.saveUserType(response.user.userType)
+                    if response.user.userType == .host || response.user.userType == .talent {
+                        StorageService.shared.setNeedsBankConnect(true)
+                    }
                     self?.currentUser = response.user
                     self?.isAuthenticated = true
                     print("✅ isAuthenticated set to: \(self?.isAuthenticated ?? false)")

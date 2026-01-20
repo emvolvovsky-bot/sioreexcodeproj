@@ -19,6 +19,7 @@ import followRoutes from "./routes/follow.js";
 import mediaRoutes from "./routes/media.js";
 import earningsRoutes from "./routes/earnings.js";
 import stripeRoutes from "./routes/stripe.js";
+import bankRoutes from "./routes/bank.js";
 
 dotenv.config();
 
@@ -52,6 +53,7 @@ app.use("/api", followRoutes);
 app.use("/api/media", mediaRoutes);
 app.use("/api/earnings", earningsRoutes);
 app.use("/api/stripe", stripeRoutes);
+app.use("/api/bank", bankRoutes);
 
 app.get("/health", (req, res) => {
   res.json({ status: "Backend running", database: "Supabase Postgres" });
@@ -67,10 +69,13 @@ io.on("connection", socket => {
 });
 
 const PORT = process.env.PORT || 4000;
-// Listen on all interfaces (0.0.0.0) so phone can connect via IP address
-server.listen(PORT, "0.0.0.0", () => {
+const HOST = process.env.HOST || "127.0.0.1";
+// Default to localhost to avoid EPERM in restricted environments.
+// Set HOST=0.0.0.0 explicitly if you need LAN access.
+server.listen(PORT, HOST, () => {
   console.log(`✅ Server running on port ${PORT}`);
-  console.log(`🌐 Accessible at: http://localhost:${PORT} or http://192.168.1.200:${PORT}`);
+  console.log(`🌐 Host: ${HOST}`);
+  console.log(`🌐 Accessible at: http://${HOST}:${PORT}`);
 });
 
 export { app, server };

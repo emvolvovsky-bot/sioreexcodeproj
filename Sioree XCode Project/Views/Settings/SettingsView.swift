@@ -22,6 +22,11 @@ struct SettingsView: View {
     @State private var showDeleteAccountAlert = false
     @State private var isDeletingAccount = false
     
+    private var showsWithdrawals: Bool {
+        guard let userType = authViewModel.currentUser?.userType else { return false }
+        return userType == .host || userType == .talent
+    }
+    
     var body: some View {
         NavigationStack {
             ZStack {
@@ -50,6 +55,17 @@ struct SettingsView: View {
                     } header: {
                         Text("Account")
                             .foregroundColor(.sioreeLightGrey)
+                    }
+                    
+                    if showsWithdrawals {
+                        Section {
+                            NavigationLink(destination: WithdrawalsView()) {
+                                SettingsRow(icon: "arrow.up.circle", title: "Withdraw", color: .sioreeIcyBlue)
+                            }
+                        } header: {
+                            Text("Withdraw")
+                                .foregroundColor(.sioreeLightGrey)
+                        }
                     }
                     
                     // Notifications Section

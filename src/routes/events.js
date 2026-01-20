@@ -1,6 +1,8 @@
 import express from "express";
 import { db } from "../db/database.js";
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
+import stripe from "../lib/stripe.js";
 
 const router = express.Router();
 const FEATURED_FOLLOWER_THRESHOLD = 500;
@@ -55,6 +57,80 @@ const normalizeRoles = (value) => {
   return [value.toString()].filter(Boolean);
 };
 
+const normalizeImages = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.filter(Boolean);
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map(item => item.trim())
+      .filter(item => item.length > 0);
+  }
+  return [value.toString()].filter(Boolean);
+};
+
+const verifyJwtToken = (token) => {
+  const secrets = [];
+  if (process.env.JWT_SECRET) secrets.push(process.env.JWT_SECRET);
+  if (process.env.JWT_SECRET_FALLBACK) secrets.push(process.env.JWT_SECRET_FALLBACK);
+  if (!process.env.JWT_SECRET || process.env.NODE_ENV !== "production") {
+    secrets.push("your-secret-key-change-in-production");
+  }
+
+  let lastError;
+  for (const secret of secrets) {
+    try {
+      return jwt.verify(token, secret);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error("Invalid token");
+};
+
+const resolveStripeClient = (req) => {
+  const mode = req.body?.mode || req.query?.mode || req.headers["x-stripe-mode"];
+  if (typeof stripe.getStripeClient === "function") {
+    return stripe.getStripeClient(mode);
+  }
+  return stripe;
+};
+
+const ensureHostStripeReady = async (req, userId) => {
+  const stripeClient = resolveStripeClient(req);
+  if (!stripeClient || !stripeClient.accounts) {
+    return { ok: false, status: 500, message: "Stripe is not configured" };
+  }
+
+  const userResult = await db.query(
+    "SELECT stripe_account_id FROM users WHERE id = $1",
+    [userId]
+  );
+  const stripeAccountId = userResult.rows[0]?.stripe_account_id;
+  if (!stripeAccountId) {
+    return { ok: false, status: 400, message: "Connect Stripe before creating ticketed events." };
+  }
+
+  const account = await stripeClient.accounts.retrieve(stripeAccountId);
+  const capabilities = account?.capabilities || {};
+  const hasTransferCapability = ["transfers", "legacy_payments", "crypto_transfers"].some(
+    capability => capabilities[capability] === "active"
+  );
+  const hasOutstandingRequirements = Array.isArray(account?.requirements?.currently_due) &&
+    account.requirements.currently_due.length > 0;
+
+  if (!hasTransferCapability || hasOutstandingRequirements) {
+    return {
+      ok: false,
+      status: 400,
+      message: "Complete Stripe onboarding to enable payouts before hosting ticketed events."
+    };
+  }
+
+  return { ok: true, stripeAccountId };
+};
+
 const buildLookingForLabel = (roles = [], legacy = null, notes = null) => {
   const cleanRoles = normalizeRoles(roles);
   const parts = [];
@@ -71,6 +147,65 @@ const buildLookingForLabel = (roles = [], legacy = null, notes = null) => {
 
   const label = parts.join(" — ").trim();
   return label.length > 0 ? label : null;
+};
+
+let eventsLookingForColumnsEnsured = false;
+let eventsLookingForColumnsPromise = null;
+const ensureEventsLookingForColumns = async () => {
+  if (eventsLookingForColumnsEnsured) return;
+  if (eventsLookingForColumnsPromise) return eventsLookingForColumnsPromise;
+
+  eventsLookingForColumnsPromise = (async () => {
+    await db.query(
+      `ALTER TABLE events
+       ADD COLUMN IF NOT EXISTS looking_for_roles TEXT[] DEFAULT '{}'::text[]`
+    );
+    await db.query(
+      `ALTER TABLE events
+       ADD COLUMN IF NOT EXISTS looking_for_notes TEXT`
+    );
+    await db.query(
+      `ALTER TABLE events
+       ADD COLUMN IF NOT EXISTS looking_for_talent_type TEXT`
+    );
+    await db.query(
+      `ALTER TABLE events
+       ADD COLUMN IF NOT EXISTS talent_ids TEXT[] DEFAULT '{}'::text[]`
+    );
+    await db.query(
+      `ALTER TABLE events
+       ADD COLUMN IF NOT EXISTS images TEXT[] DEFAULT '{}'::text[]`
+    );
+    await db.query(
+      `UPDATE events
+       SET looking_for_roles = ARRAY[looking_for_talent_type]
+       WHERE looking_for_talent_type IS NOT NULL
+         AND looking_for_talent_type <> ''
+         AND (looking_for_roles IS NULL OR array_length(looking_for_roles, 1) = 0)`
+    );
+    await db.query(
+      `UPDATE events
+       SET looking_for_roles = '{}'::text[]
+       WHERE looking_for_roles IS NULL`
+    );
+    await db.query(
+      `UPDATE events
+       SET talent_ids = '{}'::text[]
+       WHERE talent_ids IS NULL`
+    );
+    await db.query(
+      `UPDATE events
+       SET images = '{}'::text[]
+       WHERE images IS NULL`
+    );
+
+    eventsLookingForColumnsEnsured = true;
+  })().catch((err) => {
+    eventsLookingForColumnsPromise = null;
+    throw err;
+  });
+
+  return eventsLookingForColumnsPromise;
 };
 
 // GET FEATURED EVENTS (hosts/talent with 500+ followers)
@@ -95,7 +230,6 @@ router.get("/featured", async (req, res) => {
       [FEATURED_FOLLOWER_THRESHOLD]
     );
 
-    const crypto = require('crypto');
     const events = result.rows.map(row => {
       const eventId = row.id.toString();
       const qrCode = row.qr_code || `sioree:event:${eventId}:${crypto.randomUUID()}`;
@@ -112,7 +246,7 @@ router.get("/featured", async (req, res) => {
         hostAvatar: row.host_avatar || null,
         date: toISOString(row.event_date),
         location: row.location || "",
-        images: [],
+        images: normalizeImages(row.images),
         ticketPrice: row.ticket_price && parseFloat(row.ticket_price) > 0 ? parseFloat(row.ticket_price) : null,
         capacity: row.capacity || null,
         attendees: row.attendee_count || 0,
@@ -165,7 +299,6 @@ router.get("/nearby", async (req, res) => {
     );
 
     // Format events to match iOS expectations
-    const crypto = require('crypto');
     const events = result.rows.map(row => {
       const eventId = row.id.toString();
       const qrCode = row.qr_code || `sioree:event:${eventId}:${crypto.randomUUID()}`;
@@ -181,7 +314,7 @@ router.get("/nearby", async (req, res) => {
         hostAvatar: row.host_avatar || null,
         date: toISOString(row.event_date),
         location: row.location || "",
-        images: [], // Will be populated from media_uploads table if needed
+        images: normalizeImages(row.images),
         ticketPrice: row.ticket_price && parseFloat(row.ticket_price) > 0 ? parseFloat(row.ticket_price) : null,
         capacity: row.capacity || null,
         attendees: row.attendee_count || 0,
@@ -207,6 +340,7 @@ router.get("/nearby", async (req, res) => {
 // GET EVENTS LOOKING FOR TALENT (by role list or single role)
 router.get("/looking-for/:role?", async (req, res) => {
   try {
+    await ensureEventsLookingForColumns();
     const roleParam = req.params.role;
     const roleQuery = req.query.roles;
 
@@ -259,7 +393,6 @@ router.get("/looking-for/:role?", async (req, res) => {
       params
     );
 
-    const crypto = require('crypto');
     const events = result.rows.map(row => {
       const eventId = row.id.toString();
       const qrCode = row.qr_code || `sioree:event:${eventId}:${crypto.randomUUID()}`;
@@ -275,7 +408,7 @@ router.get("/looking-for/:role?", async (req, res) => {
         hostAvatar: row.host_avatar || null,
         date: toISOString(row.event_date),
         location: row.location || "",
-        images: [],
+        images: normalizeImages(row.images),
         ticketPrice: row.ticket_price && parseFloat(row.ticket_price) > 0 ? parseFloat(row.ticket_price) : null,
         capacity: row.capacity || null,
         attendees: row.attendee_count || 0,
@@ -301,12 +434,13 @@ router.get("/looking-for/:role?", async (req, res) => {
 // CREATE EVENT
 router.post("/", async (req, res) => {
   try {
+    await ensureEventsLookingForColumns();
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer "))
       return res.status(401).json({ error: "Unauthorized" });
 
     const token = authHeader.substring(7);
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key-change-in-production");
+    const decoded = verifyJwtToken(token);
 
     // Support both event_date and date fields
     const body = req.body || {};
@@ -314,6 +448,9 @@ router.post("/", async (req, res) => {
     const { title, description, location, ticket_price, ticketPrice, capacity } = body;
     // Extract images array from request body - support both camelCase and snake_case
     const images = body.images || body.cover_photo || (body.coverPhoto ? [body.coverPhoto] : []) || [];
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/a26ee9fb-9a8b-4833-8f7f-13ddff24387c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'src/routes/events.js:328',message:'createEvent received body',data:{hasImages:Array.isArray(body.images),imagesCount:Array.isArray(body.images)?body.images.length:0,hasCoverPhoto:!!body.coverPhoto,hasCoverPhotoSnake:!!body.cover_photo,eventDate:!!eventDate},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion agent log
     const lookingForTalentType =
       body.lookingForTalentType ||
       body.looking_for_talent_type ||
@@ -341,6 +478,9 @@ router.post("/", async (req, res) => {
     console.log("   Ticket Price:", ticket_price || ticketPrice);
     console.log("   Capacity:", capacity);
     console.log("   Images:", images);
+    console.log("   Cover Photo (body.cover_photo):", body.cover_photo);
+    console.log("   Cover Photo (body.coverPhoto):", body.coverPhoto);
+    console.log("   Cover Photo (first image):", Array.isArray(images) ? images[0] : images);
     console.log("   Looking For Talent Type:", lookingForTalentType);
     console.log("   Looking For Roles:", lookingForRoles);
     console.log("   Looking For Notes:", lookingForNotes);
@@ -388,8 +528,18 @@ router.post("/", async (req, res) => {
     
     console.log("💰 Ticket price received:", ticketPriceField, "→ parsed:", ticketPriceValue, "→ DB:", dbTicketPrice);
 
+    if (dbTicketPrice > 0) {
+      const stripeCheck = await ensureHostStripeReady(req, decoded.userId);
+      if (!stripeCheck.ok) {
+        return res.status(stripeCheck.status).json({ error: stripeCheck.message });
+      }
+    }
+
     // Ensure images is an array and save to database
     const imagesArray = Array.isArray(images) ? images : (images ? [images] : []);
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/a26ee9fb-9a8b-4833-8f7f-13ddff24387c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'src/routes/events.js:407',message:'createEvent images normalized',data:{imagesType:typeof images,imagesArrayCount:imagesArray.length,firstImage:imagesArray[0]||null},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H2'})}).catch(()=>{});
+    // #endregion agent log
     
     const result = await db.query(
       `INSERT INTO events (creator_id, title, description, location, event_date, ticket_price, capacity, talent_ids, looking_for_talent_type, looking_for_roles, looking_for_notes, images)
@@ -412,6 +562,9 @@ router.post("/", async (req, res) => {
     );
 
     const eventRow = result.rows[0];
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/a26ee9fb-9a8b-4833-8f7f-13ddff24387c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'src/routes/events.js:429',message:'createEvent db row images',data:{dbImagesPresent:Array.isArray(eventRow?.images),dbImagesCount:Array.isArray(eventRow?.images)?eventRow.images.length:0},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H3'})}).catch(()=>{});
+    // #endregion agent log
     
     // Get host info
     const hostResult = await db.query(
@@ -422,7 +575,6 @@ router.post("/", async (req, res) => {
     const qualifiesFeatured = isFeaturedByFollowers(host);
 
     // Generate unique QR code for the event
-    const crypto = require('crypto');
     const eventId = eventRow.id.toString();
     const qrCode = `sioree:event:${eventId}:${crypto.randomUUID()}`;
     const eventLookingForRoles = normalizeRoles(eventRow?.looking_for_roles || lookingForRoles);
@@ -441,8 +593,10 @@ router.post("/", async (req, res) => {
     await db.query(`UPDATE events SET is_featured = $1 WHERE id = $2`, [qualifiesFeatured, eventId]);
 
     // Get images from database result or use the ones from request body
-    const savedImages = eventRow.images || imagesArray;
-    const finalImages = Array.isArray(savedImages) ? savedImages : (savedImages ? [savedImages] : []);
+    const finalImages = normalizeImages(eventRow.images || imagesArray);
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/a26ee9fb-9a8b-4833-8f7f-13ddff24387c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'src/routes/events.js:459',message:'createEvent final images',data:{finalCount:finalImages.length,firstFinal:finalImages[0]||null},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H3'})}).catch(()=>{});
+    // #endregion agent log
     
     const event = {
       id: eventId,
@@ -512,7 +666,6 @@ router.get("/", async (req, res) => {
       [FEATURED_FOLLOWER_THRESHOLD]
     );
 
-    const crypto = require('crypto');
     const events = result.rows.map(row => {
       const eventId = row.id.toString();
       const qrCode = row.qr_code || `sioree:event:${eventId}:${crypto.randomUUID()}`;
@@ -528,7 +681,7 @@ router.get("/", async (req, res) => {
         hostAvatar: row.host_avatar || null,
         date: toISOString(row.event_date),
         location: row.location || "",
-        images: [],
+        images: normalizeImages(row.images),
         ticketPrice: row.ticket_price && parseFloat(row.ticket_price) > 0 ? parseFloat(row.ticket_price) : null,
         capacity: row.capacity || null,
         attendees: row.attendee_count || 0,
@@ -557,12 +710,79 @@ function getUserIdFromToken(req) {
   if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
   const token = authHeader.substring(7);
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key-change-in-production");
+    const decoded = verifyJwtToken(token);
     return decoded.userId;
   } catch (err) {
     return null;
   }
 }
+
+// GET EVENTS USER IS ATTENDING (upcoming events)
+router.get("/attending/upcoming", async (req, res) => {
+  try {
+    const userId = getUserIdFromToken(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const result = await db.query(
+      `SELECT DISTINCT
+        e.*,
+        u.username as host_username,
+        u.name as host_name,
+        u.avatar as host_avatar,
+        u.follower_count,
+        u.user_type,
+        CASE
+          WHEN u.user_type IN ('host','talent') AND COALESCE(u.follower_count, 0) >= $2 THEN true
+          ELSE false
+        END as auto_featured
+      FROM events e
+      INNER JOIN event_attendees ea ON e.id = ea.event_id
+      LEFT JOIN users u ON e.creator_id = u.id
+      WHERE ea.user_id = $1
+        AND e.event_date > NOW()
+        AND COALESCE(e.status, 'published') <> 'cancelled'
+      ORDER BY e.event_date ASC`,
+      [userId, FEATURED_FOLLOWER_THRESHOLD]
+    );
+
+    const events = result.rows.map(row => {
+      const eventId = row.id.toString();
+      const qrCode = row.qr_code || `sioree:event:${eventId}:${crypto.randomUUID()}`;
+      const lookingForRoles = normalizeRoles(row.looking_for_roles);
+      const lookingForNotes = row.looking_for_notes || null;
+      const lookingForLabel = buildLookingForLabel(lookingForRoles, row.looking_for_talent_type, lookingForNotes);
+      return {
+        id: eventId,
+        title: row.title,
+        description: row.description || "",
+        hostId: row.creator_id?.toString() || "",
+        hostName: row.host_name || row.host_username || "Unknown Host",
+        hostAvatar: row.host_avatar || null,
+        date: toISOString(row.event_date),
+        location: row.location || "",
+        images: normalizeImages(row.images),
+        ticketPrice: row.ticket_price && parseFloat(row.ticket_price) > 0 ? parseFloat(row.ticket_price) : null,
+        capacity: row.capacity || null,
+        attendees: row.attendee_count || 0,
+        isLiked: false,
+        isSaved: false,
+        likes: row.likes || 0,
+        isFeatured: row.auto_featured || false,
+        isRSVPed: true,
+        qrCode: qrCode,
+        talentIds: normalizeTalentIds(row.talent_ids),
+        lookingForRoles,
+        lookingForNotes,
+        lookingForTalentType: lookingForLabel
+      };
+    });
+
+    res.json({ events });
+  } catch (err) {
+    console.error("Get attending events error:", err);
+    res.status(500).json({ error: "Failed to fetch attending events" });
+  }
+});
 
 // GET SINGLE EVENT
 router.get("/:id", async (req, res) => {
@@ -609,7 +829,6 @@ router.get("/:id", async (req, res) => {
       return res.status(404).json({ error: "Event not found" });
 
     const row = result.rows[0];
-    const crypto = require('crypto');
     const eventId = row.id.toString();
     // Generate QR code if not stored in DB (for backward compatibility)
     const qrCode = row.qr_code || `sioree:event:${eventId}:${crypto.randomUUID()}`;
@@ -626,7 +845,7 @@ router.get("/:id", async (req, res) => {
       hostAvatar: row.host_avatar || null,
       date: toISOString(row.event_date),
       location: row.location || "",
-      images: [],
+      images: normalizeImages(row.images),
       ticketPrice: row.ticket_price && parseFloat(row.ticket_price) > 0 ? parseFloat(row.ticket_price) : null,
       capacity: row.capacity || null,
       attendees: row.attendee_count || 0,
@@ -647,6 +866,60 @@ router.get("/:id", async (req, res) => {
   } catch (err) {
     console.error("Get event error:", err);
     res.status(500).json({ error: "Failed to fetch event" });
+  }
+});
+
+// GET recent signups for host's events (for host notifications)
+router.get("/host/recent-signups", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer "))
+      return res.status(401).json({ error: "Unauthorized" });
+
+    const token = authHeader.substring(7);
+    const decoded = verifyJwtToken(token);
+    const hostId = decoded.userId;
+
+    const result = await db.query(
+      `SELECT 
+        ea.id as signup_id,
+        ea.created_at as signed_up_at,
+        ea.event_id,
+        e.title as event_title,
+        e.event_date,
+        u.id as user_id,
+        u.name as user_name,
+        u.username as user_username,
+        u.avatar as user_avatar
+      FROM event_attendees ea
+      INNER JOIN events e ON ea.event_id = e.id
+      INNER JOIN users u ON ea.user_id = u.id
+      WHERE e.creator_id = $1
+        AND ea.created_at > NOW() - INTERVAL '24 hours'
+      ORDER BY ea.created_at DESC
+      LIMIT 50`,
+      [hostId]
+    );
+
+    const signups = result.rows.map(row => ({
+      id: row.signup_id.toString(),
+      signedUpAt: toISOString(row.signed_up_at),
+      eventId: row.event_id.toString(),
+      eventTitle: row.event_title,
+      eventDate: toISOString(row.event_date),
+      userId: row.user_id.toString(),
+      userName: row.user_name || row.user_username,
+      userUsername: row.user_username,
+      userAvatar: row.user_avatar || null
+    }));
+
+    res.json({ signups });
+  } catch (err) {
+    console.error("Get recent signups error:", err);
+    if (err.name === "JsonWebTokenError" || err.name === "TokenExpiredError") {
+      return res.status(401).json({ error: "Invalid or expired token" });
+    }
+    res.status(500).json({ error: "Failed to fetch recent signups" });
   }
 });
 
@@ -686,7 +959,7 @@ router.post("/:id/rsvp", async (req, res) => {
       return res.status(401).json({ error: "Unauthorized" });
 
     const token = authHeader.substring(7);
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key-change-in-production");
+    const decoded = verifyJwtToken(token);
     const userId = decoded.userId;
     const eventId = req.params.id;
 
@@ -727,7 +1000,7 @@ router.delete("/:id/rsvp", async (req, res) => {
       return res.status(401).json({ error: "Unauthorized" });
 
     const token = authHeader.substring(7);
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key-change-in-production");
+    const decoded = verifyJwtToken(token);
     const userId = decoded.userId;
     const eventId = req.params.id;
 
@@ -839,7 +1112,7 @@ router.post("/:id/cancel", async (req, res) => {
     }
 
     const token = authHeader.substring(7);
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key-change-in-production");
+    const decoded = verifyJwtToken(token);
     const eventId = req.params.id;
     const { reason } = req.body || {};
 

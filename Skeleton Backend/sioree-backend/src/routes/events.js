@@ -2,8 +2,12 @@ import express from "express";
 import { db } from "../db/database.js";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
+import stripe from "../lib/stripe.js";
 
 const router = express.Router();
+const STRIPE_ERRORS = {
+  onboardingRequired: "STRIPE_ONBOARDING_REQUIRED"
+};
 
 // Ensure promo schema exists if migrations lag in production
 let promoSchemaEnsured = false;
@@ -34,6 +38,19 @@ async function ensureEventPromoSchema() {
   }
 }
 
+let eventImagesColumnEnsured = false;
+async function ensureEventImagesColumn() {
+  if (eventImagesColumnEnsured) return true;
+  try {
+    await db.query(`ALTER TABLE events ADD COLUMN IF NOT EXISTS images TEXT[];`);
+    eventImagesColumnEnsured = true;
+    return true;
+  } catch (err) {
+    console.error("ensureEventImagesColumn error:", err);
+    return false;
+  }
+}
+
 // Helper function to safely convert date to ISO8601 string
 const toISOString = (dateValue) => {
   if (!dateValue) return new Date().toISOString();
@@ -48,6 +65,51 @@ const toISOString = (dateValue) => {
     console.error("Error converting date to ISO8601:", err, dateValue);
     return new Date().toISOString();
   }
+};
+
+const ensureHostStripeReady = async (userId) => {
+  if (!stripe || !stripe.accounts) {
+    return { ok: false, status: 500, message: "Stripe is not configured" };
+  }
+
+  const userResult = await db.query(
+    "SELECT stripe_account_id FROM users WHERE id = $1",
+    [userId]
+  );
+  const stripeAccountId = userResult.rows[0]?.stripe_account_id;
+  if (!stripeAccountId) {
+    return { ok: false, status: 400, message: "Connect Stripe before creating ticketed events." };
+  }
+
+  const account = await stripe.accounts.retrieve(stripeAccountId);
+  const capabilities = account?.capabilities || {};
+  const hasTransferCapability = ["transfers", "legacy_payments", "crypto_transfers"].some(
+    capability => capabilities[capability] === "active"
+  );
+  const hasOutstandingRequirements = Array.isArray(account?.requirements?.currently_due) &&
+    account.requirements.currently_due.length > 0;
+
+  if (!hasTransferCapability || hasOutstandingRequirements) {
+    return {
+      ok: false,
+      status: 400,
+      message: STRIPE_ERRORS.onboardingRequired
+    };
+  }
+
+  return { ok: true };
+};
+
+const normalizeImages = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.filter(Boolean);
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map(item => item.trim())
+      .filter(item => item.length > 0);
+  }
+  return [value.toString()].filter(Boolean);
 };
 
 // GET FEATURED EVENTS (promoted by brands)
@@ -98,7 +160,7 @@ router.get("/featured", async (req, res) => {
         hostAvatar: row.host_avatar || null,
         date: toISOString(row.event_date),
         location: row.location || "",
-        images: [],
+        images: normalizeImages(row.images),
         ticketPrice: row.ticket_price && parseFloat(row.ticket_price) > 0 ? parseFloat(row.ticket_price) : null,
         capacity: row.capacity || null,
         attendees: row.attendee_count || 0,
@@ -192,7 +254,7 @@ router.get("/nearby", async (req, res) => {
         hostAvatar: row.host_avatar || null,
         date: toISOString(row.event_date),
         location: row.location || "",
-        images: [], // Will be populated from media_uploads table if needed
+        images: normalizeImages(row.images),
         ticketPrice: row.ticket_price && parseFloat(row.ticket_price) > 0 ? parseFloat(row.ticket_price) : null,
         capacity: row.capacity || null,
         attendees: parseInt(row.attendee_count_actual) || 0, // Use actual count from event_attendees table
@@ -237,6 +299,8 @@ router.post("/", async (req, res) => {
       : Array.isArray(body.talent_ids)
         ? body.talent_ids
         : [];
+    const images = body.images || body.cover_photo || (body.coverPhoto ? [body.coverPhoto] : []) || [];
+    const imagesArray = normalizeImages(images);
     const { title, description, location, ticket_price, ticketPrice, capacity } = body;
     console.log("📥 Received event creation request:");
     console.log("   Title:", title);
@@ -246,6 +310,10 @@ router.post("/", async (req, res) => {
     console.log("   Ticket Price:", ticket_price || ticketPrice);
     console.log("   Capacity:", capacity);
     console.log("   Talent IDs:", talentIds);
+    console.log("   Images:", imagesArray);
+    console.log("   Cover Photo (body.cover_photo):", body.cover_photo);
+    console.log("   Cover Photo (body.coverPhoto):", body.coverPhoto);
+    console.log("   Cover Photo (first image):", Array.isArray(imagesArray) ? imagesArray[0] : imagesArray);
     console.log("   Looking For Talent Type:", lookingForTalentType);
 
     if (!title || !title.trim()) {
@@ -290,6 +358,13 @@ router.post("/", async (req, res) => {
     
     console.log("💰 Ticket price received:", ticketPriceField, "→ parsed:", ticketPriceValue, "→ DB:", dbTicketPrice);
 
+    if (dbTicketPrice > 0) {
+      const stripeCheck = await ensureHostStripeReady(decoded.userId);
+      if (!stripeCheck.ok) {
+        return res.status(stripeCheck.status).json({ error: stripeCheck.message });
+      }
+    }
+
     // Check if looking_for_talent_type column exists before including it in INSERT
     let columnExists = false;
     try {
@@ -304,24 +379,45 @@ router.post("/", async (req, res) => {
       // If we can't check, assume it doesn't exist to be safe
       columnExists = false;
     }
-    
-    let result;
+
+    const imagesColumnExists = await ensureEventImagesColumn();
+
+    const insertColumns = [
+      "creator_id",
+      "title",
+      "description",
+      "location",
+      "event_date",
+      "ticket_price",
+      "capacity"
+    ];
+    const insertValues = [
+      decoded.userId,
+      title,
+      description || null,
+      location || null,
+      eventDate,
+      dbTicketPrice,
+      capacity || null
+    ];
+
     if (columnExists) {
-      result = await db.query(
-        `INSERT INTO events (creator_id, title, description, location, event_date, ticket_price, capacity, looking_for_talent_type)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         RETURNING *`,
-        [decoded.userId, title, description || null, location || null, eventDate, dbTicketPrice, capacity || null, lookingForTalentType || null]
-      );
-    } else {
-      // Column doesn't exist, insert without it
-      result = await db.query(
-        `INSERT INTO events (creator_id, title, description, location, event_date, ticket_price, capacity)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING *`,
-        [decoded.userId, title, description || null, location || null, eventDate, dbTicketPrice, capacity || null]
-      );
+      insertColumns.push("looking_for_talent_type");
+      insertValues.push(lookingForTalentType || null);
     }
+
+    if (imagesColumnExists) {
+      insertColumns.push("images");
+      insertValues.push(imagesArray);
+    }
+
+    const placeholders = insertColumns.map((_, index) => `$${index + 1}`).join(", ");
+    const result = await db.query(
+      `INSERT INTO events (${insertColumns.join(", ")})
+       VALUES (${placeholders})
+       RETURNING *`,
+      insertValues
+    );
 
     const eventRow = result.rows[0];
     
@@ -408,7 +504,7 @@ router.post("/", async (req, res) => {
       hostAvatar: host.avatar || null,
       date: toISOString(eventRow.event_date),
       location: eventRow.location || "",
-      images: [],
+      images: normalizeImages(eventRow.images || imagesArray),
       ticketPrice: eventRow.ticket_price && parseFloat(eventRow.ticket_price) > 0 ? parseFloat(eventRow.ticket_price) : null,
       capacity: eventRow.capacity || null,
       attendees: 0,  // Maps to attendeeCount via CodingKeys
@@ -467,7 +563,7 @@ router.get("/", async (req, res) => {
         hostAvatar: row.host_avatar || null,
         date: toISOString(row.event_date),
         location: row.location || "",
-        images: [],
+        images: normalizeImages(row.images),
         ticketPrice: row.ticket_price && parseFloat(row.ticket_price) > 0 ? parseFloat(row.ticket_price) : null,
         capacity: row.capacity || null,
         attendees: row.attendee_count || 0,
@@ -564,7 +660,7 @@ router.get("/:id", async (req, res) => {
       hostAvatar: row.host_avatar || null,
       date: toISOString(row.event_date),
       location: row.location || "",
-      images: [],
+      images: normalizeImages(row.images),
       ticketPrice: row.ticket_price && parseFloat(row.ticket_price) > 0 ? parseFloat(row.ticket_price) : null,
       capacity: row.capacity || null,
       attendees: parseInt(row.attendee_count_actual) || 0, // Use actual count from event_attendees table
@@ -984,7 +1080,7 @@ router.get("/looking-for/:talentType", async (req, res) => {
         hostAvatar: row.host_avatar || null,
         date: toISOString(row.event_date),
         location: row.location || "",
-        images: [],
+        images: normalizeImages(row.images),
         ticketPrice: row.ticket_price && parseFloat(row.ticket_price) > 0 ? parseFloat(row.ticket_price) : null,
         capacity: row.capacity || null,
         attendees: row.attendee_count || 0,
@@ -1048,7 +1144,7 @@ router.get("/attending/upcoming", async (req, res) => {
         hostAvatar: row.host_avatar || null,
         date: toISOString(row.event_date),
         location: row.location || "",
-        images: [],
+        images: normalizeImages(row.images),
         ticketPrice: row.ticket_price && parseFloat(row.ticket_price) > 0 ? parseFloat(row.ticket_price) : null,
         capacity: row.capacity || null,
         attendees: row.attendee_count || 0,
@@ -1139,7 +1235,7 @@ router.get("/talent/upcoming", async (req, res) => {
         hostAvatar: row.host_avatar || null,
         date: toISOString(row.event_date),
         location: row.location || "",
-        images: [],
+        images: normalizeImages(row.images),
         ticketPrice: row.ticket_price && parseFloat(row.ticket_price) > 0 ? parseFloat(row.ticket_price) : null,
         capacity: row.capacity || null,
         attendees: parseInt(row.attendee_count) || 0,

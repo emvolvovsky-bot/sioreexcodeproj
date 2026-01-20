@@ -14,3 +14,19 @@ export function requireAuth(req, res, next) {
   }
 }
 
+export function getUserIdFromToken(req) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
+
+  const token = authHeader.substring(7);
+  try {
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET || "your-secret-key-change-in-production"
+    );
+    return decoded.userId;
+  } catch {
+    return null;
+  }
+}
+

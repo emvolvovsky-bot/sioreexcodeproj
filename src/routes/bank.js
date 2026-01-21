@@ -153,7 +153,8 @@ router.get("/onboarding-status", async (req, res) => {
       return res.json({
         isReady: false,
         needsOnboarding: true,
-        requirements: []
+        requirements: [],
+        status: "not_started"
       });
     }
 
@@ -162,15 +163,23 @@ router.get("/onboarding-status", async (req, res) => {
     const requirements = Array.isArray(account?.requirements?.currently_due)
       ? account.requirements.currently_due
       : [];
-    const isReady =
-      account?.payouts_enabled === true &&
-      capabilities.transfers === "active" &&
-      requirements.length === 0;
+    const payoutsEnabled = account?.payouts_enabled === true;
+    const transfersActive = capabilities.transfers === "active";
+    const isReady = payoutsEnabled && transfersActive && requirements.length === 0;
+    let status = "in_review";
+    if (requirements.length > 0) {
+      status = "more_info_needed";
+    } else if (!payoutsEnabled || !transfersActive) {
+      status = "in_review";
+    } else {
+      status = "verified";
+    }
 
     return res.json({
       isReady,
       needsOnboarding: !isReady,
-      requirements
+      requirements,
+      status
     });
   } catch (error) {
     console.error("Stripe onboarding status error:", error);

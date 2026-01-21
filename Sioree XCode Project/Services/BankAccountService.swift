@@ -30,6 +30,7 @@ struct BankConnectStatus: Codable {
     let isReady: Bool
     let needsOnboarding: Bool
     let requirements: [String]
+    let status: String?
 }
 
 struct BankAccountConnectRequest: Codable {

@@ -92,13 +92,35 @@ struct HostProfileView: View {
     }
 
     private var stripePayoutsCard: some View {
+        let status = connectStatus?.status
+        let statusText: String = {
+            switch status {
+            case "verified":
+                return "Verified"
+            case "in_review":
+                return "In review"
+            case "more_info_needed":
+                return "More information needed"
+            case "not_started":
+                return "Complete setup to receive payouts"
+            default:
+                return connectStatus?.isReady == true ? "Verified" : "Complete setup to receive payouts"
+            }
+        }()
+        let buttonLabel = status == "more_info_needed" ? "Provide info" : "Set up"
+        let isButtonDisabled =
+            isStartingOnboarding ||
+            status == "verified" ||
+            status == "in_review" ||
+            connectStatus?.isReady == true
+
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             HStack {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                     Text("Stripe payouts")
                         .font(.sioreeH4)
                         .foregroundColor(.sioreeWhite)
-                    Text(connectStatus?.isReady == true ? "Verified" : "Complete setup to receive payouts")
+                    Text(statusText)
                         .font(.sioreeCaption)
                         .foregroundColor(.sioreeLightGrey)
                 }
@@ -106,7 +128,7 @@ struct HostProfileView: View {
                 Button(action: {
                     startStripeOnboarding()
                 }) {
-                    Text(isStartingOnboarding ? "Starting..." : "Set up")
+                    Text(isStartingOnboarding ? "Starting..." : buttonLabel)
                         .font(.sioreeBodySmall)
                         .foregroundColor(.sioreeBlack)
                         .padding(.horizontal, Theme.Spacing.m)
@@ -114,7 +136,7 @@ struct HostProfileView: View {
                         .background(Color.sioreeIcyBlue)
                         .cornerRadius(Theme.CornerRadius.large)
                 }
-                .disabled(isStartingOnboarding || connectStatus?.isReady == true)
+                .disabled(isButtonDisabled)
             }
         }
         .padding(.horizontal, Theme.Spacing.m)

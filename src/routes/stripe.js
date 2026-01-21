@@ -95,10 +95,10 @@ router.post("/payment-sheet", async (req, res) => {
       );
       hostStripeAccountId = hostResult.rows[0]?.stripe_account_id;
       if (!hostStripeAccountId) {
-        return respondStripeError(res, 400, "Host Stripe account is not connected", {
-          type: "invalid_request_error",
-          param: "stripe_account_id"
-        });
+        console.warn(
+          "Stripe payment-sheet: host has no connected account, skipping transfer.",
+          { eventId, hostId: eventRow.creator_id }
+        );
       }
 
       totalAmount = ticketPrice * 1.05;

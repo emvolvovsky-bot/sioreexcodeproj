@@ -89,7 +89,7 @@ struct FeedView: View {
                     .transition(.opacity)
                 }
             }
-            .navigationTitle("Sioree")
+            .navigationTitle("Soirée")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {

@@ -234,7 +234,7 @@ struct EventDetailView: View {
 
                     // Only show host profile and message host button if user is not the host
                     if !isHost {
-                        NavigationLink(destination: UserProfileView(userId: event.hostId)) {
+                        NavigationLink(destination: InboxProfileView(userId: event.hostId)) {
                             HStack(spacing: Theme.Spacing.s) {
                                 AvatarView(imageURL: event.hostAvatar, size: .small)
                                 Text(event.hostName)
@@ -251,7 +251,7 @@ struct EventDetailView: View {
                         Divider()
 
                         // Message Host Button
-                        NavigationLink(destination: UserProfileView(userId: event.hostId)) {
+                        NavigationLink(destination: InboxProfileView(userId: event.hostId)) {
                             HStack {
                                 Image(systemName: "message.fill")
                                     .foregroundColor(.sioreeIcyBlue)

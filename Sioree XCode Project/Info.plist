@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Sioree</string>
+	<string>Soirée</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -23,15 +23,15 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Sioree needs access to your camera to take photos for events, scan QR codes for tickets, and verify attendees at events.</string>
+	<string>Soirée needs access to your camera to take photos for events, scan QR codes for tickets, and verify attendees at events.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Sioree uses your location to show nearby events and help you discover local nightlife.</string>
+	<string>Soirée uses your location to show nearby events and help you discover local nightlife.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Sioree uses your location to show nearby events and help you discover local nightlife.</string>
+	<string>Soirée uses your location to show nearby events and help you discover local nightlife.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Sioree needs access to your photo library to upload event images and profile photos.</string>
+	<string>Soirée needs access to your photo library to upload event images and profile photos.</string>
 	<key>NSUserNotificationsUsageDescription</key>
-	<string>Sioree sends notifications about events, bookings, and updates from hosts you follow.</string>
+	<string>Soirée sends notifications about events, bookings, and updates from hosts you follow.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

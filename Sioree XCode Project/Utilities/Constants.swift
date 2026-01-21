@@ -22,9 +22,9 @@ struct Constants {
                     if runLocalValue == "false" {
                         return "https://sioree-api.onrender.com"
                     }
-                    return "http://localhost:4000"
+                    return "http://127.0.0.1:4000"
                 }
-                return "http://localhost:4000"
+                return "http://127.0.0.1:4000"
             case .production:
                 return "https://sioree-api.onrender.com"  // Render deployment
             }
@@ -34,7 +34,7 @@ struct Constants {
     // MARK: - API
     struct API {
         // Change this to .production when ready for App Store
-        static let environment: Environment = .production
+        static let environment: Environment = .development
         
         static var baseURL: String {
             environment.baseURL
@@ -54,7 +54,7 @@ struct Constants {
     
     // MARK: - App Info
     struct App {
-        static let name = "Sioree"
+        static let name = "Soirée"
         static let version = "1.0.0"
     }
     
@@ -62,6 +62,7 @@ struct Constants {
     struct Stripe {
         // Update these values with your Stripe Buy Button settings.
         static let publishableKey = "pk_test_51SbF9IEZUZFsipCPLKDUFgbVQpowjxWafVJjHZBR9TihnyFHSsZ5yA93lrz4krTsQNNttqwBIrDW0MLKcYDMiD6q00Db2qsWKJ"
+        static let connectOnboardingFallbackURL = "https://connect.stripe.com/d/setup/s/_TpV5nheYDyMZuXtE0HLRqHnJ3f/YWNjdF8xU3JxNVFJM3dzbFNmdk9O/7400bccc20031ffc6"
     }
 
     // MARK: - Limits

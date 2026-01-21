@@ -82,7 +82,7 @@ struct HostMarketplaceView: View {
                                 ScrollView(.horizontal, showsIndicators: false) {
                                     HStack(spacing: Theme.Spacing.m) {
                                         ForEach(featuredTalent, id: \.id) { talent in
-                                            NavigationLink(destination: TalentDetailView(talent: talent)) {
+                                            NavigationLink(destination: InboxProfileView(userId: talent.id)) {
                                                 SpotlightTalentCard(talent: talent)
                                             }
                                             .buttonStyle(.plain)
@@ -115,7 +115,7 @@ struct HostMarketplaceView: View {
                             } else {
                                 LazyVStack(spacing: Theme.Spacing.m) {
                                     ForEach(filteredTalent) { talent in
-                                        NavigationLink(destination: TalentDetailView(talent: talent)) {
+                                        NavigationLink(destination: InboxProfileView(userId: talent.id)) {
                                             MarketplaceTalentCard(talent: talent)
                                         }
                                         .buttonStyle(.plain)

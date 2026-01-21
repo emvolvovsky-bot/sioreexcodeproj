@@ -26,15 +26,36 @@ const toStripeErrorDetails = (error) => {
   };
 };
 
+const resolveStripeClient = (req) => {
+  const mode = req.body?.mode || req.query?.mode || req.headers["x-stripe-mode"];
+  if (typeof stripe.getStripeClient === "function") {
+    return stripe.getStripeClient(mode);
+  }
+  return stripe;
+};
+
+const resolvePublishableKey = (req) => {
+  const mode = req.body?.mode || req.query?.mode || req.headers["x-stripe-mode"];
+  const normalized = typeof mode === "string" ? mode.trim().toLowerCase() : undefined;
+  if (normalized === "test") {
+    return process.env.STRIPE_TEST_PUBLISHABLE_KEY || process.env.STRIPE_PUBLISHABLE_KEY;
+  }
+  if (normalized === "live") {
+    return process.env.STRIPE_PUBLISHABLE_KEY || process.env.STRIPE_LIVE_PUBLISHABLE_KEY;
+  }
+  return (
+    process.env.STRIPE_TEST_PUBLISHABLE_KEY ||
+    process.env.STRIPE_PUBLISHABLE_KEY ||
+    process.env.STRIPE_LIVE_PUBLISHABLE_KEY
+  );
+};
+
 router.post("/payment-sheet", async (req, res) => {
   try {
     console.log("💳 Stripe payment-sheet:", req.body);
-    const secretKey =
-      process.env.STRIPE_SECRET_KEY || process.env.STRIPE_LIVE_SECRET_KEY;
-    const publishableKey =
-      process.env.STRIPE_PUBLISHABLE_KEY || process.env.STRIPE_LIVE_PUBLISHABLE_KEY;
-
-    if (!secretKey || !publishableKey) {
+    const stripeClient = resolveStripeClient(req);
+    const publishableKey = resolvePublishableKey(req);
+    if (!stripeClient || !publishableKey) {
       return respondStripeError(res, 500, "Stripe keys are not configured", {
         type: "configuration_error"
       });
@@ -82,10 +103,10 @@ router.post("/payment-sheet", async (req, res) => {
       );
       hostStripeAccountId = hostResult.rows[0]?.stripe_account_id;
       if (!hostStripeAccountId) {
-        return respondStripeError(res, 400, "Host Stripe account is not connected", {
-          type: "invalid_request_error",
-          param: "stripe_account_id"
-        });
+        console.warn(
+          "Stripe payment-sheet: host has no connected account, skipping transfer.",
+          { eventId, hostId: eventRow.creator_id }
+        );
       }
 
       totalAmount = ticketPrice * 1.05;
@@ -97,8 +118,8 @@ router.post("/payment-sheet", async (req, res) => {
       }
     }
 
-    const customer = await stripe.customers.create();
-    const customerSession = await stripe.customerSessions.create({
+    const customer = await stripeClient.customers.create();
+    const customerSession = await stripeClient.customerSessions.create({
       customer: customer.id,
       components: {
         mobile_payment_element: {
@@ -137,7 +158,7 @@ router.post("/payment-sheet", async (req, res) => {
       };
     }
 
-    const paymentIntent = await stripe.paymentIntents.create(paymentIntentParams);
+    const paymentIntent = await stripeClient.paymentIntents.create(paymentIntentParams);
 
     return res.json({
       paymentIntent: paymentIntent.client_secret,

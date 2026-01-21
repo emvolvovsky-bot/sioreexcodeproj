@@ -326,9 +326,13 @@ class CheckoutViewModel: ObservableObject {
                 if let preferredMode = self?.preferredStripeMode(),
                    mode != "unknown",
                    preferredMode != mode {
-                    self?.logPaymentSheetDebug("Stripe mode mismatch: preferred=\(preferredMode), response=\(mode)")
-                    handleFailure("Payment setup failed. Backend returned \(mode) publishable key but app expects \(preferredMode).")
-                    return
+                    if Constants.API.environment == .production {
+                        self?.logPaymentSheetDebug("Stripe mode mismatch: preferred=\(preferredMode), response=\(mode)")
+                        handleFailure("Payment setup failed. Backend returned \(mode) publishable key but app expects \(preferredMode).")
+                        return
+                    } else {
+                        self?.logPaymentSheetDebug("Stripe mode mismatch (non-fatal in development): preferred=\(preferredMode), response=\(mode)")
+                    }
                 }
                 if Constants.API.environment == .production, mode == "test" {
                     self?.logPaymentSheetDebug("Warning: Production environment using test publishable key.")
@@ -344,13 +348,18 @@ class CheckoutViewModel: ObservableObject {
                 var configuration = PaymentSheet.Configuration()
                 configuration.merchantDisplayName = "Soirée"
                 configuration.apiClient = STPAPIClient.shared
-                if let ephemeralKey = response.ephemeralKey {
+                if let customerSessionClientSecret = response.customerSessionClientSecret,
+                   !customerSessionClientSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    configuration.customer = .init(
+                        id: response.customer,
+                        customerSessionClientSecret: customerSessionClientSecret
+                    )
+                } else if let ephemeralKey = response.ephemeralKey,
+                          !ephemeralKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     configuration.customer = .init(
                         id: response.customer,
                         ephemeralKeySecret: ephemeralKey
                     )
-                } else if response.customerSessionClientSecret != nil {
-                    self?.logPaymentSheetDebug("Customer session provided but not used; presenting without customer.")
                 }
                 configuration.allowsDelayedPaymentMethods = true
                 configuration.returnURL = "sioree://stripe-redirect"

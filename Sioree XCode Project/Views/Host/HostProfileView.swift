@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Combine
 
 struct HostProfileView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
@@ -16,6 +17,14 @@ struct HostProfileView: View {
     @State private var showFollowingList = false
     @State private var selectedEventForPhotos: Event? = nil
     @State private var selectedEventForPost: Event?
+    @State private var isStartingOnboarding = false
+    @State private var isLoadingConnectStatus = false
+    @State private var connectStatus: BankConnectStatus?
+    @State private var payoutErrorMessage: String?
+    @State private var cancellables = Set<AnyCancellable>()
+    @Environment(\.openURL) private var openURL
+
+    private let bankService = BankAccountService.shared
     
     private var currentUser: User? {
         authViewModel.currentUser
@@ -49,6 +58,7 @@ struct HostProfileView: View {
         ScrollView {
             VStack(spacing: 0) {
                 profileHeader(user: user)
+                stripePayoutsCard
                 eventsSection
             }
             .padding(.bottom, Theme.Spacing.xl)
@@ -78,6 +88,40 @@ struct HostProfileView: View {
 
     private var eventsSection: some View {
         eventsContent
+    }
+
+    private var stripePayoutsCard: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            HStack {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                    Text("Stripe payouts")
+                        .font(.sioreeH4)
+                        .foregroundColor(.sioreeWhite)
+                    Text(connectStatus?.isReady == true ? "Verified" : "Complete setup to receive payouts")
+                        .font(.sioreeCaption)
+                        .foregroundColor(.sioreeLightGrey)
+                }
+                Spacer()
+                Button(action: {
+                    startStripeOnboarding()
+                }) {
+                    Text(isStartingOnboarding ? "Starting..." : "Set up")
+                        .font(.sioreeBodySmall)
+                        .foregroundColor(.sioreeBlack)
+                        .padding(.horizontal, Theme.Spacing.m)
+                        .padding(.vertical, Theme.Spacing.s)
+                        .background(Color.sioreeIcyBlue)
+                        .cornerRadius(Theme.CornerRadius.large)
+                }
+                .disabled(isStartingOnboarding || connectStatus?.isReady == true)
+            }
+        }
+        .padding(.horizontal, Theme.Spacing.m)
+        .padding(.vertical, Theme.Spacing.m)
+        .background(Color.sioreeLightGrey.opacity(0.08))
+        .cornerRadius(Theme.CornerRadius.large)
+        .padding(.horizontal, Theme.Spacing.m)
+        .padding(.top, Theme.Spacing.s)
     }
 
     private var eventsContent: some View {
@@ -206,14 +250,71 @@ struct HostProfileView: View {
                 AddPostFromEventView(event: event)
                     .environmentObject(authViewModel)
             }
+            .alert("Stripe Setup Error", isPresented: .constant(payoutErrorMessage != nil)) {
+                Button("OK") {
+                    payoutErrorMessage = nil
+                }
+            } message: {
+                if let error = payoutErrorMessage {
+                    Text(error)
+                }
+            }
             .onAppear {
                 viewModel.setAuthViewModel(authViewModel)
                 viewModel.loadUserContent()
+                loadStripeConnectStatus()
             }
             .onChange(of: authViewModel.currentUser?.id) { _ in
                 viewModel.setAuthViewModel(authViewModel)
                 viewModel.loadUserContent()
+                loadStripeConnectStatus()
             }
+        }
+    }
+
+    private func loadStripeConnectStatus() {
+        guard !isLoadingConnectStatus else { return }
+        isLoadingConnectStatus = true
+        bankService.fetchOnboardingStatus()
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    isLoadingConnectStatus = false
+                    if case .failure(let error) = completion {
+                        payoutErrorMessage = error.localizedDescription
+                    }
+                },
+                receiveValue: { status in
+                    connectStatus = status
+                }
+            )
+            .store(in: &cancellables)
+    }
+
+    private func startStripeOnboarding() {
+        guard !isStartingOnboarding else { return }
+        isStartingOnboarding = true
+        bankService.createOnboardingLink()
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    isStartingOnboarding = false
+                    if case .failure = completion {
+                        openStripeFallbackURL()
+                    }
+                },
+                receiveValue: { url in
+                    openURL(url)
+                }
+            )
+            .store(in: &cancellables)
+    }
+
+    private func openStripeFallbackURL() {
+        if let fallbackURL = URL(string: Constants.Stripe.connectOnboardingFallbackURL) {
+            openURL(fallbackURL)
+        } else {
+            payoutErrorMessage = "Unable to start Stripe onboarding. Please try again."
         }
     }
 }

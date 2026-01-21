@@ -614,7 +614,7 @@ struct TermsView: View {
                                 .font(.sioreeH3)
                                 .foregroundColor(.sioreeIcyBlue)
                             
-                            Text("By accessing and using Sioree, you accept and agree to be bound by the terms and provision of this agreement. If you do not agree to abide by the above, please do not use this service.")
+                            Text("By accessing and using Soirée, you accept and agree to be bound by the terms and provision of this agreement. If you do not agree to abide by the above, please do not use this service.")
                                 .font(.sioreeBody)
                                 .foregroundColor(.sioreeLightGrey)
                         }
@@ -625,14 +625,14 @@ struct TermsView: View {
                                 .font(.sioreeH3)
                                 .foregroundColor(.sioreeIcyBlue)
                             
-                            Text("Permission is granted to temporarily download one copy of Sioree for personal, non-commercial transitory viewing only. This is the grant of a license, not a transfer of title, and under this license you may not:")
+                            Text("Permission is granted to temporarily download one copy of Soirée for personal, non-commercial transitory viewing only. This is the grant of a license, not a transfer of title, and under this license you may not:")
                                 .font(.sioreeBody)
                                 .foregroundColor(.sioreeLightGrey)
                             
                             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                                 Text("• Modify or copy the materials")
                                 Text("• Use the materials for any commercial purpose")
-                                Text("• Attempt to reverse engineer any software contained in Sioree")
+                                Text("• Attempt to reverse engineer any software contained in Soirée")
                                 Text("• Remove any copyright or other proprietary notations")
                             }
                             .font(.sioreeBody)
@@ -657,7 +657,7 @@ struct TermsView: View {
                                 .font(.sioreeH3)
                                 .foregroundColor(.sioreeIcyBlue)
                             
-                            Text("You retain ownership of any content you post on Sioree. By posting content, you grant Sioree a worldwide, non-exclusive, royalty-free license to use, reproduce, and distribute your content for the purpose of operating and promoting the service.")
+                            Text("You retain ownership of any content you post on Soirée. By posting content, you grant Soirée a worldwide, non-exclusive, royalty-free license to use, reproduce, and distribute your content for the purpose of operating and promoting the service.")
                                 .font(.sioreeBody)
                                 .foregroundColor(.sioreeLightGrey)
                             
@@ -673,11 +673,11 @@ struct TermsView: View {
                                 .font(.sioreeH3)
                                 .foregroundColor(.sioreeIcyBlue)
                             
-                            Text("Hosts are responsible for the accuracy of event information. Sioree is not liable for any issues arising from events, including cancellations, changes, or disputes between hosts and attendees.")
+                            Text("Hosts are responsible for the accuracy of event information. Soirée is not liable for any issues arising from events, including cancellations, changes, or disputes between hosts and attendees.")
                                 .font(.sioreeBody)
                                 .foregroundColor(.sioreeLightGrey)
                             
-                            Text("All bookings and transactions are between users. Sioree facilitates connections but is not a party to any agreements.")
+                            Text("All bookings and transactions are between users. Soirée facilitates connections but is not a party to any agreements.")
                                 .font(.sioreeBody)
                                 .foregroundColor(.sioreeLightGrey)
                                 .padding(.top, Theme.Spacing.xs)
@@ -689,7 +689,7 @@ struct TermsView: View {
                                 .font(.sioreeH3)
                                 .foregroundColor(.sioreeIcyBlue)
                             
-                            Text("Payment processing is handled through secure third-party providers. Refund policies are determined by individual hosts and event organizers. Sioree may charge service fees for certain transactions.")
+                            Text("Payment processing is handled through secure third-party providers. Refund policies are determined by individual hosts and event organizers. Soirée may charge service fees for certain transactions.")
                                 .font(.sioreeBody)
                                 .foregroundColor(.sioreeLightGrey)
                         }
@@ -734,7 +734,7 @@ struct TermsView: View {
                                 .font(.sioreeH3)
                                 .foregroundColor(.sioreeIcyBlue)
                             
-                            Text("Sioree shall not be liable for any indirect, incidental, special, consequential, or punitive damages resulting from your use of or inability to use the service.")
+                            Text("Soirée shall not be liable for any indirect, incidental, special, consequential, or punitive damages resulting from your use of or inability to use the service.")
                                 .font(.sioreeBody)
                                 .foregroundColor(.sioreeLightGrey)
                         }
@@ -767,7 +767,7 @@ struct TermsView: View {
                         }
                         
                         // Footer
-                        Text("By using Sioree, you acknowledge that you have read, understood, and agree to be bound by these Terms of Service.")
+                        Text("By using Soirée, you acknowledge that you have read, understood, and agree to be bound by these Terms of Service.")
                             .font(.sioreeCaption)
                             .foregroundColor(.sioreeLightGrey)
                             .italic()
@@ -824,7 +824,7 @@ struct PrivacyPolicyView: View {
                                 .font(.sioreeH3)
                                 .foregroundColor(.sioreeIcyBlue)
                             
-                            Text("Sioree (\"we,\" \"our,\" or \"us\") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our mobile application and services.")
+                        Text("Soirée (\"we,\" \"our,\" or \"us\") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our mobile application and services.")
                                 .font(.sioreeBody)
                                 .foregroundColor(.sioreeLightGrey)
                         }
@@ -999,7 +999,7 @@ struct PrivacyPolicyView: View {
                                 .font(.sioreeH3)
                                 .foregroundColor(.sioreeIcyBlue)
                             
-                            Text("Sioree is not intended for users under the age of 18. We do not knowingly collect personal information from children. If you believe we have collected information from a child, please contact us immediately.")
+                        Text("Soirée is not intended for users under the age of 18. We do not knowingly collect personal information from children. If you believe we have collected information from a child, please contact us immediately.")
                                 .font(.sioreeBody)
                                 .foregroundColor(.sioreeLightGrey)
                         }
@@ -1010,7 +1010,7 @@ struct PrivacyPolicyView: View {
                                 .font(.sioreeH3)
                                 .foregroundColor(.sioreeIcyBlue)
                             
-                            Text("If you are using Sioree from outside the United States, please note that your information may be transferred to, stored, and processed in the United States where our servers are located.")
+                        Text("If you are using Soirée from outside the United States, please note that your information may be transferred to, stored, and processed in the United States where our servers are located.")
                                 .font(.sioreeBody)
                                 .foregroundColor(.sioreeLightGrey)
                         }
@@ -1046,7 +1046,7 @@ struct PrivacyPolicyView: View {
                         }
                         
                         // Footer
-                        Text("By using Sioree, you acknowledge that you have read and understood this Privacy Policy.")
+                        Text("By using Soirée, you acknowledge that you have read and understood this Privacy Policy.")
                             .font(.sioreeCaption)
                             .foregroundColor(.sioreeLightGrey)
                             .italic()
@@ -1103,7 +1103,7 @@ struct AboutView: View {
                                         .foregroundColor(.sioreeIcyBlue)
                                 )
                             
-                            Text("Sioree")
+                            Text("Soirée")
                                 .font(.sioreeH1)
                                 .foregroundColor(.sioreeWhite)
                             
@@ -1119,7 +1119,7 @@ struct AboutView: View {
                                 .font(.sioreeH3)
                                 .foregroundColor(.sioreeIcyBlue)
                             
-                            Text("Sioree is the ultimate platform connecting nightlife enthusiasts, event hosts, talented performers, and brands. We're building a community where high-design meets underground culture—exclusive but effortless, calm, sleek, and curated.")
+                            Text("Soirée is the ultimate platform connecting nightlife enthusiasts, event hosts, talented performers, and brands. We're building a community where high-design meets underground culture—exclusive but effortless, calm, sleek, and curated.")
                                 .font(.sioreeBody)
                                 .foregroundColor(.sioreeLightGrey)
                         }
@@ -1199,7 +1199,7 @@ struct AboutView: View {
                                 .font(.sioreeH3)
                                 .foregroundColor(.sioreeIcyBlue)
                             
-                            Text("Sioree is built using modern technologies to provide a seamless, secure, and beautiful experience. We use industry-leading encryption, secure payment processing, and real-time messaging to keep you connected.")
+                            Text("Soirée is built using modern technologies to provide a seamless, secure, and beautiful experience. We use industry-leading encryption, secure payment processing, and real-time messaging to keep you connected.")
                                 .font(.sioreeBody)
                                 .foregroundColor(.sioreeLightGrey)
                         }
@@ -1245,7 +1245,7 @@ struct AboutView: View {
                         .padding(.horizontal, Theme.Spacing.l)
                         
                         // Copyright
-                        Text("© 2024 Sioree. All rights reserved.")
+                        Text("© 2024 Soirée. All rights reserved.")
                             .font(.sioreeCaption)
                             .foregroundColor(.sioreeLightGrey.opacity(0.6))
                             .padding(.bottom, Theme.Spacing.l)

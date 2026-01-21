@@ -15,18 +15,13 @@ struct TalentMapView: View {
         center: CLLocationCoordinate2D(latitude: 34.0522, longitude: -118.2437), // LA default
         span: MKCoordinateSpan(latitudeDelta: 0.5, longitudeDelta: 0.5)
     )
-    @State private var selectedTalent: Talent?
-    @State private var showTalentDetail = false
     
     var body: some View {
         NavigationStack {
             ZStack {
                 Map(coordinateRegion: $region, annotationItems: talentAnnotations) { talent in
                     MapAnnotation(coordinate: talent.coordinate) {
-                        Button(action: {
-                            selectedTalent = talent.talent
-                            showTalentDetail = true
-                        }) {
+                        NavigationLink(destination: InboxProfileView(userId: talent.talent.userId)) {
                             VStack(spacing: 4) {
                                 Image(systemName: "mappin.circle.fill")
                                     .font(.system(size: 30))
@@ -41,6 +36,7 @@ struct TalentMapView: View {
                                     .cornerRadius(4)
                             }
                         }
+                        .buttonStyle(.plain)
                     }
                 }
                 .ignoresSafeArea()
@@ -80,17 +76,6 @@ struct TalentMapView: View {
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
                 viewModel.loadTalent()
-            }
-            .sheet(item: $selectedTalent) { talent in
-                TalentDetailView(talent: TalentListing(
-                    id: talent.userId,
-                    name: talent.name,
-                    roleText: talent.category.rawValue,
-                    rateText: "$\(Int(talent.priceRange.min))/hour",
-                    location: talent.location ?? "Location TBD",
-                    rating: talent.rating,
-                    imageName: "person.circle.fill"
-                ))
             }
         }
     }

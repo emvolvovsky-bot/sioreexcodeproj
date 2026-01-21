@@ -11,12 +11,32 @@ const normalizeMode = (mode) => {
 
 const resolveSecretKey = (mode) => {
   const normalized = normalizeMode(mode);
-  return process.env.STRIPE_SECRET_KEY;
+  if (normalized === 'test') {
+    return process.env.STRIPE_TEST_SECRET_KEY || process.env.STRIPE_SECRET_KEY;
+  }
+  if (normalized === 'live') {
+    return process.env.STRIPE_SECRET_KEY || process.env.STRIPE_LIVE_SECRET_KEY;
+  }
+  return (
+    process.env.STRIPE_TEST_SECRET_KEY ||
+    process.env.STRIPE_SECRET_KEY ||
+    process.env.STRIPE_LIVE_SECRET_KEY
+  );
 };
 
 const resolvePublishableKey = (mode) => {
   const normalized = normalizeMode(mode);
-  return process.env.STRIPE_PUBLISHABLE_KEY;
+  if (normalized === 'test') {
+    return process.env.STRIPE_TEST_PUBLISHABLE_KEY || process.env.STRIPE_PUBLISHABLE_KEY;
+  }
+  if (normalized === 'live') {
+    return process.env.STRIPE_PUBLISHABLE_KEY || process.env.STRIPE_LIVE_PUBLISHABLE_KEY;
+  }
+  return (
+    process.env.STRIPE_TEST_PUBLISHABLE_KEY ||
+    process.env.STRIPE_PUBLISHABLE_KEY ||
+    process.env.STRIPE_LIVE_PUBLISHABLE_KEY
+  );
 };
 
 const clients = new Map();

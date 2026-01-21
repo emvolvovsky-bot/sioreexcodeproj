@@ -1,3 +1,4 @@
+
 import express from "express";
 import { db } from "../db/database.js";
 import { getUserIdFromToken } from "../middleware/auth.js";

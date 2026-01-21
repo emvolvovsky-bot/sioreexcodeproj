@@ -16,145 +16,58 @@ struct TalentInboxView: View {
     @State private var errorMessage: String?
     @State private var showSearch = false
     @State private var showCreateGroup = false
+    @State private var chatSearchText = ""
     
     var body: some View {
         NavigationStack {
             ZStack {
                 backgroundGlow
                 
-                if isLoading {
-                    LoadingView()
-                } else if conversations.isEmpty {
-                    VStack(spacing: Theme.Spacing.m) {
-                        Image(systemName: "envelope.fill")
-                            .font(.system(size: 60))
-                            .foregroundColor(Color.sioreeIcyBlue.opacity(0.5))
-                        
-                        Text("No messages yet")
-                            .font(.sioreeH3)
-                            .foregroundColor(Color.sioreeWhite)
-                        
-                        Text("Communicate with other talent, partiers, and hosts")
-                            .font(.sioreeBody)
-                            .foregroundColor(Color.sioreeLightGrey)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, Theme.Spacing.xl)
-                    }
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: Theme.Spacing.m) {
-                            ForEach(conversations) { conversation in
-                                NavigationLink(
-                                    destination:
-                                        RealMessageView(conversation: conversation)
-                                            .onAppear { NotificationCenter.default.post(name: .hideTabBar, object: nil) }
-                                            .onDisappear { NotificationCenter.default.post(name: .showTabBar, object: nil) }
-                                ) {
-                                    TalentConversationRow(conversation: conversation)
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                                .padding(.horizontal, Theme.Spacing.l)
-                            }
+                VStack(spacing: Theme.Spacing.m) {
+                    inboxSearchHeader
+                    
+                    if isLoading {
+                        LoadingView()
+                    } else if filteredConversations.isEmpty {
+                        VStack(spacing: Theme.Spacing.m) {
+                            Image(systemName: "envelope.fill")
+                                .font(.system(size: 60))
+                                .foregroundColor(Color.sioreeIcyBlue.opacity(0.5))
+                            
+                            Text(conversations.isEmpty ? "No messages yet" : "No chats found")
+                                .font(.sioreeH3)
+                                .foregroundColor(Color.sioreeWhite)
+                            
+                            Text(conversations.isEmpty ? "Communicate with other talent, partiers, and hosts" : "Try a different search")
+                                .font(.sioreeBody)
+                                .foregroundColor(Color.sioreeLightGrey)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, Theme.Spacing.xl)
                         }
-                        .padding(.vertical, Theme.Spacing.m)
+                    } else {
+                        ScrollView {
+                            LazyVStack(spacing: Theme.Spacing.m) {
+                                ForEach(filteredConversations) { conversation in
+                                    NavigationLink(
+                                        destination:
+                                            RealMessageView(conversation: conversation)
+                                                .onAppear { NotificationCenter.default.post(name: .hideTabBar, object: nil) }
+                                                .onDisappear { NotificationCenter.default.post(name: .showTabBar, object: nil) }
+                                    ) {
+                                        TalentConversationRow(conversation: conversation)
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                    .padding(.horizontal, Theme.Spacing.l)
+                                }
+                            }
+                            .padding(.vertical, Theme.Spacing.m)
+                        }
                     }
                 }
+                .padding(.top, Theme.Spacing.m)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    HStack(spacing: Theme.Spacing.m) {
-                        Button(action: {
-                            showCreateGroup = true
-                        }) {
-                            Image(systemName: "person.2.fill")
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundColor(.sioreeIcyBlue)
-                                .frame(width: 36, height: 36)
-                                .background(Color.sioreeIcyBlue.opacity(0.1))
-                                .clipShape(Circle())
-                        }
-                        
-                        Button(action: {
-                            showSearch = true
-                        }) {
-                            Image(systemName: "message.fill")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(.sioreeIcyBlue)
-                                .frame(width: 36, height: 36)
-                                .background(Color.sioreeIcyBlue.opacity(0.1))
-                                .clipShape(Circle())
-                        }
-                        .accessibilityLabel("Text a person")
-                    }
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        showSearch = true
-                    }) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.sioreeIcyBlue)
-                            .frame(width: 36, height: 36)
-                            .background(Color.sioreeIcyBlue.opacity(0.1))
-                            .clipShape(Circle())
-                    }
-                    .accessibilityLabel("Search users")
-                }
-            }
-            .overlay(alignment: .topTrailing) {
-                // Floating Action Button
-                Button(action: {
-                    showSearch = true
-                }) {
-                    ZStack {
-                        // Outer glow
-                        Circle()
-                            .fill(
-                                RadialGradient(
-                                    colors: [
-                                        Color.sioreeIcyBlue.opacity(0.4),
-                                        Color.sioreeIcyBlue.opacity(0.1),
-                                        Color.clear
-                                    ],
-                                    center: .center,
-                                    startRadius: 20,
-                                    endRadius: 40
-                                )
-                            )
-                            .frame(width: 80, height: 80)
-                            .blur(radius: 8)
-                        
-                        // Button circle
-                        Circle()
-                            .fill(
-                                LinearGradient(
-                                    colors: [
-                                        Color.sioreeIcyBlue.opacity(0.9),
-                                        Color.sioreeIcyBlue
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .frame(width: 64, height: 64)
-                            .overlay(
-                                Circle()
-                                    .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 1)
-                            )
-                            .shadow(color: Color.sioreeIcyBlue.opacity(0.5), radius: 16, x: 0, y: 8)
-                        
-                        // Plus icon
-                        Image(systemName: "plus")
-                            .font(.system(size: 24, weight: .semibold))
-                            .foregroundColor(.sioreeWhite)
-                    }
-                }
-                .padding(.trailing, Theme.Spacing.l)
-                .padding(.top, Theme.Spacing.m)
-            }
             .sheet(isPresented: $showSearch) {
                 UserSearchView()
             }
@@ -195,6 +108,77 @@ struct TalentInboxView: View {
                 .blur(radius: 140)
                 .offset(x: 160, y: 220)
         }
+    }
+
+    private var filteredConversations: [Conversation] {
+        let trimmedQuery = chatSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedQuery.isEmpty else { return conversations }
+        let query = trimmedQuery.lowercased()
+        return conversations.filter { conversation in
+            conversation.participantName.lowercased().contains(query)
+                || conversation.lastMessage.lowercased().contains(query)
+        }
+    }
+
+    private var inboxSearchHeader: some View {
+        HStack(spacing: Theme.Spacing.s) {
+            Button(action: {
+                showCreateGroup = true
+            }) {
+                Image(systemName: "person.2.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.sioreeIcyBlue)
+                    .frame(width: 34, height: 34)
+                    .background(Color.sioreeIcyBlue.opacity(0.15))
+                    .clipShape(Circle())
+            }
+            .accessibilityLabel("Create group chat")
+            
+            HStack(spacing: Theme.Spacing.s) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(Color.sioreeLightGrey.opacity(0.8))
+                
+                TextField("Search chats", text: $chatSearchText)
+                    .font(.sioreeBody)
+                    .foregroundColor(.sioreeWhite)
+                
+                if !chatSearchText.isEmpty {
+                    Button(action: { chatSearchText = "" }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(Color.sioreeLightGrey.opacity(0.8))
+                    }
+                    .accessibilityLabel("Clear search")
+                }
+            }
+            .padding(.horizontal, Theme.Spacing.m)
+            .padding(.vertical, Theme.Spacing.s)
+            .background(Color.sioreeLightGrey.opacity(0.12))
+            .cornerRadius(Theme.CornerRadius.medium)
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                    .stroke(Color.sioreeIcyBlue.opacity(0.2), lineWidth: 1)
+            )
+            
+            Button(action: {
+                showSearch = true
+            }) {
+                Image(systemName: "plus")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.sioreeWhite)
+                    .frame(width: 34, height: 34)
+                    .background(
+                        LinearGradient(
+                            colors: [Color.sioreeIcyBlue.opacity(0.9), Color.sioreeIcyBlue],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .clipShape(Circle())
+                    .shadow(color: Color.sioreeIcyBlue.opacity(0.5), radius: 8, x: 0, y: 4)
+            }
+            .accessibilityLabel("New chat")
+        }
+        .padding(.horizontal, Theme.Spacing.l)
     }
     
     private func loadConversations() {

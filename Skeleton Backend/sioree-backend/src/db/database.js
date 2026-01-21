@@ -1,6 +1,26 @@
 import pg from "pg";
 import dotenv from "dotenv";
-dotenv.config();
+import fs from "fs";
+import path from "path";
+
+const candidateEnvPaths = [
+  path.resolve(process.cwd(), ".env"),
+  path.resolve(process.cwd(), "..", "..", ".env"),
+  path.resolve(process.cwd(), "Skeleton Backend/sioree-backend/.env")
+];
+
+let loadedEnvPath = null;
+for (const envPath of candidateEnvPaths) {
+  if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath });
+    loadedEnvPath = envPath;
+    break;
+  }
+}
+
+if (!loadedEnvPath) {
+  dotenv.config();
+}
 
 // Parse connection string to determine SSL requirements
 const isLocalDB = process.env.DATABASE_URL?.includes("localhost") || 

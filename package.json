@@ -5,8 +5,10 @@
   "main": "src/index.js",
   "type": "module",
   "scripts": {
-    "dev": "node src/index.js",
-    "start": "node src/index.js",
+    "dev": "npm --prefix \"Skeleton Backend/sioree-backend\" run dev",
+    "start": "npm --prefix \"Skeleton Backend/sioree-backend\" start",
+    "dev:legacy": "node src/index.js",
+    "start:legacy": "node src/index.js",
     "migrate": "node migrations/migrate.js",
     "export:users-events": "node scripts/export-users-events-csv.js",
     "export:users-events:watch": "CSV_WATCH=true node scripts/export-users-events-csv.js",

@@ -17,14 +17,12 @@ struct Constants {
         var baseURL: String {
             switch self {
             case .development:
-                // Default to local backend for dev; set RUN_LOCAL=false to force Render.
-                if let runLocalValue = ProcessInfo.processInfo.environment["RUN_LOCAL"]?.lowercased() {
-                    if runLocalValue == "false" {
-                        return "https://sioree-api.onrender.com"
-                    }
+                // Default to Render; set RUN_LOCAL=true to force localhost.
+                if let runLocalValue = ProcessInfo.processInfo.environment["RUN_LOCAL"]?.lowercased(),
+                   runLocalValue == "true" {
                     return "http://127.0.0.1:4000"
                 }
-                return "http://127.0.0.1:4000"
+                return "https://sioree-api.onrender.com"
             case .production:
                 return "https://sioree-api.onrender.com"  // Render deployment
             }

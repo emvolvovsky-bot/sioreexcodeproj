@@ -23,6 +23,7 @@ struct HostProfileView: View {
     @State private var payoutErrorMessage: String?
     @State private var cancellables = Set<AnyCancellable>()
     @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
 
     private let bankService = BankAccountService.shared
     
@@ -268,6 +269,11 @@ struct HostProfileView: View {
                 viewModel.setAuthViewModel(authViewModel)
                 viewModel.loadUserContent()
                 loadStripeConnectStatus()
+            }
+            .onChange(of: scenePhase) { phase in
+                if phase == .active {
+                    loadStripeConnectStatus()
+                }
             }
         }
     }

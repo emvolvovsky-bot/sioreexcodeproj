@@ -133,6 +133,55 @@ router.post("/onboarding-link", async (req, res) => {
   }
 });
 
+// GET /api/bank/onboarding-status - return Stripe Connect readiness
+router.get("/onboarding-status", async (req, res) => {
+  const userId = requireUser(req, res);
+  if (!userId) return;
+
+  const stripeClient = resolveStripeClient(req);
+  if (!stripeClient || !stripeClient.accounts) {
+    return res.status(500).json({ error: "Stripe is not configured" });
+  }
+
+  try {
+    const userResult = await db.query(
+      "SELECT stripe_account_id FROM users WHERE id = $1",
+      [userId]
+    );
+    const stripeAccountId = userResult.rows[0]?.stripe_account_id;
+    if (!stripeAccountId) {
+      return res.json({
+        isReady: false,
+        needsOnboarding: true,
+        requirements: []
+      });
+    }
+
+    const account = await stripeClient.accounts.retrieve(stripeAccountId);
+    const capabilities = account?.capabilities || {};
+    const requirements = Array.isArray(account?.requirements?.currently_due)
+      ? account.requirements.currently_due
+      : [];
+    const isReady =
+      account?.payouts_enabled === true &&
+      capabilities.transfers === "active" &&
+      requirements.length === 0;
+
+    return res.json({
+      isReady,
+      needsOnboarding: !isReady,
+      requirements
+    });
+  } catch (error) {
+    console.error("Stripe onboarding status error:", error);
+    const stripeMessage =
+      error?.raw?.message ||
+      error?.message ||
+      "Failed to fetch onboarding status";
+    return res.status(500).json({ error: stripeMessage });
+  }
+});
+
 // POST /api/bank/manual - create a bank account via routing/account numbers
 router.post("/manual", async (req, res) => {
   const userId = requireUser(req, res);

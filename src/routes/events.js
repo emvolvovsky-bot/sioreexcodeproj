@@ -290,7 +290,7 @@ router.get("/nearby", async (req, res) => {
           ELSE false 
         END as auto_featured
       FROM events e
-      LEFT JOIN users u ON e.creator_id = u.id
+      INNER JOIN users u ON e.creator_id = u.id
       WHERE e.event_date > NOW()
         AND COALESCE(e.status, 'published') <> 'cancelled'
       ORDER BY e.event_date ASC
@@ -380,7 +380,7 @@ router.get("/looking-for/:role?", async (req, res) => {
           ELSE false 
         END as auto_featured
       FROM events e
-      LEFT JOIN users u ON e.creator_id = u.id
+      INNER JOIN users u ON e.creator_id = u.id
       WHERE e.event_date > NOW()
         AND COALESCE(e.status, 'published') <> 'cancelled'
         AND (
@@ -659,7 +659,7 @@ router.get("/", async (req, res) => {
           ELSE false 
         END as auto_featured
       FROM events e
-      LEFT JOIN users u ON e.creator_id = u.id
+      INNER JOIN users u ON e.creator_id = u.id
       WHERE COALESCE(e.status, 'published') <> 'cancelled'
       ORDER BY e.event_date ASC
       LIMIT 100`,
@@ -737,7 +737,7 @@ router.get("/attending/upcoming", async (req, res) => {
         END as auto_featured
       FROM events e
       INNER JOIN event_attendees ea ON e.id = ea.event_id
-      LEFT JOIN users u ON e.creator_id = u.id
+      INNER JOIN users u ON e.creator_id = u.id
       WHERE ea.user_id = $1
         AND e.event_date > NOW()
         AND COALESCE(e.status, 'published') <> 'cancelled'
@@ -805,7 +805,7 @@ router.get("/:id", async (req, res) => {
         CASE WHEN ela.user_id IS NOT NULL THEN true ELSE false END as is_liked,
         CASE WHEN esa.user_id IS NOT NULL THEN true ELSE false END as is_saved
       FROM events e
-      LEFT JOIN users u ON e.creator_id = u.id
+      INNER JOIN users u ON e.creator_id = u.id
       LEFT JOIN (
         SELECT event_id, COUNT(*) as likes_count
         FROM event_likes

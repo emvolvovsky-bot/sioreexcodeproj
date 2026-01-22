@@ -4,8 +4,16 @@ import jwt from "jsonwebtoken";
 import { db } from "../db/database.js";
 import { sendLoginEmail } from "../services/email.js";
 import { sendWelcomeEmail } from "../email/resend.js";
+import stripe from "../lib/stripe.js";
 
 const router = express.Router();
+
+const resolveStripeClient = () => {
+  if (typeof stripe.getStripeClient === "function") {
+    return stripe.getStripeClient(process.env.STRIPE_MODE);
+  }
+  return stripe;
+};
 
 /*
 ---------------------------------------
@@ -265,6 +273,7 @@ router.post("/logout", (req, res) => {
 ---------------------------------------
 */
 router.delete("/delete-account", async (req, res) => {
+  let client;
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer "))
@@ -273,11 +282,39 @@ router.delete("/delete-account", async (req, res) => {
     const token = authHeader.substring(7);
     const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key-change-in-production");
 
-    // Delete user from database
-    await db.query(`DELETE FROM users WHERE id = $1`, [decoded.userId]);
+    const userId = decoded.userId;
+    client = await db.connect();
+    const stripeResult = await client.query(
+      "SELECT stripe_account_id FROM users WHERE id = $1",
+      [userId]
+    );
+    const stripeAccountId = stripeResult.rows[0]?.stripe_account_id;
+
+    await client.query("BEGIN");
+    // Remove hosted events so they disappear across the app
+    await client.query("DELETE FROM events WHERE creator_id = $1", [userId]);
+    // Delete user from database (cascades related records)
+    await client.query("DELETE FROM users WHERE id = $1", [userId]);
+    await client.query("COMMIT");
+    client.release();
+
+    if (stripeAccountId) {
+      const stripeClient = resolveStripeClient();
+      if (stripeClient?.accounts?.del) {
+        try {
+          await stripeClient.accounts.del(stripeAccountId);
+        } catch (stripeError) {
+          console.error("Stripe account delete error:", stripeError);
+        }
+      }
+    }
 
     res.json({ message: "Account deleted successfully" });
   } catch (err) {
+    if (client) {
+      await client.query("ROLLBACK");
+      client.release();
+    }
     console.error("Delete account error:", err);
     res.status(500).json({ error: "Failed to delete account" });
   }

@@ -92,7 +92,7 @@ router.get("/", async (req, res) => {
           u.avatar as host_avatar,
           COALESCE(el.likes_count, 0) as likes
         FROM events e
-        LEFT JOIN users u ON e.creator_id = u.id
+        INNER JOIN users u ON e.creator_id = u.id
         LEFT JOIN (
           SELECT event_id, COUNT(*) as likes_count
           FROM event_likes

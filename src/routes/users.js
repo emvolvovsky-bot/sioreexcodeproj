@@ -261,7 +261,7 @@ router.get("/:id/attended", async (req, res) => {
         CASE WHEN esa.user_id IS NOT NULL THEN true ELSE false END as is_saved
       FROM event_attendees ea
       INNER JOIN events e ON ea.event_id = e.id
-      LEFT JOIN users u ON e.creator_id = u.id
+      INNER JOIN users u ON e.creator_id = u.id
       LEFT JOIN (
         SELECT event_id, COUNT(*) as likes_count
         FROM event_likes
@@ -341,7 +341,7 @@ router.get("/:id/events", async (req, res) => {
     const result = await db.query(
       `SELECT e.*, u.username as host_username, u.name as host_name, u.avatar as host_avatar
        FROM events e
-       LEFT JOIN users u ON e.creator_id = u.id
+       INNER JOIN users u ON e.creator_id = u.id
        WHERE e.creator_id = $1
        ORDER BY e.event_date DESC`,
       [userId]

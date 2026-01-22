@@ -96,7 +96,7 @@ router.get("/", async (req, res) => {
           COALESCE(ela.user_liked, false) as is_liked,
           COALESCE(esa.user_saved, false) as is_saved
         FROM events e
-        LEFT JOIN users u ON e.creator_id = u.id
+        INNER JOIN users u ON e.creator_id = u.id
         LEFT JOIN follows f ON f.following_id = e.creator_id AND f.follower_id = $1
         LEFT JOIN (
           SELECT event_id, COUNT(*) as likes_count
@@ -134,7 +134,7 @@ router.get("/", async (req, res) => {
           COALESCE(ela.user_liked, false) as is_liked,
           COALESCE(esa.user_saved, false) as is_saved
         FROM events e
-        LEFT JOIN users u ON e.creator_id = u.id
+        INNER JOIN users u ON e.creator_id = u.id
         LEFT JOIN (
           SELECT event_id, COUNT(*) as likes_count
           FROM event_likes
@@ -170,7 +170,7 @@ router.get("/", async (req, res) => {
           COALESCE(ela.user_liked, false) as is_liked,
           COALESCE(esa.user_saved, false) as is_saved
         FROM events e
-        LEFT JOIN users u ON e.creator_id = u.id
+        INNER JOIN users u ON e.creator_id = u.id
         LEFT JOIN (
           SELECT event_id, COUNT(*) as likes_count
           FROM event_likes
@@ -206,7 +206,7 @@ router.get("/", async (req, res) => {
           COALESCE(ela.user_liked, false) as is_liked,
           COALESCE(esa.user_saved, false) as is_saved
         FROM events e
-        LEFT JOIN users u ON e.creator_id = u.id
+        INNER JOIN users u ON e.creator_id = u.id
         LEFT JOIN (
           SELECT event_id, COUNT(*) as likes_count
           FROM event_likes

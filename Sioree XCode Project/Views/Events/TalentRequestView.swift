@@ -46,7 +46,7 @@ struct TalentRequestView: View {
 
                                 Text(talent.name)
                                     .font(.sioreeCaption)
-                                    .foregroundColor(.sioreeCharcoal.opacity(0.7))
+                                    .foregroundColor(.sioreeWhite)
                             }
 
                             Spacer()
@@ -56,14 +56,14 @@ struct TalentRequestView: View {
                         }
                         .padding(.horizontal, Theme.Spacing.m)
                     }
-                    .padding(.top, Theme.Spacing.l)
+                    .padding(.top, Theme.Spacing.m)
                     .background(Color.sioreeBlack.opacity(0.8))
 
                     // Content
                     ScrollView {
                         VStack(spacing: Theme.Spacing.l) {
                             // Talent Profile Card
-                            VStack(spacing: Theme.Spacing.m) {
+                            VStack(spacing: Theme.Spacing.s) {
                                 HStack(spacing: Theme.Spacing.m) {
                                     // Avatar
                                     ZStack {
@@ -78,104 +78,76 @@ struct TalentRequestView: View {
                                                     .resizable()
                                                     .foregroundColor(.sioreeCharcoal.opacity(0.5))
                                             }
-                                            .frame(width: 80, height: 80)
+                                            .frame(width: 60, height: 60)
                                             .clipShape(Circle())
                                         } else {
                                             Image(systemName: "person.circle.fill")
                                                 .resizable()
                                                 .foregroundColor(.sioreeCharcoal.opacity(0.5))
-                                                .frame(width: 80, height: 80)
+                                                .frame(width: 60, height: 60)
                                         }
                                     }
 
-                                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                                    VStack(alignment: .leading, spacing: 2) {
                                         HStack {
                                             Text(talent.name)
-                                                .font(.sioreeH3)
+                                                .font(.sioreeH4)
                                                 .foregroundColor(.white)
 
                                             if talent.verified {
                                                 Image(systemName: "checkmark.seal.fill")
                                                     .foregroundColor(.sioreeIcyBlue)
-                                                    .font(.system(size: 16))
+                                                    .font(.system(size: 14))
                                             }
                                         }
 
                                         Text(talent.category.rawValue)
-                                            .font(.sioreeBody)
+                                            .font(.sioreeCaption)
                                             .foregroundColor(.sioreeIcyBlue)
-
-                                        HStack(spacing: Theme.Spacing.xs) {
-                                            Image(systemName: "star.fill")
-                                                .foregroundColor(.sioreeIcyBlue)
-                                                .font(.system(size: 12))
-
-                                            Text(String(format: "%.1f", talent.rating))
-                                                .font(.sioreeBody)
-                                                .foregroundColor(.white)
-
-                                            Text("(\(talent.reviewCount) reviews)")
-                                                .font(.sioreeCaption)
-                                                .foregroundColor(.sioreeCharcoal.opacity(0.7))
-                                        }
 
                                         if let location = talent.location {
                                             HStack(spacing: Theme.Spacing.xs) {
                                                 Image(systemName: "mappin")
-                                                    .foregroundColor(.sioreeCharcoal.opacity(0.7))
-                                                    .font(.system(size: 12))
+                                                    .foregroundColor(.sioreeWhite)
+                                                    .font(.system(size: 11))
 
                                                 Text(location)
                                                     .font(.sioreeCaption)
-                                                    .foregroundColor(.sioreeCharcoal.opacity(0.7))
+                                                    .foregroundColor(.sioreeWhite)
                                             }
                                         }
                                     }
 
                                     Spacer()
 
-                                    VStack(alignment: .trailing, spacing: 2) {
-                                        Text("$\(Int(talent.priceRange.min))-\(Int(talent.priceRange.max))")
-                                            .font(.sioreeH3)
-                                            .foregroundColor(.sioreeIcyBlue)
+                                    VStack(alignment: .trailing, spacing: 1) {
+                                        if talent.priceRange.min == 0 && talent.priceRange.max == 0 {
+                                            Text("Rate not set")
+                                                .font(.sioreeCaption)
+                                                .foregroundColor(.sioreeCharcoal.opacity(0.7))
+                                        } else {
+                                            Text("$\(Int(talent.priceRange.min))-\(Int(talent.priceRange.max))")
+                                                .font(.sioreeH4)
+                                                .foregroundColor(.sioreeIcyBlue)
 
-                                        Text("/hour")
-                                            .font(.sioreeCaption)
-                                            .foregroundColor(.sioreeCharcoal.opacity(0.7))
+                                            Text("/hour")
+                                                .font(.sioreeCaption)
+                                                .foregroundColor(.sioreeWhite)
+                                        }
                                     }
                                 }
 
                                 if let bio = talent.bio, !bio.isEmpty {
                                     Text(bio)
-                                        .font(.sioreeBody)
+                                        .font(.sioreeBodySmall)
                                         .foregroundColor(.sioreeCharcoal.opacity(0.8))
                                         .multilineTextAlignment(.leading)
                                         .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-
-                                // Portfolio preview (if available)
-                                if !talent.portfolio.isEmpty {
-                                    ScrollView(.horizontal, showsIndicators: false) {
-                                        HStack(spacing: Theme.Spacing.s) {
-                                            ForEach(talent.portfolio.prefix(3), id: \.self) { imageUrl in
-                                                if let url = URL(string: imageUrl) {
-                                                    AsyncImage(url: url) { image in
-                                                        image
-                                                            .resizable()
-                                                            .scaledToFill()
-                                                    } placeholder: {
-                                                        Color.sioreeCharcoal.opacity(0.3)
-                                                    }
-                                                    .frame(width: 80, height: 80)
-                                                    .cornerRadius(8)
-                                                }
-                                            }
-                                        }
-                                    }
+                                        .lineLimit(2)
                                 }
                             }
-                            .padding(Theme.Spacing.m)
-                            .background(Color.sioreeCharcoal.opacity(0.2))
+                            .padding(Theme.Spacing.s)
+                            .background(Color.sioreeCharcoal.opacity(0.3))
                             .cornerRadius(Theme.CornerRadius.medium)
                             .padding(.horizontal, Theme.Spacing.m)
 
@@ -194,11 +166,11 @@ struct TalentRequestView: View {
 
                                             Text(event.date.formatted(date: .abbreviated, time: .shortened))
                                                 .font(.sioreeCaption)
-                                                .foregroundColor(.sioreeCharcoal.opacity(0.7))
+                                                .foregroundColor(.sioreeWhite)
 
                                             Text(event.location)
                                                 .font(.sioreeCaption)
-                                                .foregroundColor(.sioreeCharcoal.opacity(0.7))
+                                                .foregroundColor(.sioreeWhite)
                                         }
                                     }
                                 }
@@ -209,10 +181,14 @@ struct TalentRequestView: View {
                             }
 
                             // Request Form
-                            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                            VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                                Divider()
+                                    .background(Color.sioreeCharcoal.opacity(0.5))
+
                                 Text("Send Request")
-                                    .font(.sioreeH4)
+                                    .font(.sioreeH3)
                                     .foregroundColor(.white)
+                                    .padding(.top, Theme.Spacing.xs)
 
                                 // Proposed Rate
                                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
@@ -220,7 +196,11 @@ struct TalentRequestView: View {
                                         .font(.sioreeBody)
                                         .foregroundColor(.white)
 
-                                    TextField("e.g. $50/hour", text: $proposedRate)
+                                    Text("Helps the talent decide faster.")
+                                        .font(.sioreeCaption)
+                                        .foregroundColor(.sioreeCharcoal.opacity(0.7))
+
+                                    TextField("$0.000", text: $proposedRate)
                                         .font(.sioreeBody)
                                         .foregroundColor(.white)
                                         .tint(.sioreeIcyBlue)
@@ -232,25 +212,29 @@ struct TalentRequestView: View {
 
                                 // Message
                                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                                    Text("Message to Talent")
+                                    Text("Introduce yourself and explain why you'd like to work with this talent")
                                         .font(.sioreeBody)
-                                        .foregroundColor(.white)
+                                        .foregroundColor(.sioreeWhite)
 
                                     ZStack(alignment: .topLeading) {
                                         RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
                                             .fill(Color.sioreeCharcoal.opacity(0.3))
-                                            .frame(height: 120)
+                                            .frame(height: 140)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                                                    .stroke(Color.sioreeCharcoal.opacity(0.5), lineWidth: 0.5)
+                                            )
 
                                         TextEditor(text: $messageText)
                                             .font(.sioreeBody)
                                             .foregroundColor(.white)
                                             .tint(.sioreeIcyBlue)
-                                            .frame(height: 120)
+                                            .frame(height: 140)
                                             .padding(Theme.Spacing.m)
                                             .scrollContentBackground(.hidden)
 
                                         if messageText.isEmpty {
-                                            Text("Introduce yourself and explain why you'd like to work with this talent...")
+                                            Text("Type your message here...")
                                                 .font(.sioreeBody)
                                                 .foregroundColor(.sioreeCharcoal.opacity(0.5))
                                                 .padding(.horizontal, Theme.Spacing.m)
@@ -258,6 +242,10 @@ struct TalentRequestView: View {
                                                 .allowsHitTesting(false)
                                         }
                                     }
+
+                                    Text("This message is sent directly to the talent.")
+                                        .font(.sioreeCaption)
+                                        .foregroundColor(.sioreeCharcoal.opacity(0.6))
                                 }
 
                                 if let error = errorMessage {
@@ -283,12 +271,12 @@ struct TalentRequestView: View {
                         ) {
                             sendTalentRequest()
                         }
-                        .disabled(isSending || messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .disabled(isSending || (messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && proposedRate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
 
                         Button(action: { dismiss() }) {
                             Text("Cancel")
                                 .font(.sioreeBody)
-                                .foregroundColor(.sioreeCharcoal.opacity(0.7))
+                                .foregroundColor(.sioreeWhite)
                         }
                     }
                     .padding(.horizontal, Theme.Spacing.m)
@@ -300,8 +288,11 @@ struct TalentRequestView: View {
     }
 
     private func sendTalentRequest() {
-        guard !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            errorMessage = "Please enter a message"
+        let trimmedMessage = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedRate = proposedRate.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !trimmedMessage.isEmpty || !trimmedRate.isEmpty else {
+            errorMessage = "Please enter a message or proposed rate"
             return
         }
 
@@ -316,7 +307,7 @@ struct TalentRequestView: View {
             talentId: talent.userId,
             eventId: event?.id,
             eventTitle: event?.title,
-            message: messageText.trimmingCharacters(in: .whitespacesAndNewlines),
+            message: trimmedMessage.isEmpty ? "Talent request with proposed rate: $\(proposedRateValue ?? 0)" : trimmedMessage,
             proposedRate: proposedRateValue,
             status: .pending
         )

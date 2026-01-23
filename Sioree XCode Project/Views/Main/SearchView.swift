@@ -164,7 +164,6 @@ struct SearchView: View {
                             onLike: {},
                             onSave: {}
                         )
-                        .padding(.horizontal, Theme.Spacing.m)
                     }
                 }
                 

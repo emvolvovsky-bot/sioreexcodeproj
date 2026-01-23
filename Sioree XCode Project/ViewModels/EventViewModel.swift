@@ -10,19 +10,30 @@ import SwiftUI
 import Combine
 
 class EventViewModel: ObservableObject {
-    @Published var event: Event?
+    @Published var event: Event? {
+        didSet {
+            // Update local RSVP status when event changes
+            if let event = event {
+                isRSVPed = event.isRSVPed
+            }
+        }
+    }
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var isRSVPed = false
-    @Published var showPaymentCheckout = false
-    @Published var showRSVPSheet = false
-    @Published var rsvpQRCode: String?
     @Published var eventBookings: [Booking] = []
     @Published var isLoadingBookings = false
+
+    // Remove unused published properties that were causing unnecessary re-renders
+    var showPaymentCheckout = false
+    var showRSVPSheet = false
+    var rsvpQRCode: String?
+    private var hasLoadedBookings = false
     
     private let networkService = NetworkService()
     private var cancellables = Set<AnyCancellable>()
     private let eventId: String
+    private var hasLoadedEvent = false
     
     init(eventId: String) {
         self.eventId = eventId
@@ -33,13 +44,15 @@ class EventViewModel: ObservableObject {
     }
     
     func loadEvent() {
-        guard !eventId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard !eventId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !hasLoadedEvent || event == nil else {
             return
         }
         isLoading = true
         errorMessage = nil
+        hasLoadedEvent = true
         print("🔍 Loading event with ID: \(eventId)")
-        
+
         networkService.fetchEvent(eventId: eventId)
             .receive(on: DispatchQueue.main)
             .sink(
@@ -142,7 +155,7 @@ class EventViewModel: ObservableObject {
             .store(in: &cancellables)
     }
     
-    func rsvpToEvent() {
+    func rsvpToEvent(completion: ((String?) -> Void)? = nil) {
         guard var event = event else { return }
         // Optimistically update UI
         isRSVPed = true
@@ -180,9 +193,9 @@ class EventViewModel: ObservableObject {
                         self?.event = event
                     }
                     
-                    // Show sticky success sheet
-                    self?.showRSVPSheet = true
-                    
+                    // Call completion with QR code
+                    completion?(response.qrCode)
+
                     // Update event with QR code if provided
                     if let qrCode = response.qrCode, var event = self?.event {
                         event.qrCode = qrCode
@@ -243,9 +256,10 @@ class EventViewModel: ObservableObject {
     }
 
     func fetchEventBookings() {
-        guard let event = event else { return }
+        guard let event = event, !hasLoadedBookings else { return }
 
         isLoadingBookings = true
+        hasLoadedBookings = true
 
         networkService.fetchEventBookings(eventId: event.id)
             .receive(on: DispatchQueue.main)

@@ -8,18 +8,18 @@
 import SwiftUI
 
 struct LoadingView: View {
+    var useDarkBackground: Bool = true
+
     var body: some View {
         VStack(spacing: Theme.Spacing.m) {
-            ProgressView()
-                .progressViewStyle(CircularProgressViewStyle(tint: Color.sioreeIcyBlue))
-                .scaleEffect(1.5)
-            
+            LogoView(size: .large, isSpinning: true)
+
             Text("Loading...")
                 .font(.sioreeBody)
-                .foregroundColor(Color.sioreeCharcoal.opacity(0.6))
+                .foregroundColor(useDarkBackground ? Color.sioreeLightGrey.opacity(0.6) : Color.sioreeCharcoal.opacity(0.6))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.sioreeWhite)
+        .background(useDarkBackground ? Color.clear : Color.sioreeWhite)
     }
 }
 

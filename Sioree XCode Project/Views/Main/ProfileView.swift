@@ -155,7 +155,6 @@ struct ProfileView: View {
                             onLike: {},
                             onSave: {}
                         )
-                        .padding(.horizontal, Theme.Spacing.m)
                     }
                 }
             }
@@ -176,7 +175,6 @@ struct ProfileView: View {
                         onLike: {},
                         onSave: {}
                     )
-                    .padding(.horizontal, Theme.Spacing.m)
                 }
             }
         }

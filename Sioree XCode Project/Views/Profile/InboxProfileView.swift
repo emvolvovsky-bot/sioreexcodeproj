@@ -97,7 +97,7 @@ struct InboxProfileView: View {
                                     }
                                 }
                                 .padding(.horizontal, Theme.Spacing.m)
-                                .padding(.top, 12)
+                                .padding(.top, 6)
                             }
                             
                             pastEventsSection

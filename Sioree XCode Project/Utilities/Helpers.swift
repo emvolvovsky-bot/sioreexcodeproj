@@ -21,11 +21,15 @@ struct Helpers {
     }
     
     // MARK: - Formatting
-    static func formatCurrency(_ amount: Double) -> String {
+    private static let currencyFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
         formatter.currencyCode = "USD"
-        return formatter.string(from: NSNumber(value: amount)) ?? "$0.00"
+        return formatter
+    }()
+
+    static func formatCurrency(_ amount: Double) -> String {
+        return currencyFormatter.string(from: NSNumber(value: amount)) ?? "$0.00"
     }
     
     static func formatNumber(_ number: Int) -> String {

@@ -12,12 +12,29 @@ struct EventCard: View {
     let onTap: () -> Void
     let onLike: () -> Void
     let onSave: () -> Void
+    private let cardCornerRadius: CGFloat = 18
+    private let imageHeight: CGFloat = 200
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Hero Image - Cover photo ONLY, no fallback
             ZStack(alignment: .topTrailing) {
-                CoverPhotoView(imageURL: event.images.first, height: 200)
+                RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .frame(height: imageHeight)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
+                            .stroke(Color.sioreeWhite.opacity(0.12), lineWidth: 0.5)
+                    )
+                
+                CoverPhotoView(imageURL: event.images.first, height: imageHeight)
+                    .overlay(
+                        LinearGradient(
+                            colors: [Color.clear, Color.black.opacity(0.12)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
                 
                 // Action buttons
                 HStack(spacing: Theme.Spacing.s) {
@@ -39,6 +56,7 @@ struct EventCard: View {
                 }
                 .padding(Theme.Spacing.m)
             }
+            .frame(height: imageHeight)
             
             // Content
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
@@ -67,28 +85,34 @@ struct EventCard: View {
                         .fontWeight(.semibold)
                         .foregroundColor(Color.sioreeIcyBlue)
                 }
+                
+                HStack(spacing: Theme.Spacing.xs) {
+                    Text("View event")
+                        .fontWeight(.semibold)
+                    Image(systemName: "chevron.right")
+                }
+                .font(.sioreeCaption)
+                .foregroundColor(Color.sioreeIcyBlue)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(.top, Theme.Spacing.xs)
             }
             .padding(Theme.Spacing.m)
-            .background(Color.sioreeWhite.opacity(0.05))
+            .background(Color.sioreeWhite.opacity(0.04))
         }
         .background(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .fill(Color.sioreeWhite.opacity(0.05))
-                .shadow(color: Color.black.opacity(0.2), radius: 8, x: 0, y: 4)
+            RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
+                .fill(Color.sioreeWhite.opacity(0.06))
+                .shadow(color: Color.black.opacity(0.25), radius: 14, x: 0, y: 8)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                .stroke(
-                    LinearGradient(
-                        colors: [Color.sioreeIcyBlue.opacity(0.3), Color.sioreeWarmGlow.opacity(0.2)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1
-                )
+            RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
+                .stroke(Color.sioreeWhite.opacity(0.14), lineWidth: 1)
         )
-        .cornerRadius(Theme.CornerRadius.medium)
+        .clipShape(RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous))
+        .padding(.horizontal, Theme.Spacing.m)
         .onTapGesture(perform: onTap)
+        .accessibilityAddTraits(.isButton)
     }
 }
 

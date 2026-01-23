@@ -11,6 +11,7 @@ enum ButtonVariant {
     case primary
     case secondary
     case tertiary
+    case destructive
 }
 
 enum ButtonSize {
@@ -84,6 +85,8 @@ struct CustomButton: View {
             return Color.clear
         case .tertiary:
             return Color.clear
+        case .destructive:
+            return Color.red.opacity(0.1)
         }
     }
     
@@ -92,9 +95,11 @@ struct CustomButton: View {
         case .primary:
             return Color.sioreeWhite
         case .secondary:
-            return Color.sioreeIcyBlue
+            return Color.sioreeWhite
         case .tertiary:
             return Color.sioreeCharcoal
+        case .destructive:
+            return Color.red
         }
     }
     
@@ -109,6 +114,7 @@ struct CustomButton: View {
         CustomButton(title: "Primary Button", variant: .primary, size: .large) {}
         CustomButton(title: "Secondary Button", variant: .secondary, size: .medium) {}
         CustomButton(title: "Tertiary Button", variant: .tertiary, size: .small) {}
+        CustomButton(title: "Destructive Button", variant: .destructive, size: .medium) {}
     }
     .padding()
 }

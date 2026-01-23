@@ -51,13 +51,22 @@ struct AvatarView: View {
             }
             
             Group {
-                if let imageURL = imageURL, !imageURL.isEmpty {
-                    AsyncImage(url: URL(string: imageURL)) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        placeholderView
+                if let imageURL = imageURL, !imageURL.isEmpty, let url = URL(string: imageURL) {
+                    CachedAsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .onAppear {
+                                    // Cache the image when it loads successfully
+                                    if let uiImage = image.asUIImage() {
+                                        ImageCache.shared.storeImage(uiImage, for: url)
+                                    }
+                                }
+                        default:
+                            placeholderView
+                        }
                     }
                 } else {
                     placeholderView

@@ -25,25 +25,29 @@ struct TalentInboxView: View {
                 
                 VStack(spacing: Theme.Spacing.m) {
                     inboxSearchHeader
-                    
+
                     if isLoading {
+                        Spacer()
                         LoadingView()
+                        Spacer()
                     } else if filteredConversations.isEmpty {
+                        Spacer()
                         VStack(spacing: Theme.Spacing.m) {
                             Image(systemName: "envelope.fill")
                                 .font(.system(size: 60))
                                 .foregroundColor(Color.sioreeIcyBlue.opacity(0.5))
-                            
+
                             Text(conversations.isEmpty ? "No messages yet" : "No chats found")
                                 .font(.sioreeH3)
                                 .foregroundColor(Color.sioreeWhite)
-                            
+
                             Text(conversations.isEmpty ? "Communicate with other talent, partiers, and hosts" : "Try a different search")
                                 .font(.sioreeBody)
                                 .foregroundColor(Color.sioreeLightGrey)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal, Theme.Spacing.xl)
                         }
+                        Spacer()
                     } else {
                         ScrollView {
                             LazyVStack(spacing: Theme.Spacing.m) {
@@ -65,6 +69,7 @@ struct TalentInboxView: View {
                     }
                 }
                 .padding(.top, Theme.Spacing.m)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .navigationBar)

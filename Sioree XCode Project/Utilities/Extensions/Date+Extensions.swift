@@ -8,16 +8,24 @@
 import Foundation
 
 extension Date {
-    func formattedEventDate() -> String {
+    private static let eventDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEEE, MMM d"
-        return formatter.string(from: self)
-    }
-    
-    func formattedEventTime() -> String {
+        return formatter
+    }()
+
+    private static let eventTimeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "h:mm a"
-        return formatter.string(from: self)
+        return formatter
+    }()
+
+    func formattedEventDate() -> String {
+        return Self.eventDateFormatter.string(from: self)
+    }
+
+    func formattedEventTime() -> String {
+        return Self.eventTimeFormatter.string(from: self)
     }
     
     func formattedRelative() -> String {

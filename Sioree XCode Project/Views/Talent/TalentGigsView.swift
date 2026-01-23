@@ -9,8 +9,12 @@ import SwiftUI
 import Combine
 import UIKit
 
+// Assuming Constants is in the same module
+// If not, you may need to import the appropriate module
+
 enum GigStatus: String {
     case requested = "Requested"
+    case waitingForPayment = "Waiting for Payment"
     case confirmed = "Confirmed"
     case paid = "Paid"
     case completed = "Completed"
@@ -48,31 +52,27 @@ struct TalentGigsView: View {
         Gig(eventName: "Underground Rave Warehouse", hostName: "Midnight Collective", date: Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date(), rate: "$500", status: .paid),
         Gig(eventName: "Beachside Bonfire", hostName: "Coastal Vibes", date: Calendar.current.date(byAdding: .day, value: -2, to: Date()) ?? Date(), rate: "$400", status: .completed)
     ]
-    @State private var showFindEvents = false
-    @State private var selectedTalentType = "DJ"
-    @State private var selectedTab = 0 // 0 = My Gigs, 1 = Browse Events
     @State private var selectedSegment = 0 // 0 = Pending, 1 = Upcoming, 2 = Past
-    @State private var eventsLookingForTalent: [Event] = []
-    @State private var isLoadingEvents = false
-    @State private var eventsError: String?
     @State private var selectedGigForMessaging: Gig?
     @State private var showMessageView = false
     @State private var showWithdrawConfirmation = false
     @State private var gigToWithdraw: Gig?
-    @State private var selectedEventId: String?
-    @State private var showEventDetail = false
+    @State private var selectedTalentType = "DJ"
     @State private var currentTalent: Talent?
     @State private var isTalentAvailable: Bool = false
+    @State private var talentPrice: Double = 0
     @State private var showTalentTypeSelector = false
+    @State private var selectedEventId: String?
+    @State private var showEventDetail = false
     private let networkService = NetworkService()
     private let messagingService = MessagingService()
     
     var pendingBookings: [Gig] {
-        myGigs.filter { $0.status == .requested }
+        myGigs.filter { $0.status == .requested || $0.status == .waitingForPayment }
     }
 
     var upcomingBookings: [Gig] {
-        myGigs.filter { ($0.status == .confirmed || $0.status == .paid) && $0.date >= Date() }
+        myGigs.filter { $0.status == .paid && $0.date >= Date() }
     }
 
     var pastBookings: [Gig] {
@@ -91,16 +91,6 @@ struct TalentGigsView: View {
                 .ignoresSafeArea()
                 
                 VStack(spacing: 0) {
-                    // Tab Selector
-                    Picker("", selection: $selectedTab) {
-                        Text("My Bookings").tag(0)
-                        Text("Browse Events").tag(1)
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal, Theme.Spacing.m)
-                    .padding(.top, Theme.Spacing.m)
-                    
-                    if selectedTab == 0 {
                         // My Bookings Tab
                         VStack(spacing: 0) {
                             // Segment Picker
@@ -127,6 +117,15 @@ struct TalentGigsView: View {
                                                 handleBookingAction(for: booking, segment: selectedSegment)
                                             }, onWithdraw: selectedSegment == 0 ? {
                                                 withdrawApplication(for: booking)
+                                            } : nil, onAccept: selectedSegment == 0 && booking.status == .requested ? {
+                                                // Accept the booking request - change status to waiting for payment
+                                                acceptBooking(booking)
+                                            } : nil, onReject: selectedSegment == 0 && booking.status == .requested ? {
+                                                rejectBooking(booking)
+                                            } : nil, onViewEvent: selectedSegment == 2 ? {
+                                                // Navigate to this event in the host's profile
+                                                // For now, show a placeholder
+                                                print("Navigate to event '\(booking.eventName)' in host profile")
                                             } : nil)
                                             .padding(.horizontal, Theme.Spacing.m)
                                         }
@@ -142,7 +141,7 @@ struct TalentGigsView: View {
                                                 .foregroundColor(.sioreeWhite)
 
                                             if selectedSegment == 0 {
-                                                Text("Apply to events to see pending bookings here")
+                                                Text("Hosts will send you booking requests here")
                                                     .font(.sioreeBody)
                                                     .foregroundColor(.sioreeLightGrey.opacity(0.7))
                                                     .multilineTextAlignment(.center)
@@ -156,45 +155,6 @@ struct TalentGigsView: View {
                                 .padding(.bottom, Theme.Spacing.xl)
                             }
                         }
-                    } else {
-                        // Find Events Tab
-                        ScrollView {
-                            VStack(spacing: Theme.Spacing.m) {
-                                Button(action: {
-                                    showFindEvents = true
-                                }) {
-                                    HStack {
-                                        Image(systemName: "magnifyingglass")
-                                            .font(.system(size: 20))
-                                        Text("Find events that might need \(selectedTalentType)")
-                                            .font(.sioreeBody)
-                                    }
-                                    .foregroundColor(Color.sioreeWhite)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(Theme.Spacing.m)
-                                    .background(Color.sioreeIcyBlue.opacity(0.2))
-                                    .cornerRadius(Theme.CornerRadius.medium)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                                            .stroke(Color.sioreeIcyBlue, lineWidth: 2)
-                                    )
-                                }
-                                .padding(.horizontal, Theme.Spacing.m)
-                                .padding(.top, Theme.Spacing.m)
-                                
-                                if isLoadingEvents {
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .sioreeIcyBlue))
-                                        .padding(.vertical, Theme.Spacing.xl)
-                                } else if eventsLookingForTalent.isEmpty {
-                                    emptyState
-                                } else {
-                                    eventsList
-                                }
-                            }
-                            .padding(.bottom, Theme.Spacing.m)
-                        }
-                    }
                 }
             }
             .navigationTitle("Gigs")
@@ -222,24 +182,23 @@ struct TalentGigsView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showFindEvents) {
-                FindEventsForTalentView(selectedTalentType: $selectedTalentType)
-            }
             .sheet(isPresented: $showTalentTypeSelector) {
                 TalentTypeSelectorView(
                     selectedTalentType: $selectedTalentType,
                     isTalentAvailable: $isTalentAvailable,
+                    price: $talentPrice,
+                    existingTalent: currentTalent,
+                    onStripeCheck: isStripeSetup,
                     onSave: {
-                        // Save the talent type and availability
+                        // Save the talent type, availability, and pricing
                         if let talent = currentTalent {
                             talentViewModel.updateAvailability(talentId: talent.id, isAvailable: isTalentAvailable)
+                            // TODO: Save pricing information to backend
+                            print("Saving talent profile - Type: \(selectedTalentType), Price: $\(talentPrice)")
                         }
                         showTalentTypeSelector = false
                     }
                 )
-            }
-            .onChange(of: selectedTalentType) { oldValue, newValue in
-                loadEventsForTalentType()
             }
             .sheet(isPresented: $showMessageView) {
                 if let gig = selectedGigForMessaging {
@@ -268,7 +227,6 @@ struct TalentGigsView: View {
                     selectedTalentType = talentCategory.rawValue
                 }
                 loadCurrentTalent()
-                loadEventsForTalentType()
             }
         }
     }
@@ -290,17 +248,6 @@ struct TalentGigsView: View {
         case 1: // Upcoming - Message Host
             selectedGigForMessaging = booking
             showMessageView = true
-        case 2: // Past - Rate & Review
-            let alert = UIAlertController(
-                title: "Rate & Review",
-                message: "Rating and review for \(booking.eventName) would open here.",
-                preferredStyle: .alert
-            )
-            alert.addAction(UIAlertAction(title: "OK", style: .default))
-            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-               let rootViewController = windowScene.windows.first?.rootViewController {
-                rootViewController.present(alert, animated: true)
-            }
         default:
             break
         }
@@ -324,31 +271,65 @@ struct TalentGigsView: View {
         gigToWithdraw = nil
     }
 
-    
-    private func loadEventsForTalentType() {
-        guard !selectedTalentType.isEmpty else { return }
-        isLoadingEvents = true
-        eventsError = nil
-        
-        networkService.fetchEventsLookingForTalent(talentType: selectedTalentType)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { completion in
-                    isLoadingEvents = false
-                    if case .failure(let error) = completion {
-                        eventsError = error.localizedDescription
-                        print("❌ Failed to load events: \(error)")
-                    }
-                },
-                receiveValue: { events in
-                    isLoadingEvents = false
-                    eventsLookingForTalent = events
-                    print("✅ Loaded \(events.count) events looking for \(selectedTalentType)")
-                }
+    private func acceptBooking(_ booking: Gig) {
+        // Check if Stripe is set up (only required in production)
+        if Constants.API.environment == .production && !isStripeSetup() {
+            // Show alert that Stripe setup is required
+            let alert = UIAlertController(
+                title: "Stripe Setup Required",
+                message: "You must set up Stripe payouts before accepting bookings.",
+                preferredStyle: .alert
             )
-            .store(in: &cancellables)
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+               let rootViewController = windowScene.windows.first?.rootViewController {
+                rootViewController.present(alert, animated: true)
+            }
+            return
+        }
+
+        // Update the booking status to waiting for payment
+        if let index = myGigs.firstIndex(where: { $0.id == booking.id }) {
+            myGigs[index] = Gig(
+                id: booking.id,
+                eventName: booking.eventName,
+                hostName: booking.hostName,
+                date: booking.date,
+                rate: booking.rate,
+                status: .waitingForPayment
+            )
+        }
+
+        // In a real app, you'd call an API to accept the booking
+        print("Accepted booking for event: \(booking.eventName)")
+    }
+
+    private func rejectBooking(_ booking: Gig) {
+        // Remove the booking from the list
+        myGigs.removeAll { $0.id == booking.id }
+
+        // In a real app, you'd call an API to reject the booking
+        print("Rejected booking for event: \(booking.eventName)")
+    }
+
+    private func isStripeSetup() -> Bool {
+        // This would check if the talent has completed Stripe onboarding
+        // For now, return false to simulate not being set up
+        return false
+    }
+
+    
+
+    private func toggleAvailability() {
+        guard let talent = currentTalent else { return }
+
+        let newAvailability = !isTalentAvailable
+        isTalentAvailable = newAvailability
+        talentViewModel.updateAvailability(talentId: talent.id, isAvailable: newAvailability)
     }
     
+    @State private var cancellables = Set<AnyCancellable>()
+
     private func getTalentCategoryFromUser(_ user: User) -> TalentCategory? {
         // TODO: Get talent category from user profile
         // For now, return nil and let user select
@@ -370,73 +351,10 @@ struct TalentGigsView: View {
                     currentTalent = talent
                     isTalentAvailable = talent.isAvailable
                     selectedTalentType = talent.category.rawValue
+                    talentPrice = talent.priceRange.min // Use min as the single price
                 }
             )
             .store(in: &cancellables)
-    }
-
-    private func toggleAvailability() {
-        guard let talent = currentTalent else { return }
-
-        let newAvailability = !isTalentAvailable
-        isTalentAvailable = newAvailability
-        talentViewModel.updateAvailability(talentId: talent.id, isAvailable: newAvailability)
-    }
-    
-    @State private var cancellables = Set<AnyCancellable>()
-    
-    // MARK: - Subviews
-    private var eventsList: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            Text("Events Looking For \(selectedTalentType)")
-                .font(.sioreeH4)
-                .foregroundColor(.sioreeWhite)
-                .padding(.horizontal, Theme.Spacing.m)
-            
-            ForEach(eventsLookingForTalent) { event in
-                NavigationLink(destination: EventDetailView(eventId: event.id)) {
-                    EventCard(
-                        event: event,
-                        onTap: {},
-                        onLike: {},
-                        onSave: {}
-                    )
-                    .overlay(alignment: .topLeading) {
-                        if let need = event.lookingForSummary ?? event.lookingForTalentType, !need.isEmpty {
-                            Label("Looking for \(need)", systemImage: "person.3.sequence.fill")
-                                .font(.sioreeCaption)
-                                .foregroundColor(.sioreeWhite)
-                                .padding(8)
-                                .background(Color.sioreeIcyBlue.opacity(0.8))
-                                .cornerRadius(8)
-                                .padding(8)
-                        }
-                    }
-                }
-                .buttonStyle(PlainButtonStyle())
-                .padding(.horizontal, Theme.Spacing.m)
-            }
-        }
-    }
-    
-    private var emptyState: some View {
-        VStack(spacing: Theme.Spacing.m) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 50))
-                .foregroundColor(.sioreeLightGrey.opacity(0.5))
-            
-            Text("No one needs \(selectedTalentType.lowercased()) yet")
-                .font(.sioreeH4)
-                .foregroundColor(.sioreeWhite)
-            
-            Text("Check back later for events that need \(selectedTalentType.lowercased())")
-                .font(.sioreeBody)
-                .foregroundColor(.sioreeLightGrey)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, Theme.Spacing.xl)
-        .padding(.horizontal, Theme.Spacing.m)
     }
 }
 
@@ -486,6 +404,9 @@ struct TalentBookingRow: View {
     let segment: Int // 0 = Pending, 1 = Upcoming, 2 = Past
     let onAction: () -> Void
     let onWithdraw: (() -> Void)?
+    let onAccept: (() -> Void)?
+    let onReject: (() -> Void)?
+    let onViewEvent: (() -> Void)?
 
     private var actionButtonTitle: String {
         switch segment {
@@ -494,7 +415,7 @@ struct TalentBookingRow: View {
         case 1: // Upcoming
             return "Message Host"
         case 2: // Past
-            return "Rate & Review"
+            return "View Event"
         default:
             return "View"
         }
@@ -547,44 +468,94 @@ struct TalentBookingRow: View {
 
                     // Status badge for pending/upcoming
                     if segment < 2 {
-                        Text(booking.status.rawValue)
-                            .font(.sioreeCaption)
-                            .foregroundColor(.sioreeWhite)
-                            .padding(.horizontal, Theme.Spacing.xs)
-                            .padding(.vertical, 2)
-                            .background(statusColor(for: booking.status))
-                            .clipShape(Capsule())
+                        if segment == 1 { // Upcoming (paid gigs)
+                            Text("Confirmed")
+                                .font(.sioreeCaption)
+                                .foregroundColor(.green)
+                        } else { // Pending
+                            Text(booking.status.rawValue)
+                                .font(.sioreeCaption)
+                                .foregroundColor(.sioreeWhite)
+                                .padding(.horizontal, Theme.Spacing.xs)
+                                .padding(.vertical, 2)
+                                .background(statusColor(for: booking.status))
+                                .clipShape(Capsule())
+                        }
                     }
                 }
             }
 
             // Action buttons
             HStack(spacing: Theme.Spacing.s) {
-                CustomButton(
-                    title: actionButtonTitle,
-                    variant: .primary,
-                    size: .small
-                ) {
-                    onAction()
-                }
-
                 if segment == 0 {
-                    // Pending bookings can be withdrawn
-                    CustomButton(
-                        title: "Withdraw",
-                        variant: .secondary,
-                        size: .small
-                    ) {
-                        onWithdraw?()
+                    if booking.status == .requested {
+                        // Requested bookings: View Details, Accept, Reject, Message Host
+                        VStack(spacing: Theme.Spacing.xs) {
+                            HStack(spacing: Theme.Spacing.xs) {
+                                CustomButton(
+                                    title: "View Details",
+                                    variant: .secondary,
+                                    size: .small
+                                ) {
+                                    onAction()
+                                }
+
+                                CustomButton(
+                                    title: "Message Host",
+                                    variant: .secondary,
+                                    size: .small
+                                ) {
+                                    // For now, show placeholder - this would open messaging
+                                    print("Message host for booking: \(booking.eventName)")
+                                }
+                            }
+
+                            HStack(spacing: Theme.Spacing.xs) {
+                                CustomButton(
+                                    title: "Accept",
+                                    variant: .primary,
+                                    size: .small
+                                ) {
+                                    onAccept?()
+                                }
+
+                                CustomButton(
+                                    title: "Reject",
+                                    variant: .destructive,
+                                    size: .small
+                                ) {
+                                    onReject?()
+                                }
+                            }
+                        }
+                    } else if booking.status == .waitingForPayment {
+                        // Waiting for payment: just Message Host
+                        CustomButton(
+                            title: "Message Host",
+                            variant: .primary,
+                            size: .small
+                        ) {
+                            // For now, show placeholder - this would open messaging
+                            print("Message host for booking: \(booking.eventName)")
+                        }
                     }
-                } else if segment == 2 && canDismiss {
-                    // Past bookings can be dismissed
+                } else if segment == 2 {
+                    // Past events: single button to view event
                     CustomButton(
-                        title: "Dismiss",
-                        variant: .secondary,
+                        title: "View Event",
+                        variant: .primary,
                         size: .small
                     ) {
-                        // Handle dismiss action
+                        onViewEvent?()
+                    }
+                } else {
+                    // Upcoming: Message Host
+                    CustomButton(
+                        title: "Message Host",
+                        variant: .primary,
+                        size: .small
+                    ) {
+                        onAction()
                     }
                 }
 
@@ -600,6 +571,8 @@ struct TalentBookingRow: View {
         switch status {
         case .requested:
             return .sioreeWarning
+        case .waitingForPayment:
+            return .orange
         case .confirmed:
             return .green
         case .paid:
@@ -614,8 +587,12 @@ struct TalentTypeSelectorView: View {
     @Environment(\.dismiss) var dismiss
     @Binding var selectedTalentType: String
     @Binding var isTalentAvailable: Bool
+    @Binding var price: Double
+    let existingTalent: Talent?
+    let onStripeCheck: () -> Bool
 
     let onSave: () -> Void
+
 
     private var talentTypes: [String] {
         TalentCategory.allCases.map { $0.rawValue }
@@ -631,23 +608,19 @@ struct TalentTypeSelectorView: View {
                 )
                 .ignoresSafeArea()
 
-                VStack(spacing: Theme.Spacing.xl) {
+                ScrollView {
+                    VStack(spacing: Theme.Spacing.xl) {
                     Text("Set Up Your Talent Profile")
                         .font(.sioreeH3)
                         .foregroundColor(.sioreeWhite)
                         .padding(.top, Theme.Spacing.m)
 
-                    Text("Choose your talent type and availability")
+                    Text("Choose your talent type, set your price per event, and availability")
                         .font(.sioreeBody)
                         .foregroundColor(.sioreeLightGrey)
                         .multilineTextAlignment(.center)
 
                     VStack(spacing: Theme.Spacing.m) {
-                        Text("Talent Type")
-                            .font(.sioreeH4)
-                            .foregroundColor(.sioreeWhite)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-
                         ForEach(talentTypes, id: \.self) { type in
                             Button(action: {
                                 selectedTalentType = type
@@ -673,33 +646,108 @@ struct TalentTypeSelectorView: View {
                     }
 
                     VStack(spacing: Theme.Spacing.m) {
+                        Text("Set Your Price Per Event")
+                            .font(.sioreeH4)
+                            .foregroundColor(.sioreeWhite)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                            Text("Price")
+                                .font(.sioreeCaption)
+                                .foregroundColor(.sioreeLightGrey)
+
+                            TextField("0.00", text: Binding(
+                                get: { price > 0 ? String(format: "%.2f", price) : "" },
+                                set: { newValue in
+                                    if let value = Double(newValue), value >= 0 {
+                                        price = value
+                                    } else if newValue.isEmpty {
+                                        price = 0
+                                    }
+                                }
+                            ))
+                                .keyboardType(.decimalPad)
+                                .padding(Theme.Spacing.s)
+                                .background(Color.sioreeLightGrey.opacity(0.1))
+                                .cornerRadius(Theme.CornerRadius.medium)
+                                .foregroundColor(.sioreeWhite)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
+                                        .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 1)
+                                )
+                        }
+                        .padding(.bottom, Theme.Spacing.s)
+                    }
+                    .onAppear {
+                        // Load existing pricing if available
+                        if let talent = existingTalent {
+                            price = talent.priceRange.min // Use min as the single price
+                        }
+                    }
+
+                    VStack(spacing: Theme.Spacing.m) {
                         Text("Availability")
                             .font(.sioreeH4)
                             .foregroundColor(.sioreeWhite)
                             .frame(maxWidth: .infinity, alignment: .leading)
 
-                        Button(action: {
-                            isTalentAvailable.toggle()
-                        }) {
-                            HStack {
-                                Text(isTalentAvailable ? "On Market" : "Off Market")
-                                    .font(.sioreeBody)
-                                    .foregroundColor(.sioreeWhite)
+                        HStack(spacing: Theme.Spacing.m) {
+                            Button(action: {
+                                isTalentAvailable = false
+                            }) {
+                                HStack {
+                                    Text("Off Market")
+                                        .font(.sioreeBody)
+                                        .foregroundColor(.sioreeWhite)
 
-                                Spacer()
+                                    Spacer()
 
-                                Circle()
-                                    .fill(isTalentAvailable ? Color.green : Color.gray.opacity(0.5))
-                                    .frame(width: 20, height: 20)
-                                    .overlay(
-                                        Image(systemName: isTalentAvailable ? "checkmark" : "xmark")
-                                            .font(.system(size: 12, weight: .bold))
-                                            .foregroundColor(.white)
-                                    )
+                                    if !isTalentAvailable {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundColor(.sioreeIcyBlue)
+                                            .font(.system(size: 20))
+                                    }
+                                }
+                                .padding(Theme.Spacing.m)
+                                .background(Color.sioreeCharcoal.opacity(!isTalentAvailable ? 0.6 : 0.3))
+                                .cornerRadius(Theme.CornerRadius.medium)
                             }
-                            .padding(Theme.Spacing.m)
-                            .background(Color.sioreeCharcoal.opacity(0.3))
-                            .cornerRadius(Theme.CornerRadius.medium)
+
+                            Button(action: {
+                                // Check if Stripe is set up before allowing talent to go on market (only in production)
+                                if Constants.API.environment == .production && !onStripeCheck() {
+                                    // Show alert that Stripe setup is required
+                                    let alert = UIAlertController(
+                                        title: "Stripe Setup Required",
+                                        message: "You must set up Stripe payouts before going on market.",
+                                        preferredStyle: .alert
+                                    )
+                                    alert.addAction(UIAlertAction(title: "OK", style: .default))
+                                    if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                                       let rootViewController = windowScene.windows.first?.rootViewController {
+                                        rootViewController.present(alert, animated: true)
+                                    }
+                                    return
+                                }
+                                isTalentAvailable = true
+                            }) {
+                                HStack {
+                                    Text("On Market")
+                                        .font(.sioreeBody)
+                                        .foregroundColor(.sioreeWhite)
+
+                                    Spacer()
+
+                                    if isTalentAvailable {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundColor(.sioreeIcyBlue)
+                                            .font(.system(size: 20))
+                                    }
+                                }
+                                .padding(Theme.Spacing.m)
+                                .background(Color.sioreeCharcoal.opacity(isTalentAvailable ? 0.6 : 0.3))
+                                .cornerRadius(Theme.CornerRadius.medium)
+                            }
                         }
                     }
 
@@ -710,22 +758,44 @@ struct TalentTypeSelectorView: View {
                         variant: .primary,
                         size: .large
                     ) {
+                        // Validate pricing
+                        if price <= 0 {
+                            // Show validation error
+                            let alert = UIAlertController(
+                                title: "Invalid Pricing",
+                                message: "Please set a valid price greater than $0.",
+                                preferredStyle: .alert
+                            )
+                            alert.addAction(UIAlertAction(title: "OK", style: .default))
+                            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                               let rootViewController = windowScene.windows.first?.rootViewController {
+                                rootViewController.present(alert, animated: true)
+                            }
+                            return
+                        }
+
                         onSave()
                     }
                     .padding(.horizontal, Theme.Spacing.m)
                     .padding(.bottom, Theme.Spacing.xl)
+                    }
                 }
                 .padding(.horizontal, Theme.Spacing.m)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: {
-                        dismiss()
-                    }) {
-                        Image(systemName: "xmark")
-                            .foregroundColor(.sioreeWhite)
-                            .font(.system(size: 16, weight: .semibold))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Button(action: {
+                            dismiss()
+                        }) {
+                            Image(systemName: "xmark")
+                                .foregroundColor(.sioreeWhite)
+                                .font(.system(size: 16, weight: .semibold))
+                        }
+                        Text("Talent Type")
+                            .font(.sioreeCaption)
+                            .foregroundColor(.sioreeLightGrey)
                     }
                 }
             }

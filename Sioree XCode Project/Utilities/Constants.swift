@@ -17,12 +17,12 @@ struct Constants {
         var baseURL: String {
             switch self {
             case .development:
-                // Default to Render; set RUN_LOCAL=true to force localhost.
-                if let runLocalValue = ProcessInfo.processInfo.environment["RUN_LOCAL"]?.lowercased(),
-                   runLocalValue == "true" {
-                    return "http://127.0.0.1:4000"
+                // Default to localhost for easier local development
+                // Set RUN_LOCAL=false to use production Render API
+                if ProcessInfo.processInfo.environment["RUN_LOCAL"]?.lowercased() == "false" {
+                    return "https://sioree-api.onrender.com"
                 }
-                return "https://sioree-api.onrender.com"
+                return "http://localhost:4000"
             case .production:
                 return "https://sioree-api.onrender.com"  // Render deployment
             }
@@ -61,6 +61,8 @@ struct Constants {
         // Update these values with your Stripe Buy Button settings.
         static let publishableKey = "pk_test_51SbF9IEZUZFsipCPLKDUFgbVQpowjxWafVJjHZBR9TihnyFHSsZ5yA93lrz4krTsQNNttqwBIrDW0MLKcYDMiD6q00Db2qsWKJ"
         static let connectOnboardingFallbackURL = "https://connect.stripe.com/d/setup/s/_TpV5nheYDyMZuXtE0HLRqHnJ3f/YWNjdF8xU3JxNVFJM3dzbFNmdk9O/7400bccc20031ffc6"
+        static let applePayMerchantId = "merchant.com.soiree.tickets"
+        static let applePayCountryCode = "US"
     }
 
     // MARK: - Limits

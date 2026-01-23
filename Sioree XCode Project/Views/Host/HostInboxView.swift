@@ -48,25 +48,28 @@ struct HostInboxView: View {
                 
                 VStack(spacing: Theme.Spacing.m) {
                     inboxSearchHeader
-                    
+
                     if isLoading {
+                        Spacer()
                         LoadingView()
+                        Spacer()
                     } else if filteredConversations.isEmpty {
+                        Spacer()
                         VStack(spacing: Theme.Spacing.m) {
                             Image(systemName: "envelope.fill")
                                 .font(.system(size: 60))
                                 .foregroundColor(Color.sioreeIcyBlue.opacity(0.5))
-                            
+
                             Text(conversations.isEmpty ? "No messages yet" : "No chats found")
                                 .font(.sioreeH3)
                                 .foregroundColor(Color.sioreeWhite)
-                            
+
                             Text(conversations.isEmpty ? "Answer any questions from partiers" : "Try a different search")
                                 .font(.sioreeBody)
                                 .foregroundColor(Color.sioreeLightGrey)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal, Theme.Spacing.xl)
-                            
+
                             if conversations.isEmpty {
                                 Text("Reach out to talent")
                                     .font(.sioreeBody)
@@ -75,6 +78,7 @@ struct HostInboxView: View {
                                     .padding(.horizontal, Theme.Spacing.xl)
                             }
                         }
+                        Spacer()
                     } else {
                         ScrollView {
                             LazyVStack(spacing: Theme.Spacing.m) {
@@ -96,6 +100,7 @@ struct HostInboxView: View {
                     }
                 }
                 .padding(.top, Theme.Spacing.m)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .navigationBar)

@@ -27,14 +27,16 @@ struct StatusChip: View {
     }
     
     var body: some View {
-        Text(statusText)
+        let shouldShowBackground = statusText != "Waiting for Payment" && statusText != "Requested"
+
+        return Text(statusText)
             .font(.sioreeCaption)
             .fontWeight(.semibold)
             .foregroundColor(statusColor)
-            .padding(.horizontal, Theme.Spacing.s)
-            .padding(.vertical, 4)
-            .background(statusColor.opacity(0.2))
-            .cornerRadius(Theme.CornerRadius.small)
+            .padding(.horizontal, shouldShowBackground ? Theme.Spacing.s : 0)
+            .padding(.vertical, shouldShowBackground ? 4 : 0)
+            .background(shouldShowBackground ? statusColor.opacity(0.2) : Color.clear)
+            .cornerRadius(shouldShowBackground ? Theme.CornerRadius.small : 0)
     }
     
     private static func colorForEventStatus(_ status: EventStatus) -> Color {
@@ -48,7 +50,8 @@ struct StatusChip: View {
     
     private static func colorForGigStatus(_ status: GigStatus) -> Color {
         switch status {
-        case .requested: return Color.sioreeLightGrey
+        case .requested: return Color.orange
+        case .waitingForPayment: return Color.orange.opacity(0.7)
         case .confirmed: return Color.sioreeIcyBlue
         case .paid: return Color.sioreeWarmGlow
         case .completed: return Color.green.opacity(0.7)

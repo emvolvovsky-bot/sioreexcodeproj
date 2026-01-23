@@ -28,18 +28,20 @@ struct AddPostFromEventView: View {
     private let networkService = NetworkService()
     
     private let maxEventHistoryPhotos = 7
+    private var isHostEvent: Bool {
+        event != nil && authViewModel.currentUser?.userType == .host
+    }
     private var maxPhotosAllowed: Int {
-        let isHost = authViewModel.currentUser?.userType == .host
-        // Hosts have no limit on photos for events
-        if event != nil && isHost {
-            return Constants.Limits.maxPostImages // Use standard post limit per upload, but can upload unlimited times
-        }
         // For event history (partiers), limit to 7 total photos
-        if event != nil {
+        if event != nil && !isHostEvent {
             return max(1, maxEventHistoryPhotos - existingPhotoCount)
         }
         // For regular posts, use standard limit
         return Constants.Limits.maxPostImages
+    }
+    private var pickerSelectionLimit: Int {
+        // 0 means unlimited in PHPickerConfiguration
+        isHostEvent ? 0 : maxPhotosAllowed
     }
 
     var body: some View {
@@ -152,11 +154,11 @@ struct AddPostFromEventView: View {
                                 .opacity(isUploading ? 0.6 : 1.0)
 
                                 // Add more photos button
-                                if selectedImages.count < maxPhotosAllowed {
+                                if isHostEvent || selectedImages.count < maxPhotosAllowed {
                                     Button(action: {
                                         showImagePicker = true
                                     }) {
-                                        Text("Add More Photos (\(selectedImages.count)/\(maxPhotosAllowed))")
+                                        Text(isHostEvent ? "Add More Photos" : "Add More Photos (\(selectedImages.count)/\(maxPhotosAllowed))")
                                             .font(.sioreeBodySmall)
                                             .foregroundColor(.sioreeIcyBlue)
                                     }
@@ -168,8 +170,15 @@ struct AddPostFromEventView: View {
                                         .padding(.top, Theme.Spacing.s)
                                 }
                                 
+                                if isHostEvent && selectedImages.count > 0 {
+                                    Text("\(selectedImages.count) photos selected")
+                                        .font(.sioreeCaption)
+                                        .foregroundColor(.sioreeLightGrey.opacity(0.7))
+                                        .padding(.top, Theme.Spacing.xs)
+                                }
+                                
                                 // Show warning if approaching event history limit
-                                if let event = event, existingPhotoCount + selectedImages.count >= maxEventHistoryPhotos {
+                                if let event = event, !isHostEvent, existingPhotoCount + selectedImages.count >= maxEventHistoryPhotos {
                                     Text("Note: Event history shows max \(maxEventHistoryPhotos) photos")
                                         .font(.sioreeCaption)
                                         .foregroundColor(.sioreeLightGrey.opacity(0.7))
@@ -202,7 +211,7 @@ struct AddPostFromEventView: View {
                 }
             }
             .sheet(isPresented: $showImagePicker) {
-                MultiplePhotoPicker(selectedImages: $selectedImages, limit: maxPhotosAllowed)
+                MultiplePhotoPicker(selectedImages: $selectedImages, limit: pickerSelectionLimit)
             }
             .onAppear {
                 if let event = event {

@@ -9,7 +9,6 @@ import SwiftUI
 
 enum TalentTab: CaseIterable {
     case gigs
-    case map
     case inbox
     case profile
 }
@@ -27,11 +26,7 @@ struct TalentTabContainer: View {
                     .environmentObject(talentViewModel)
                     .tag(TalentTab.gigs)
                     .tabItem { EmptyView() }
-                
-                TalentEventsMapView()
-                    .tag(TalentTab.map)
-                    .tabItem { EmptyView() }
-                
+
                 TalentInboxView()
                     .tag(TalentTab.inbox)
                     .tabItem { EmptyView() }
@@ -75,7 +70,7 @@ private struct TalentBottomBar: View {
         GeometryReader { geometry in
             let safeAreaBottom = geometry.safeAreaInsets.bottom
             let totalHeight = 70 + safeAreaBottom
-            let tabWidth = geometry.size.width / 4
+            let tabWidth = geometry.size.width / 3
             
             ZStack(alignment: .bottom) {
                 RoundedRectangle(cornerRadius: 26, style: .continuous)
@@ -96,10 +91,9 @@ private struct TalentBottomBar: View {
                     )
                     .shadow(color: Color.sioreeIcyBlue.opacity(0.22), radius: 16, x: 0, y: 10)
                     .frame(width: geometry.size.width, height: totalHeight)
-                
+
                 HStack(spacing: 0) {
                     tabButton(.gigs, tabWidth: tabWidth, geometry: geometry)
-                    tabButton(.map, tabWidth: tabWidth, geometry: geometry)
                     tabButton(.inbox, tabWidth: tabWidth, geometry: geometry)
                     tabButton(.profile, tabWidth: tabWidth, geometry: geometry)
                 }
@@ -145,8 +139,6 @@ private struct TalentBottomBar: View {
         switch tab {
         case .gigs:
             return isSelected ? "briefcase.fill" : "briefcase"
-        case .map:
-            return isSelected ? "map.fill" : "map"
         case .inbox:
             return isSelected ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right"
         case .profile:

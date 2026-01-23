@@ -285,17 +285,155 @@ struct ImagePicker: UIViewControllerRepresentable {
 
 struct PrivacySettingsView: View {
     var body: some View {
-        Text("Privacy Settings")
-            .foregroundColor(.sioreeWhite)
+        NavigationStack {
+            ZStack {
+                LinearGradient(
+                    colors: [Color.sioreeBlack, Color.sioreeBlack.opacity(0.95), Color.sioreeCharcoal.opacity(0.1)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.l) {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                            Text("Privacy")
+                                .font(.sioreeH1)
+                                .foregroundColor(.sioreeWhite)
+                            Text("Control how your information is shown and shared.")
+                                .font(.sioreeBody)
+                                .foregroundColor(.sioreeLightGrey)
+                        }
+                        .padding(.bottom, Theme.Spacing.m)
+
+                        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                            Text("Profile Visibility")
+                                .font(.sioreeH3)
+                                .foregroundColor(.sioreeIcyBlue)
+                            Text("Your name, username, profile photo, and public posts are visible to other users so they can discover and connect with you. You can edit your profile details anytime.")
+                                .font(.sioreeBody)
+                                .foregroundColor(.sioreeLightGrey)
+                        }
+
+                        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                            Text("Messaging & Interactions")
+                                .font(.sioreeH3)
+                                .foregroundColor(.sioreeIcyBlue)
+                            Text("We keep your conversations private and only show messages to participants in a chat. Blocked users cannot view your profile or contact you.")
+                                .font(.sioreeBody)
+                                .foregroundColor(.sioreeLightGrey)
+                        }
+
+                        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                            Text("Data Sharing")
+                                .font(.sioreeH3)
+                                .foregroundColor(.sioreeIcyBlue)
+                            Text("We do not sell your personal information. We share data with service providers only to operate the app, process payments, and keep things secure.")
+                                .font(.sioreeBody)
+                                .foregroundColor(.sioreeLightGrey)
+                        }
+
+                        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                            Text("Account Controls")
+                                .font(.sioreeH3)
+                                .foregroundColor(.sioreeIcyBlue)
+                            Text("You can update your profile, disconnect social accounts, or delete your account from Settings. Deleting your account permanently removes your data.")
+                                .font(.sioreeBody)
+                                .foregroundColor(.sioreeLightGrey)
+                        }
+
+                        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                            Text("Need Help?")
+                                .font(.sioreeH3)
+                                .foregroundColor(.sioreeIcyBlue)
+                            Text("Questions about privacy? Contact us at privacy@sioree.com.")
+                                .font(.sioreeBody)
+                                .foregroundColor(.sioreeLightGrey)
+                        }
+                    }
+                    .padding(Theme.Spacing.l)
+                }
+            }
             .navigationTitle("Privacy")
+            .navigationBarTitleDisplayMode(.inline)
+        }
     }
 }
 
 struct SecuritySettingsView: View {
     var body: some View {
-        Text("Security Settings")
-            .foregroundColor(.sioreeWhite)
+        NavigationStack {
+            ZStack {
+                LinearGradient(
+                    colors: [Color.sioreeBlack, Color.sioreeBlack.opacity(0.95), Color.sioreeCharcoal.opacity(0.1)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.l) {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                            Text("Security")
+                                .font(.sioreeH1)
+                                .foregroundColor(.sioreeWhite)
+                            Text("Protect your account with strong security practices.")
+                                .font(.sioreeBody)
+                                .foregroundColor(.sioreeLightGrey)
+                        }
+                        .padding(.bottom, Theme.Spacing.m)
+
+                        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                            Text("Password & Sign-In")
+                                .font(.sioreeH3)
+                                .foregroundColor(.sioreeIcyBlue)
+                            Text("Use a unique password and update it regularly. If you suspect unusual activity, reset your password right away.")
+                                .font(.sioreeBody)
+                                .foregroundColor(.sioreeLightGrey)
+                        }
+
+                        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                            Text("Account Activity")
+                                .font(.sioreeH3)
+                                .foregroundColor(.sioreeIcyBlue)
+                            Text("We monitor sign-ins and flag suspicious activity. If we detect something unusual, we may ask you to verify your account.")
+                                .font(.sioreeBody)
+                                .foregroundColor(.sioreeLightGrey)
+                        }
+
+                        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                            Text("Payments Safety")
+                                .font(.sioreeH3)
+                                .foregroundColor(.sioreeIcyBlue)
+                            Text("Payment details are handled by secure, trusted processors. We do not store full card numbers on our servers.")
+                                .font(.sioreeBody)
+                                .foregroundColor(.sioreeLightGrey)
+                        }
+
+                        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                            Text("Device Security")
+                                .font(.sioreeH3)
+                                .foregroundColor(.sioreeIcyBlue)
+                            Text("Enable Face ID or Touch ID in your device settings for added protection.")
+                                .font(.sioreeBody)
+                                .foregroundColor(.sioreeLightGrey)
+                        }
+
+                        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                            Text("Need Help?")
+                                .font(.sioreeH3)
+                                .foregroundColor(.sioreeIcyBlue)
+                            Text("If you need help securing your account, contact support@sioree.com.")
+                                .font(.sioreeBody)
+                                .foregroundColor(.sioreeLightGrey)
+                        }
+                    }
+                    .padding(Theme.Spacing.l)
+                }
+            }
             .navigationTitle("Security")
+            .navigationBarTitleDisplayMode(.inline)
+        }
     }
 }
 
@@ -548,19 +686,70 @@ struct AppearanceSettingsView: View {
     }
 }
 
-struct LanguageSettingsView: View {
-    var body: some View {
-        Text("Language Settings")
-            .foregroundColor(.sioreeWhite)
-            .navigationTitle("Language")
-    }
-}
-
 struct DataUsageView: View {
     var body: some View {
-        Text("Data Usage")
-            .foregroundColor(.sioreeWhite)
+        NavigationStack {
+            ZStack {
+                LinearGradient(
+                    colors: [Color.sioreeBlack, Color.sioreeBlack.opacity(0.95), Color.sioreeCharcoal.opacity(0.1)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.l) {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                            Text("Data Usage")
+                                .font(.sioreeH1)
+                                .foregroundColor(.sioreeWhite)
+                            Text("Tips to manage data while browsing events and media.")
+                                .font(.sioreeBody)
+                                .foregroundColor(.sioreeLightGrey)
+                        }
+                        .padding(.bottom, Theme.Spacing.m)
+
+                        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                            Text("Media Playback")
+                                .font(.sioreeH3)
+                                .foregroundColor(.sioreeIcyBlue)
+                            Text("Photos and videos load automatically as you scroll. For the best experience on cellular, we optimize media quality to reduce data usage.")
+                                .font(.sioreeBody)
+                                .foregroundColor(.sioreeLightGrey)
+                        }
+
+                        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                            Text("Reduce Data Use")
+                                .font(.sioreeH3)
+                                .foregroundColor(.sioreeIcyBlue)
+                            Text("You can lower data usage by:")
+                                .font(.sioreeBody)
+                                .foregroundColor(.sioreeLightGrey)
+                            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                                Text("• Using Wi-Fi for uploads and streaming")
+                                Text("• Limiting background app refresh in iOS Settings")
+                                Text("• Closing the app when you are done")
+                            }
+                            .font(.sioreeBody)
+                            .foregroundColor(.sioreeLightGrey)
+                            .padding(.leading, Theme.Spacing.m)
+                        }
+
+                        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                            Text("Caching")
+                                .font(.sioreeH3)
+                                .foregroundColor(.sioreeIcyBlue)
+                            Text("Recent images and event details are cached on your device to load faster the next time you open the app.")
+                                .font(.sioreeBody)
+                                .foregroundColor(.sioreeLightGrey)
+                        }
+                    }
+                    .padding(Theme.Spacing.l)
+                }
+            }
             .navigationTitle("Data Usage")
+            .navigationBarTitleDisplayMode(.inline)
+        }
     }
 }
 

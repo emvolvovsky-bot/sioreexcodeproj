@@ -7,6 +7,9 @@
 
 import SwiftUI
 
+// Import for image caching
+import Foundation
+
 struct CoverPhotoView: View {
     let imageURL: String?
     let height: CGFloat
@@ -21,7 +24,7 @@ struct CoverPhotoView: View {
             if let urlString = imageURL, !urlString.isEmpty, !urlString.trimmingCharacters(in: .whitespaces).isEmpty {
                 // Validate URL and create URL object
                 if let url = URL(string: urlString) {
-                    AsyncImage(url: url) { phase in
+                    CachedAsyncImage(url: url) { phase in
                         switch phase {
                         case .empty:
                             // While loading, show a very subtle background with loading indicator
@@ -43,22 +46,23 @@ struct CoverPhotoView: View {
                             .clipped()
                             .opacity(1.0) // Explicitly ensure full opacity - never faded
                             .background(Color.clear) // Ensure no background overlay
+                            .onAppear {
+                                // Cache the image when it loads successfully
+                                if let uiImage = image.asUIImage() {
+                                    ImageCache.shared.storeImage(uiImage, for: url)
+                                }
+                            }
                         case .failure(_):
                             // If image fails to load, show empty space (bug state)
                             Rectangle()
                                 .fill(Color.sioreeLightGrey.opacity(0.1))
                                 .frame(height: height)
-                                .onAppear {
-                                    // Log error for debugging
-                                    print("⚠️ Failed to load cover photo: \(urlString)")
-                                }
                         @unknown default:
                             Rectangle()
                                 .fill(Color.sioreeLightGrey.opacity(0.1))
                                 .frame(height: height)
                         }
                     }
-                    .id(urlString) // Force SwiftUI to reload if URL changes
                 } else {
                     // Invalid URL format
                     Rectangle()

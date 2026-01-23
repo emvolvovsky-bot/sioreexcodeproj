@@ -16,6 +16,7 @@ struct TalentBrowserView: View {
     @StateObject private var viewModel = TalentBrowserViewModel()
     @State private var selectedTalent: Talent?
     @State private var showTalentProfile = false
+    @State private var showTalentRequest = false
     @State private var selectedCategory: TalentCategory?
     @State private var searchText = ""
 
@@ -65,12 +66,12 @@ struct TalentBrowserView: View {
                                 if let event = event {
                                     Text("for \(event.title)")
                                         .font(.sioreeCaption)
-                                        .foregroundColor(.sioreeCharcoal.opacity(0.7))
+                                        .foregroundColor(.sioreeWhite)
                                         .lineLimit(1)
                                 } else {
                                     Text("Browse available talent")
                                         .font(.sioreeCaption)
-                                        .foregroundColor(.sioreeCharcoal.opacity(0.7))
+                                        .foregroundColor(.sioreeWhite)
                                 }
                             }
 
@@ -89,7 +90,7 @@ struct TalentBrowserView: View {
                                     .foregroundColor(.sioreeCharcoal.opacity(0.5))
                                     .font(.system(size: 16))
 
-                                TextField("Search talent...", text: $searchText)
+                                TextField("Search talent, location...", text: $searchText)
                                     .font(.sioreeBody)
                                     .foregroundColor(.white)
                                     .tint(.sioreeIcyBlue)
@@ -150,13 +151,13 @@ struct TalentBrowserView: View {
                                     .font(.system(size: 48))
                                     .foregroundColor(.sioreeCharcoal.opacity(0.5))
 
-                                Text("No talent found")
+                                Text("No talent users found")
                                     .font(.sioreeH4)
-                                    .foregroundColor(.sioreeCharcoal.opacity(0.7))
+                                    .foregroundColor(.sioreeWhite)
 
-                                Text("Try adjusting your search or filters")
+                                Text("No users with talent role found in the system")
                                     .font(.sioreeBody)
-                                    .foregroundColor(.sioreeCharcoal.opacity(0.5))
+                                    .foregroundColor(.sioreeWhite)
                                     .multilineTextAlignment(.center)
                             }
                             .padding(.vertical, Theme.Spacing.xl)
@@ -164,10 +165,13 @@ struct TalentBrowserView: View {
                         } else {
                             LazyVStack(spacing: Theme.Spacing.s) {
                                 ForEach(filteredTalent) { talent in
-                                    TalentBrowserCard(talent: talent) {
+                                    TalentBrowserCard(talent: talent, onTap: {
+                                        selectedTalent = talent
+                                        showTalentRequest = true
+                                    }, onProfileTap: {
                                         selectedTalent = talent
                                         showTalentProfile = true
-                                    }
+                                    })
                                     .padding(.horizontal, Theme.Spacing.m)
                                 }
                             }
@@ -178,6 +182,11 @@ struct TalentBrowserView: View {
             }
             .navigationBarHidden(true)
             .sheet(isPresented: $showTalentProfile) {
+                if let talent = selectedTalent {
+                    InboxProfileView(userId: talent.userId)
+                }
+            }
+            .sheet(isPresented: $showTalentRequest) {
                 if let talent = selectedTalent {
                     TalentRequestView(talent: talent, event: event, onTalentRequested: { requestedTalent in
                         onTalentRequested?(requestedTalent)
@@ -213,33 +222,37 @@ struct CategoryFilterButton: View {
 struct TalentBrowserCard: View {
     let talent: Talent
     let onTap: () -> Void
+    let onProfileTap: () -> Void
 
     var body: some View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                 HStack(spacing: Theme.Spacing.m) {
-                    // Talent Avatar
-                    ZStack {
-                        if let avatar = talent.avatar,
-                           let url = URL(string: avatar) {
-                            AsyncImage(url: url) { image in
-                                image
-                                    .resizable()
-                                    .scaledToFill()
-                            } placeholder: {
+                    // Talent Avatar - Tappable for profile
+                    Button(action: onProfileTap) {
+                        ZStack {
+                            if let avatar = talent.avatar,
+                               let url = URL(string: avatar) {
+                                AsyncImage(url: url) { image in
+                                    image
+                                        .resizable()
+                                        .scaledToFill()
+                                } placeholder: {
+                                    Image(systemName: "person.circle.fill")
+                                        .resizable()
+                                        .foregroundColor(.sioreeCharcoal.opacity(0.5))
+                                }
+                                .frame(width: 50, height: 50)
+                                .clipShape(Circle())
+                            } else {
                                 Image(systemName: "person.circle.fill")
                                     .resizable()
                                     .foregroundColor(.sioreeCharcoal.opacity(0.5))
+                                    .frame(width: 50, height: 50)
                             }
-                            .frame(width: 50, height: 50)
-                            .clipShape(Circle())
-                        } else {
-                            Image(systemName: "person.circle.fill")
-                                .resizable()
-                                .foregroundColor(.sioreeCharcoal.opacity(0.5))
-                                .frame(width: 50, height: 50)
                         }
                     }
+                    .buttonStyle(PlainButtonStyle())
 
                     VStack(alignment: .leading, spacing: 2) {
                         HStack {
@@ -256,31 +269,8 @@ struct TalentBrowserCard: View {
 
                         Text(talent.category.rawValue)
                             .font(.sioreeCaption)
-                            .foregroundColor(.sioreeCharcoal.opacity(0.7))
+                            .foregroundColor(.sioreeWhite)
 
-                        HStack(spacing: Theme.Spacing.xs) {
-                            Image(systemName: "star.fill")
-                                .foregroundColor(.sioreeIcyBlue)
-                                .font(.system(size: 12))
-
-                            Text(String(format: "%.1f", talent.rating))
-                                .font(.sioreeCaption)
-                                .foregroundColor(.sioreeCharcoal.opacity(0.7))
-
-                            Text("(\(talent.reviewCount))")
-                                .font(.sioreeCaption)
-                                .foregroundColor(.sioreeCharcoal.opacity(0.7))
-
-                            if let location = talent.location {
-                                Text("•")
-                                    .foregroundColor(.sioreeCharcoal.opacity(0.7))
-
-                                Text(location)
-                                    .font(.sioreeCaption)
-                                    .foregroundColor(.sioreeCharcoal.opacity(0.7))
-                                    .lineLimit(1)
-                            }
-                        }
                     }
 
                     Spacer()
@@ -292,27 +282,15 @@ struct TalentBrowserCard: View {
 
                         Text("/hour")
                             .font(.sioreeCaption)
-                            .foregroundColor(.sioreeCharcoal.opacity(0.7))
+                            .foregroundColor(.sioreeWhite)
                     }
                 }
 
                 if let bio = talent.bio, !bio.isEmpty {
                     Text(bio)
                         .font(.sioreeBody)
-                        .foregroundColor(.sioreeCharcoal.opacity(0.8))
+                        .foregroundColor(.sioreeWhite)
                         .lineLimit(2)
-                }
-
-                // View Profile Button
-                HStack {
-                    Spacer()
-                    Text("View Profile")
-                        .font(.sioreeCaption)
-                        .foregroundColor(.sioreeIcyBlue)
-                        .padding(.horizontal, Theme.Spacing.s)
-                        .padding(.vertical, Theme.Spacing.xs)
-                        .background(Color.sioreeIcyBlue.opacity(0.2))
-                        .cornerRadius(Theme.CornerRadius.small)
                 }
             }
             .padding(Theme.Spacing.m)
@@ -376,22 +354,44 @@ class TalentBrowserViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
 
-        // Load all talent for browsing
-        networkService.fetchTalent(category: nil, searchQuery: nil)
+        // Load all users and filter for talent users
+        networkService.searchUsers(query: "*")
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { [weak self] completion in
                     guard let self = self else { return }
                     self.isLoading = false
                     if case .failure(let error) = completion {
-                        print("❌ Failed to load talent: \(error.localizedDescription)")
+                        print("❌ Failed to load users: \(error.localizedDescription)")
                         self.errorMessage = error.localizedDescription
                     }
                 },
-                receiveValue: { [weak self] talent in
+                receiveValue: { [weak self] users in
                     guard let self = self else { return }
-                    self.talent = talent
-                    print("✅ Loaded \(talent.count) talent profiles")
+                    // Filter users who are talent and convert to Talent objects
+                    let talentUsers = users.filter { $0.userType == .talent }
+                    // Convert User objects to Talent objects (basic conversion)
+                    let talentProfiles = talentUsers.map { user -> Talent in
+                        Talent(
+                            id: user.id,
+                            userId: user.id,
+                            name: user.name,
+                            category: .dj, // Default category - could be improved
+                            bio: user.bio,
+                            avatar: user.avatar,
+                            portfolio: [], // Empty for now
+                            rating: 0.0,
+                            reviewCount: 0,
+                            priceRange: PriceRange(min: 0, max: 0), // Default pricing
+                            availability: [],
+                            verified: false,
+                            location: user.location,
+                            isAvailable: true,
+                            createdAt: Date()
+                        )
+                    }
+                    self.talent = talentProfiles
+                    print("✅ Loaded \(talentProfiles.count) talent users")
                 }
             )
             .store(in: &cancellables)

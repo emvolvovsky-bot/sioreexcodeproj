@@ -75,10 +75,9 @@ class NetworkService {
             print("⚠️ No auth token found - request will be unauthenticated")
         }
         
-        // Log request details for debugging
-        print("📤 \(method) \(endpoint)")
-        if let body = body, let bodyString = String(data: body, encoding: .utf8) {
-            print("📦 Request body: \(bodyString.prefix(200))...")
+        // Request logging removed for performance - only log auth token presence
+        if StorageService.shared.getAuthToken() == nil {
+            print("⚠️ No auth token found - request will be unauthenticated")
         }
         
         if let body = body {
@@ -86,53 +85,25 @@ class NetworkService {
         }
         
         let decoder = JSONDecoder()
-        // Use custom date decoding strategy that handles various ISO8601 formats
+        // Optimized date decoding strategy - use ISO8601 with fractional seconds as primary
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         decoder.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
             let dateString = try container.decode(String.self)
-            
-            // Try ISO8601DateFormatter first (most common)
-            let iso8601Formatter = ISO8601DateFormatter()
-            if let date = iso8601Formatter.date(from: dateString) {
+
+            // Primary: ISO8601 with fractional seconds (most common from backend)
+            if let date = isoFormatter.date(from: dateString) {
                 return date
             }
-            
-            // Try ISO8601DateFormatter with fractional seconds
-            let iso8601FormatterWithFractional = ISO8601DateFormatter()
-            iso8601FormatterWithFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            if let date = iso8601FormatterWithFractional.date(from: dateString) {
+
+            // Fallback: Standard ISO8601
+            let fallbackFormatter = ISO8601DateFormatter()
+            if let date = fallbackFormatter.date(from: dateString) {
                 return date
             }
-            
-            // Try DateFormatter with various formats
-            let dateFormatters: [DateFormatter] = [
-                {
-                    let f = DateFormatter()
-                    f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'"
-                    f.timeZone = TimeZone(secondsFromGMT: 0)
-                    return f
-                }(),
-                {
-                    let f = DateFormatter()
-                    f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'"
-                    f.timeZone = TimeZone(secondsFromGMT: 0)
-                    return f
-                }(),
-                {
-                    let f = DateFormatter()
-                    f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"
-                    f.timeZone = TimeZone(secondsFromGMT: 0)
-                    return f
-                }()
-            ]
-            
-            for formatter in dateFormatters {
-                if let date = formatter.date(from: dateString) {
-                    return date
-                }
-            }
-            
-            // If all formatters fail, throw a descriptive error
+
+            // If both fail, throw error
             throw DecodingError.dataCorruptedError(
                 in: container,
                 debugDescription: "Expected date string to be ISO8601-formatted, but got: \(dateString)"
@@ -144,21 +115,14 @@ class NetworkService {
                 URLError(.timedOut)
             })
             .tryMap { data, response -> Data in
-                // Log response for debugging
+                // Check for error status codes
                 if let httpResponse = response as? HTTPURLResponse {
-                    print("📡 Response: \(httpResponse.statusCode) for \(request.url?.absoluteString ?? "")")
-                    if let jsonString = String(data: data, encoding: .utf8) {
-                        print("📦 Full response body: \(jsonString)")
-                    }
-                    
-                    // Check for error status codes
                     if httpResponse.statusCode >= 400 {
                         if let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                            let errorMessage = errorJson["error"] as? String {
                             print("❌ Server error: \(errorMessage)")
                             throw NetworkError.serverError(errorMessage)
                         }
-                        print("❌ HTTP error: \(httpResponse.statusCode)")
                         throw NetworkError.serverError("HTTP \(httpResponse.statusCode)")
                     }
                 }
@@ -438,6 +402,15 @@ class NetworkService {
     
     func toggleEventSave(eventId: String) -> AnyPublisher<Bool, Error> {
         return request("/api/events/\(eventId)/save", method: "POST")
+    }
+
+    func fetchSavedEvents() -> AnyPublisher<[Event], Error> {
+        struct Response: Codable {
+            let events: [Event]
+        }
+        return request("/api/events/saved")
+            .map { (response: Response) in response.events }
+            .eraseToAnyPublisher()
     }
     
     func rsvpToEvent(eventId: String) -> AnyPublisher<RSVPResponse, Error> {
@@ -1081,6 +1054,21 @@ class NetworkService {
             let success: Bool
         }
         return request("/api/posts/\(postId)", method: "DELETE")
+            .map { (response: Response) in response.success }
+            .eraseToAnyPublisher()
+    }
+
+    func deletePostImage(postId: String, imageUrl: String) -> AnyPublisher<Bool, Error> {
+        struct Response: Codable {
+            let success: Bool
+        }
+        let body: [String: Any] = [
+            "imageUrl": imageUrl
+        ]
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else {
+            return Fail(error: NetworkError.unknown).eraseToAnyPublisher()
+        }
+        return request("/api/posts/\(postId)/images", method: "DELETE", body: jsonData)
             .map { (response: Response) in response.success }
             .eraseToAnyPublisher()
     }

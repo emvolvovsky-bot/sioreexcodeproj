@@ -19,7 +19,7 @@ class TalentProfileViewModel: ObservableObject {
 
     private let networkService = NetworkService()
     private let storageService = StorageService.shared
-    private var cancellables = Set<AnyCancellable>()
+    var cancellables = Set<AnyCancellable>()
     private weak var authViewModel: AuthViewModel?
 
     func setAuthViewModel(_ authViewModel: AuthViewModel) {
@@ -75,6 +75,12 @@ struct TalentProfileView: View {
     @State private var showFollowingList = false
     @State private var selectedEventForPhotos: Event? = nil
     @State private var selectedEventForPost: Event?
+    @State private var isStartingOnboarding = false
+    @State private var isLoadingConnectStatus = false
+    @State private var connectStatus: BankConnectStatus?
+    @State private var payoutErrorMessage: String?
+
+    private let bankService = BankAccountService.shared
     
     private var currentUser: User? {
         authViewModel.currentUser
@@ -108,6 +114,7 @@ struct TalentProfileView: View {
         ScrollView {
             VStack(spacing: 0) {
                 profileHeader(user: user)
+                stripePayoutsCard
                 eventsSection
             }
             .padding(.bottom, Theme.Spacing.xl)
@@ -133,6 +140,62 @@ struct TalentProfileView: View {
             showEditButton: true
         )
         .padding(.top, 8)
+    }
+
+    private var stripePayoutsCard: some View {
+        let status = connectStatus?.status
+        let statusText: String = {
+            switch status {
+            case "verified":
+                return "Verified"
+            case "in_review":
+                return "In review"
+            case "more_info_needed":
+                return "More information needed"
+            case "not_started":
+                return "Complete setup to receive payouts"
+            default:
+                return connectStatus?.isReady == true ? "Verified" : "Complete setup to receive payouts"
+            }
+        }()
+        let buttonLabel = status == "more_info_needed" ? "Provide info" : "Set up"
+        let isButtonDisabled =
+            isStartingOnboarding ||
+            status == "verified" ||
+            status == "in_review" ||
+            connectStatus?.isReady == true
+
+        return VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            HStack {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                    Text("Stripe payouts")
+                        .font(.sioreeH4)
+                        .foregroundColor(.sioreeWhite)
+                    Text(statusText)
+                        .font(.sioreeCaption)
+                        .foregroundColor(.sioreeLightGrey)
+                }
+                Spacer()
+                Button(action: {
+                    startStripeOnboarding()
+                }) {
+                    Text(isStartingOnboarding ? "Starting..." : buttonLabel)
+                        .font(.sioreeBodySmall)
+                        .foregroundColor(.sioreeBlack)
+                        .padding(.horizontal, Theme.Spacing.m)
+                        .padding(.vertical, Theme.Spacing.s)
+                        .background(Color.sioreeIcyBlue)
+                        .cornerRadius(Theme.CornerRadius.large)
+                }
+                .disabled(isButtonDisabled)
+            }
+        }
+        .padding(.horizontal, Theme.Spacing.m)
+        .padding(.vertical, Theme.Spacing.m)
+        .background(Color.sioreeLightGrey.opacity(0.08))
+        .cornerRadius(Theme.CornerRadius.large)
+        .padding(.horizontal, Theme.Spacing.m)
+        .padding(.top, Theme.Spacing.s)
     }
 
     private var eventsSection: some View {
@@ -199,28 +262,46 @@ struct TalentProfileView: View {
     }
 
     private var eventsGridView: some View {
-        LazyVGrid(
-            columns: [
-                GridItem(.flexible(), spacing: Theme.Spacing.m),
-                GridItem(.flexible(), spacing: Theme.Spacing.m)
-            ],
-            spacing: Theme.Spacing.m
-        ) {
-            ForEach(Array(viewModel.events.prefix(6)), id: \.id) { event in
-                EventCardGridItem(event: event)
-                    .onTapGesture {
-                        selectedEventForPhotos = event
-                    }
-                    .contextMenu {
-                        Button(action: {
-                            selectedEventForPost = event
-                        }) {
-                            Label("Add Photos", systemImage: "photo.fill")
+        let columns = Array(repeating: GridItem(.flexible(), spacing: Theme.Spacing.m), count: 3)
+
+        return LazyVGrid(columns: columns, spacing: Theme.Spacing.l) {
+            ForEach(Array(viewModel.events.prefix(9)), id: \.id) { event in
+                VStack(spacing: Theme.Spacing.xs) {
+                    EventHighlightCircle(event: event)
+                        .onTapGesture {
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+                                // Check if event has photos
+                                let coverKey = "event_cover_\(event.id)"
+                                let hasCover = UserDefaults.standard.string(forKey: coverKey) != nil
+                                let hasEventImages = !event.images.isEmpty
+
+                                if !hasCover && !hasEventImages {
+                                    // If no photos, go directly to add photos
+                                    selectedEventForPost = event
+                                } else {
+                                    selectedEventForPhotos = event
+                                }
+                            }
                         }
-                    }
+                        .contextMenu {
+                            Button(action: {
+                                selectedEventForPost = event
+                            }) {
+                                Label("Add Photos", systemImage: "photo.fill")
+                            }
+                        }
+
+                    // Event name below (like Instagram highlights)
+                    Text(event.title)
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundColor(.sioreeWhite)
+                        .lineLimit(1)
+                        .frame(maxWidth: 100)
+                }
             }
         }
-        .padding(.all, Theme.Spacing.m)
+        .padding(.horizontal, Theme.Spacing.m)
+        .padding(.vertical, Theme.Spacing.m)
     }
 
 
@@ -279,11 +360,68 @@ struct TalentProfileView: View {
             .onAppear {
                 viewModel.setAuthViewModel(authViewModel)
                 viewModel.loadProfile()
+                loadStripeConnectStatus()
             }
             .onChange(of: authViewModel.currentUser?.id) { _ in
                 viewModel.setAuthViewModel(authViewModel)
                 viewModel.loadProfile()
+                loadStripeConnectStatus()
             }
+            .alert("Stripe Setup Error", isPresented: .constant(payoutErrorMessage != nil)) {
+                Button("OK") {
+                    payoutErrorMessage = nil
+                }
+            } message: {
+                if let error = payoutErrorMessage {
+                    Text(error)
+                }
+            }
+        }
+    }
+
+    private func loadStripeConnectStatus() {
+        guard !isLoadingConnectStatus else { return }
+        isLoadingConnectStatus = true
+        bankService.fetchOnboardingStatus()
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    isLoadingConnectStatus = false
+                    if case .failure(let error) = completion {
+                        payoutErrorMessage = error.localizedDescription
+                    }
+                },
+                receiveValue: { status in
+                    connectStatus = status
+                }
+            )
+            .store(in: &viewModel.cancellables)
+    }
+
+    private func startStripeOnboarding() {
+        guard !isStartingOnboarding else { return }
+        isStartingOnboarding = true
+        bankService.createOnboardingLink()
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { completion in
+                    isStartingOnboarding = false
+                    if case .failure = completion {
+                        openStripeFallbackURL()
+                    }
+                },
+                receiveValue: { url in
+                    UIApplication.shared.open(url)
+                }
+            )
+            .store(in: &viewModel.cancellables)
+    }
+
+    private func openStripeFallbackURL() {
+        if let fallbackURL = URL(string: Constants.Stripe.connectOnboardingFallbackURL) {
+            UIApplication.shared.open(fallbackURL)
+        } else {
+            payoutErrorMessage = "Unable to start Stripe onboarding. Please try again."
         }
     }
 

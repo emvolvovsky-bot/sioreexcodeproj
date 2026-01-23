@@ -133,7 +133,7 @@ struct HostUpcomingEventCard: View {
     @State private var showAttendees = false
     
     var body: some View {
-        NavigationLink(destination: EventDetailView(eventId: event.id, isTalentMapMode: false).environmentObject(authViewModel)) {
+        NavigationLink(destination: EventDetailView(eventId: event.id, isTalentMapMode: false)) {
             VStack(alignment: .leading, spacing: 0) {
                 // Event cover photo ONLY, no fallback
                 ZStack(alignment: .bottomLeading) {
@@ -173,6 +173,7 @@ struct HostUpcomingEventCard: View {
                 }
                 .frame(height: 280)
                 .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.medium))
+                .padding(.horizontal, Theme.Spacing.m)
                 
                 // Attendee List Button
                 Button(action: {
@@ -195,6 +196,7 @@ struct HostUpcomingEventCard: View {
                     .background(Color.sioreeCharcoal.opacity(0.3))
                 }
                 .buttonStyle(.plain)
+                .padding(.horizontal, Theme.Spacing.m)
             }
             .background(
                 RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)

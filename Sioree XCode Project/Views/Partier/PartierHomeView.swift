@@ -32,7 +32,8 @@ struct PartierHomeView: View {
     @State private var animationSize: CGSize = .zero
     @State private var favoritesTargetPoint: CGPoint = .zero
     @State private var hiddenEventIds: Set<String> = []
-    
+    @State private var showSavedAlert = false
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -114,6 +115,11 @@ struct PartierHomeView: View {
             .onChange(of: selectedDate) { newDate in
                 viewModel.selectedDate = newDate
                 viewModel.applyDateFilter()
+            }
+            .alert("Saved to Favorites", isPresented: $showSavedAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("This event has been saved to your favorites.")
             }
         }
     }
@@ -292,7 +298,7 @@ private extension PartierHomeView {
     @ViewBuilder
     var tabContent: some View {
         if viewModel.isLoading && !viewModel.hasLoaded {
-            ProgressView()
+            LoadingView()
             .frame(maxWidth: .infinity)
             .padding(.vertical, Theme.Spacing.xxl)
         } else if featuredDataSource.isEmpty && nearbyDataSource.isEmpty && viewModel.hasLoaded {
@@ -318,9 +324,15 @@ private extension PartierHomeView {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                     HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("\(filteredEvents.count) Events")
+                    if filteredEvents.isEmpty && !hiddenEventIds.isEmpty {
+                        Text("You have \(hiddenEventIds.count) event\(hiddenEventIds.count == 1 ? "" : "s") saved in favorites")
                             .font(.sioreeH3)
                             .foregroundColor(.sioreeWhite)
+                    } else {
+                        Text("\(filteredEvents.count) Events")
+                            .font(.sioreeH3)
+                            .foregroundColor(.sioreeWhite)
+                    }
                 }
                         Spacer()
                     }
@@ -458,6 +470,10 @@ private extension PartierHomeView {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
                 hiddenEventIds.insert(event.id)
             }
+            // Show saved alert after animation completes
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                showSavedAlert = true
+            }
         }
         viewModel.toggleSaveEvent(event)
     }
@@ -579,12 +595,20 @@ struct NightEventCard: View {
     let event: Event
     let accent: Color
     let actionLabel: String
+    let showsFavoriteButton: Bool
     var onSave: (() -> Void)? = nil
     
-    init(event: Event, accent: Color, actionLabel: String = "Get Now", onSave: (() -> Void)? = nil) {
+    init(
+        event: Event,
+        accent: Color,
+        actionLabel: String = "Get Now",
+        showsFavoriteButton: Bool = true,
+        onSave: (() -> Void)? = nil
+    ) {
         self.event = event
         self.accent = accent
         self.actionLabel = actionLabel
+        self.showsFavoriteButton = showsFavoriteButton
         self.onSave = onSave
     }
     
@@ -630,14 +654,16 @@ struct NightEventCard: View {
                     }
                     .padding(Theme.Spacing.m)
                     
-                    VStack {
-                        HStack {
+                    if showsFavoriteButton {
+                        VStack {
+                            HStack {
+                                Spacer()
+                                heartButton
+                            }
                             Spacer()
-                            heartButton
                         }
-                        Spacer()
+                        .padding(Theme.Spacing.m)
                     }
-                    .padding(Theme.Spacing.m)
                 }
                 
                 VStack(alignment: .leading, spacing: Theme.Spacing.m) {
@@ -704,7 +730,9 @@ struct NightEventCard: View {
                 }
                 .padding(.horizontal, Theme.Spacing.m)
                 .padding(.bottom, Theme.Spacing.m)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
     

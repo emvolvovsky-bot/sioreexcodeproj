@@ -86,7 +86,7 @@ struct InstagramStyleProfileHeader: View {
                 .frame(maxWidth: .infinity)
             }
             .padding(.horizontal, 16)
-            .padding(.bottom, 12)
+            .padding(.bottom, showEditButton ? 6 : 0)
             
             // Bio section
             VStack(alignment: .leading, spacing: 4) {
@@ -115,6 +115,7 @@ struct InstagramStyleProfileHeader: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 8)
             .padding(.horizontal, 16)
             .padding(.bottom, 12)
             
@@ -137,6 +138,7 @@ struct InstagramStyleProfileHeader: View {
                         .shadow(color: Color.sioreeIcyBlue.opacity(0.3), radius: 8, x: 0, y: 4)
                 }
                 .padding(.horizontal, 16)
+                .padding(.top, 6)
                 .padding(.bottom, 12)
             }
         }

@@ -585,6 +585,22 @@ struct EventHighlightCircle: View {
                     .fill(Color.sioreeLightGrey.opacity(0.1))
                     .frame(width: innerSize, height: innerSize)
             }
+
+            if event.images.count > 1 {
+                VStack {
+                    Spacer()
+                    HStack(spacing: 4) {
+                        ForEach(0..<min(event.images.count, 5), id: \.self) { _ in
+                            Circle()
+                                .fill(Color.sioreeWhite.opacity(0.9))
+                                .frame(width: 4, height: 4)
+                        }
+                    }
+                    .padding(.bottom, 8)
+                }
+                .frame(width: circleSize, height: circleSize)
+                .allowsHitTesting(false)
+            }
         }
         .shadow(color: Color.sioreeIcyBlue.opacity(0.3), radius: 8, x: 0, y: 4)
     }

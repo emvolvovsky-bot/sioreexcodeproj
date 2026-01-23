@@ -363,6 +363,14 @@ class CheckoutViewModel: ObservableObject {
                 }
                 configuration.allowsDelayedPaymentMethods = true
                 configuration.returnURL = "sioree://stripe-redirect"
+                let merchantId = Constants.Stripe.applePayMerchantId.trimmingCharacters(in: .whitespacesAndNewlines)
+                let merchantCountryCode = Constants.Stripe.applePayCountryCode.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !merchantId.isEmpty, !merchantCountryCode.isEmpty {
+                    configuration.applePay = .init(
+                        merchantId: merchantId,
+                        merchantCountryCode: merchantCountryCode
+                    )
+                }
 
                 DispatchQueue.main.async {
                     self?.logPaymentSheetDebug("Initializing PaymentSheet with client secret and configuration.")

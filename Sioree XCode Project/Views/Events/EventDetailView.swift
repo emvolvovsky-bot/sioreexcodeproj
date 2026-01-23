@@ -28,6 +28,12 @@ struct EventDetailView: View {
     @State private var showEditEvent = false
     @State private var didPreparePaymentSheet = false
     @State private var paymentAlertMessage: String?
+    @State private var showRSVPSheet = false
+    @State private var rsvpQRCode: String?
+    @State private var showProposedRateSheet = false
+    @State private var proposedRateAmount = ""
+    @State private var showMessageTalentSheet = false
+    @State private var selectedTalentForMessage: Talent?
     private let ticketFeeRate = 0.05
     
     init(eventId: String, isTalentMapMode: Bool = false) {
@@ -43,6 +49,10 @@ struct EventDetailView: View {
         }
         return event.hostId == currentUserId
     }
+
+    private var shareURL: URL? {
+        URL(string: "sioree://event/\(eventId)")
+    }
     
     var body: some View {
         ZStack {
@@ -53,8 +63,10 @@ struct EventDetailView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Share") {
-                        // Share action
+                    if let shareURL = shareURL {
+                        ShareLink(item: shareURL) {
+                            Label("Share", systemImage: "square.and.arrow.up")
+                        }
                     }
                 }
             }
@@ -91,16 +103,12 @@ struct EventDetailView: View {
                     Button("Cancel", role: .cancel) { }
                 }
             }
-            .sheet(isPresented: $viewModel.showRSVPSheet) {
+            .sheet(isPresented: $showRSVPSheet) {
                 RSVPConfirmationView(
                     event: viewModel.event,
-                    qrString: viewModel.rsvpQRCode
+                    qrString: rsvpQRCode
                 ) {
-                    viewModel.showRSVPSheet = false
-                    // Dismiss the event detail view after RSVP - navigate back to home
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        dismiss()
-                    }
+                    showRSVPSheet = false
                 }
             }
             .sheet(isPresented: $showTalentBrowser) {
@@ -119,7 +127,15 @@ struct EventDetailView: View {
                         viewModel.loadEvent()
                         showEditEvent = false
                     }
-                    .environmentObject(authViewModel)
+                }
+            }
+            .sheet(isPresented: $showProposedRateSheet) {
+                if let event = viewModel.event {
+                    ProposedRateView(event: event, onRateProposed: { rate in
+                        // Handle proposed rate
+                        print("Proposed rate: $\(rate) for event: \(event.title)")
+                        showProposedRateSheet = false
+                    })
                 }
             }
             .alert(isPresented: Binding(
@@ -196,6 +212,10 @@ struct EventDetailView: View {
                         }
                     }
                 }
+                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous))
+                .frame(height: 300)
+                .frame(maxWidth: min(UIScreen.main.bounds.width - (Theme.Spacing.m * 2), 500), alignment: .center)
+                .frame(maxWidth: .infinity, alignment: .center)
 
                 // Content
                 VStack(alignment: .leading, spacing: Theme.Spacing.m) {
@@ -211,8 +231,14 @@ struct EventDetailView: View {
                             Button(action: {
                                 showEditEvent = true
                             }) {
-                                Text("✏️")
-                                    .font(.system(size: 24))
+                                Image(systemName: "pencil")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(.sioreeWhite)
+                                    .padding(10)
+                                    .background(
+                                        Circle()
+                                            .fill(Color.sioreeIcyBlue.opacity(0.2))
+                                    )
                             }
                             .padding(.leading, Theme.Spacing.s)
                         }
@@ -365,6 +391,22 @@ struct EventDetailView: View {
 
                             if let ticketPrice = event.ticketPrice, ticketPrice > 0, !isHost {
                                 paymentSection(ticketPrice: ticketPrice, eventId: event.id)
+                            } else if !isHost,
+                                      authViewModel.currentUser?.userType != .talent,
+                                      !(viewModel.isRSVPed || event.isRSVPed) {
+                                Button(action: {
+                                    viewModel.rsvpToEvent { qrCode in
+                                        rsvpQRCode = qrCode
+                                        showRSVPSheet = true
+                                    }
+                                }) {
+                                    buyButtonLabel(
+                                        title: "Attend",
+                                        subtitle: "Free",
+                                        showsSpinner: false
+                                    )
+                                }
+                                .buttonStyle(PlainButtonStyle())
                             }
                         }
 
@@ -408,6 +450,53 @@ struct EventDetailView: View {
                         }
                     }
 
+                    // Propose Rate & Message Talent (Host only)
+                    if isHost {
+                        Divider()
+
+                        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                            Text("Manage Talent")
+                                .font(.sioreeH3)
+                                .foregroundColor(.sioreeWhite)
+
+                            HStack(spacing: Theme.Spacing.m) {
+                                Button(action: {
+                                    showProposedRateSheet = true
+                                }) {
+                                    VStack(spacing: Theme.Spacing.xs) {
+                                        Image(systemName: "dollarsign.circle.fill")
+                                            .font(.system(size: 24))
+                                            .foregroundColor(.sioreeIcyBlue)
+                                        Text("Propose Rate")
+                                            .font(.sioreeCaption)
+                                            .foregroundColor(.sioreeWhite)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(Theme.Spacing.m)
+                                    .background(Color.sioreeIcyBlue.opacity(0.1))
+                                    .cornerRadius(Theme.CornerRadius.medium)
+                                }
+
+                                Button(action: {
+                                    showTalentBrowser = true
+                                }) {
+                                    VStack(spacing: Theme.Spacing.xs) {
+                                        Image(systemName: "message.fill")
+                                            .font(.system(size: 24))
+                                            .foregroundColor(.sioreeIcyBlue)
+                                        Text("Message Talent")
+                                            .font(.sioreeCaption)
+                                            .foregroundColor(.sioreeWhite)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(Theme.Spacing.m)
+                                    .background(Color.sioreeIcyBlue.opacity(0.1))
+                                    .cornerRadius(Theme.CornerRadius.medium)
+                                }
+                            }
+                        }
+                    }
+
                     // Talent for this Event (Host only)
                     if isHost && !viewModel.eventBookings.isEmpty {
                         Divider()
@@ -422,7 +511,7 @@ struct EventDetailView: View {
 
                                 Text("\(viewModel.eventBookings.count) booking\(viewModel.eventBookings.count == 1 ? "" : "s")")
                                     .font(.sioreeCaption)
-                                    .foregroundColor(.sioreeCharcoal.opacity(0.7))
+                                    .foregroundColor(.sioreeWhite)
                             }
 
                             ForEach(viewModel.eventBookings, id: \.id) { booking in
@@ -468,10 +557,10 @@ struct EventDetailView: View {
                     }
                 }
                 .padding(Theme.Spacing.l)
+                .padding(.bottom, Theme.Spacing.xl)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .contentShape(Rectangle())
+        .frame(maxWidth: .infinity, alignment: .top)
         .safeAreaInset(edge: .bottom) {
             if shouldShowBottomAction(for: event) {
                 // Sticky RSVP/Pay Button
@@ -505,7 +594,10 @@ struct EventDetailView: View {
                                 variant: .primary,
                                 size: .large
                             ) {
-                                viewModel.rsvpToEvent()
+                                viewModel.rsvpToEvent { qrCode in
+                                    rsvpQRCode = qrCode
+                                    showRSVPSheet = true
+                                }
                             }
                         }
                     }
@@ -519,7 +611,10 @@ struct EventDetailView: View {
         .onReceive(checkoutViewModel.$paymentResult.compactMap { $0 }) { result in
             switch result {
             case .completed:
-                viewModel.rsvpToEvent()
+                viewModel.rsvpToEvent { qrCode in
+                    rsvpQRCode = qrCode
+                    showRSVPSheet = true
+                }
                 NotificationCenter.default.post(name: .switchToTicketsTab, object: nil)
             case .failed(let error):
                 paymentAlertMessage = "Payment failed. \(error.localizedDescription)"
@@ -530,8 +625,8 @@ struct EventDetailView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("EventRSVPSuccess"))) { _ in
             // Auto-dismiss after a short delay to show the confirmation
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                if viewModel.showRSVPSheet {
-                    viewModel.showRSVPSheet = false
+                if showRSVPSheet {
+                    showRSVPSheet = false
                     dismiss()
                 }
             }
@@ -770,7 +865,7 @@ struct EventDetailView: View {
         if let price = event.ticketPrice, price > 0 {
             return false
         }
-        return true
+        return false
     }
 }
 
@@ -795,7 +890,7 @@ struct RSVPConfirmationView: View {
                     
                     Text("More information in tickets tab.")
                         .font(.sioreeBody)
-                        .foregroundColor(.sioreeLightGrey)
+                        .foregroundColor(.sioreeWhite)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, Theme.Spacing.l)
                 }

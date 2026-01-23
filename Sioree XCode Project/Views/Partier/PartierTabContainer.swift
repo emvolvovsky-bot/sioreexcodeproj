@@ -223,6 +223,21 @@ struct FavoritesView: View {
                             }
                         }
                         .padding(.horizontal, Theme.Spacing.l)
+                        .padding(.vertical, Theme.Spacing.m)
+                    }
+                }
+                    ScrollView(showsIndicators: false) {
+                        LazyVStack(spacing: Theme.Spacing.m) {
+                            ForEach(viewModel.events) { event in
+                                NavigationLink(destination: EventDetailView(eventId: event.id)) {
+                                    NightEventCard(event: event, accent: .sioreeIcyBlue) {
+                                        viewModel.toggleSaveEvent(event)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal, Theme.Spacing.l)
                         .padding(.vertical, Theme.Spacing.l)
                     }
                 }
@@ -230,6 +245,10 @@ struct FavoritesView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .navigationBar)
             .onAppear {
+                viewModel.loadFavorites()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .favoriteStatusChanged)) { _ in
+                // Refresh favorites when favorite status changes
                 viewModel.loadFavorites()
             }
         }
@@ -278,7 +297,6 @@ struct FavoritesView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-}
 
 class FavoritesViewModel: ObservableObject {
     @Published var events: [Event] = []
@@ -301,28 +319,22 @@ class FavoritesViewModel: ObservableObject {
     func loadFavorites() {
         isLoading = true
         errorMessage = nil
-        
-        // Fetch both featured and nearby events, then filter for saved ones
-        Publishers.CombineLatest(
-            networkService.fetchFeaturedEvents(),
-            networkService.fetchNearbyEvents()
-        )
-        .receive(on: DispatchQueue.main)
-        .sink(
-            receiveCompletion: { [weak self] completion in
-                self?.isLoading = false
-                if case .failure(let error) = completion {
-                    self?.errorMessage = error.localizedDescription
+
+        networkService.fetchSavedEvents()
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { [weak self] completion in
+                    self?.isLoading = false
+                    if case .failure(let error) = completion {
+                        self?.errorMessage = error.localizedDescription
+                    }
+                },
+                receiveValue: { [weak self] events in
+                    self?.events = events
+                    self?.isLoading = false
                 }
-            },
-            receiveValue: { [weak self] featured, nearby in
-                // Combine and filter to only saved events
-                let allEvents = featured + nearby
-                self?.events = allEvents.filter { $0.isSaved }
-                self?.isLoading = false
-            }
-        )
-        .store(in: &cancellables)
+            )
+            .store(in: &cancellables)
     }
     
     func refreshFavorites() {

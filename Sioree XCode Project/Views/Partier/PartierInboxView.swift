@@ -14,10 +14,7 @@ struct PartierInboxView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var showCreateGroup = false
-    @State private var showNewChatModal = false
-    @State private var selectedUserId: String?
-    @State private var selectedUserName: String?
-    @State private var showConversation = false
+    @State private var showUserSearch = false
     @State private var chatSearchText = ""
     @State private var cancellables = Set<AnyCancellable>()
     
@@ -28,25 +25,28 @@ struct PartierInboxView: View {
                 
                 VStack(spacing: Theme.Spacing.m) {
                     inboxSearchHeader
-                    
+
                     if isLoading {
+                        Spacer()
                         LoadingView()
+                        Spacer()
                     } else if filteredConversations.isEmpty {
+                        Spacer()
                         VStack(spacing: Theme.Spacing.m) {
                             Image(systemName: "envelope.fill")
                                 .font(.system(size: 60))
                                 .foregroundColor(Color.sioreeIcyBlue.opacity(0.5))
-                            
+
                             Text(conversations.isEmpty ? "No messages yet" : "No chats found")
                                 .font(.sioreeH3)
                                 .foregroundColor(Color.sioreeWhite)
-                            
+
                             Text(conversations.isEmpty ? "Thank a host or ask a question" : "Try a different search")
                                 .font(.sioreeBody)
                                 .foregroundColor(Color.sioreeLightGrey)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal, Theme.Spacing.xl)
-                            
+
                             if conversations.isEmpty {
                                 Text("Ask talent a question")
                                     .font(.sioreeBody)
@@ -55,6 +55,7 @@ struct PartierInboxView: View {
                                     .padding(.horizontal, Theme.Spacing.xl)
                             }
                         }
+                        Spacer()
                     } else {
                         ScrollView {
                             LazyVStack(spacing: Theme.Spacing.m) {
@@ -76,34 +77,15 @@ struct PartierInboxView: View {
                     }
                 }
                 .padding(.top, Theme.Spacing.m)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showCreateGroup) {
                 CreateGroupChatView()
             }
-            .sheet(isPresented: $showNewChatModal) {
-                NewChatSelectionView(
-                    onSelectUser: { userId, userName in
-                        showNewChatModal = false
-                        selectedUserId = userId
-                        selectedUserName = userName
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            showConversation = true
-                        }
-                    },
-                    onSelectGroupChat: {
-                        showNewChatModal = false
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            showCreateGroup = true
-                        }
-                    }
-                )
-            }
-            .sheet(isPresented: $showConversation) {
-                if let userId = selectedUserId, let userName = selectedUserName {
-                    CreateConversationView(userId: userId, userName: userName)
-                }
+            .sheet(isPresented: $showUserSearch) {
+                UserSearchView()
             }
             .onAppear {
                 loadConversations()
@@ -174,6 +156,18 @@ struct PartierInboxView: View {
 
     private var inboxSearchHeader: some View {
         HStack(spacing: Theme.Spacing.s) {
+            Button(action: {
+                showCreateGroup = true
+            }) {
+                Image(systemName: "person.2.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.sioreeIcyBlue)
+                    .frame(width: 34, height: 34)
+                    .background(Color.sioreeIcyBlue.opacity(0.15))
+                    .clipShape(Circle())
+            }
+            .accessibilityLabel("Create group chat")
+            
             HStack(spacing: Theme.Spacing.s) {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(Color.sioreeLightGrey.opacity(0.8))
@@ -200,7 +194,7 @@ struct PartierInboxView: View {
             )
             
             Button(action: {
-                showNewChatModal = true
+                showUserSearch = true
             }) {
                 Image(systemName: "plus")
                     .font(.system(size: 16, weight: .semibold))

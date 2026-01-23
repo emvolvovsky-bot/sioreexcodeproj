@@ -66,16 +66,16 @@ struct FeedView: View {
                                             )
                                         }
                                         .buttonStyle(PlainButtonStyle())
-                                        .padding(.horizontal, Theme.Spacing.m)
                                         .onAppear {
-                                            if event.id == viewModel.events.last?.id {
+                                            // Only trigger pagination for the last item
+                                            if event.id == viewModel.events.last?.id && !viewModel.isLoading {
                                                 viewModel.loadMoreContent()
                                             }
                                         }
                                     }
                                     
                                     if viewModel.isLoading {
-                                        ProgressView()
+                                        LoadingView()
                                             .padding()
                                     }
                                 }

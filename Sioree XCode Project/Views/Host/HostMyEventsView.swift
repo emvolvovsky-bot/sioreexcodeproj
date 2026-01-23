@@ -88,7 +88,7 @@ struct HostMyEventsView: View {
                             .padding(.bottom, Theme.Spacing.s)
                         
                         if profileViewModel.isLoading {
-                            ProgressView()
+                            LoadingView(useDarkBackground: true)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, Theme.Spacing.xxl)
                         } else if visibleEvents.isEmpty {
@@ -98,10 +98,18 @@ struct HostMyEventsView: View {
                                 // ZStack layout for upcoming events
                                 LazyVStack(spacing: Theme.Spacing.l) {
                                     ForEach(visibleEvents) { event in
-                                        HostUpcomingEventCard(event: event, authViewModel: authViewModel)
+                                        NavigationLink(destination: EventDetailView(eventId: event.id, isTalentMapMode: false)) {
+                                            NightEventCard(
+                                                event: event,
+                                                accent: .sioreeIcyBlue,
+                                                actionLabel: "Edit Details",
+                                                showsFavoriteButton: false
+                                            )
+                                        }
+                                        .buttonStyle(.plain)
                                     }
                                 }
-                                .padding(.horizontal, Theme.Spacing.m)
+                                .padding(.horizontal, Theme.Spacing.l)
                                 .padding(.vertical, Theme.Spacing.m)
                             } else {
                                 // Grid layout for hosted events
@@ -109,7 +117,7 @@ struct HostMyEventsView: View {
                                 
                                 LazyVGrid(columns: columns, spacing: Theme.Spacing.l) {
                                     ForEach(visibleEvents) { event in
-                                        NavigationLink(destination: EventDetailView(eventId: event.id, isTalentMapMode: false).environmentObject(authViewModel)) {
+                                        NavigationLink(destination: EventDetailView(eventId: event.id, isTalentMapMode: false)) {
                                             HostEventCardGrid(event: event) {
                                                 selectedEventForDetail = event
                                             }

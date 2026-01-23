@@ -291,10 +291,43 @@ router.delete("/delete-account", async (req, res) => {
     const stripeAccountId = stripeResult.rows[0]?.stripe_account_id;
 
     await client.query("BEGIN");
+    // Remove bookings tied to this user's events (even if host differs)
+    await client.query(
+      `WITH user_events AS (
+         SELECT id FROM events WHERE creator_id = $1
+       )
+       DELETE FROM bookings
+       WHERE event_id IN (SELECT id FROM user_events)`,
+      [userId]
+    );
     // Remove hosted events so they disappear across the app
     await client.query("DELETE FROM events WHERE creator_id = $1", [userId]);
-    // Delete user from database (cascades related records)
-    await client.query("DELETE FROM users WHERE id = $1", [userId]);
+    // Remove user-generated text content while keeping the user id
+    await client.query(
+      "UPDATE messages SET content = NULL WHERE sender_id = $1",
+      [userId]
+    );
+    await client.query(
+      "UPDATE posts SET caption = NULL WHERE user_id = $1",
+      [userId]
+    );
+    await client.query(
+      "UPDATE comments SET content = '[deleted]' WHERE user_id = $1",
+      [userId]
+    );
+    // Anonymize account data but keep the creator id
+    await client.query(
+      `UPDATE users
+       SET email = $2,
+           username = $3,
+           name = 'Deleted User',
+           bio = NULL,
+           avatar = NULL,
+           location = NULL,
+           password_hash = NULL
+       WHERE id = $1`,
+      [userId, `deleted_${userId}@sioree.local`, `deleted_user_${userId}`]
+    );
     await client.query("COMMIT");
     client.release();
 

@@ -56,16 +56,20 @@ struct HostUpcomingEventsView: View {
                 backgroundGradient
                 
                 if profileViewModel.isLoading {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    LoadingView(useDarkBackground: true)
                 } else if upcomingEvents.isEmpty {
                     emptyStateView
                 } else {
                     ScrollView(showsIndicators: false) {
                         LazyVStack(spacing: Theme.Spacing.m) {
                             ForEach(upcomingEvents) { event in
-                                NavigationLink(destination: EventDetailView(eventId: event.id, isTalentMapMode: false).environmentObject(authViewModel)) {
-                                    NightEventCard(event: event, accent: .sioreeIcyBlue, actionLabel: "Edit Details")
+                                NavigationLink(destination: EventDetailView(eventId: event.id, isTalentMapMode: false)) {
+                                    NightEventCard(
+                                        event: event,
+                                        accent: .sioreeIcyBlue,
+                                        actionLabel: "Edit Details",
+                                        showsFavoriteButton: false
+                                    )
                                 }
                                 .buttonStyle(.plain)
                             }

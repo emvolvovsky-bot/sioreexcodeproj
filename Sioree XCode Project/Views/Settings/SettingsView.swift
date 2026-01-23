@@ -26,6 +26,11 @@ struct SettingsView: View {
         guard let userType = authViewModel.currentUser?.userType else { return false }
         return userType == .host || userType == .talent
     }
+
+    private var showsBankAccounts: Bool {
+        guard let userType = authViewModel.currentUser?.userType else { return false }
+        return userType == .host || userType == .talent
+    }
     
     var body: some View {
         NavigationStack {
@@ -48,9 +53,11 @@ struct SettingsView: View {
                         NavigationLink(destination: PaymentMethodsView()) {
                             SettingsRow(icon: "creditcard", title: "Payment Methods", color: .sioreeIcyBlue)
                         }
-                        
-                        NavigationLink(destination: BankAccountsView()) {
-                            SettingsRow(icon: "building.columns", title: "Bank Accounts", color: .sioreeIcyBlue)
+
+                        if showsBankAccounts {
+                            NavigationLink(destination: BankAccountsView()) {
+                                SettingsRow(icon: "building.columns", title: "Bank Accounts", color: .sioreeIcyBlue)
+                            }
                         }
                     } header: {
                         Text("Account")
@@ -108,10 +115,6 @@ struct SettingsView: View {
                     
                     // App Settings Section
                     Section {
-                        NavigationLink(destination: LanguageSettingsView()) {
-                            SettingsRow(icon: "globe", title: "Language", color: .sioreeIcyBlue)
-                        }
-                        
                         NavigationLink(destination: DataUsageView()) {
                             SettingsRow(icon: "arrow.down.circle", title: "Data Usage", color: .sioreeLightGrey)
                         }

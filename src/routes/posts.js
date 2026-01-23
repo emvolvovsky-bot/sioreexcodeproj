@@ -4,6 +4,16 @@ import jwt from "jsonwebtoken";
 
 const router = express.Router();
 
+// TEST ROUTE
+router.get("/test", (req, res) => {
+  res.json({ message: "Posts routes are working", timestamp: new Date().toISOString() });
+});
+
+// TEST DELETE IMAGE ROUTE
+router.get("/:id/delete-image/test", (req, res) => {
+  res.json({ message: "Delete image route exists", postId: req.params.id });
+});
+
 // Helper to get user ID from token
 function getUserIdFromToken(req) {
   const authHeader = req.headers.authorization;
@@ -213,6 +223,62 @@ router.post("/:id/like", async (req, res) => {
     console.error("Like post error:", err);
     res.status(500).json({ error: "Failed to like/unlike post" });
   }
+});
+
+// DELETE SINGLE IMAGE FROM POST
+router.delete("/:id/images", async (req, res) => {
+  try {
+    const userId = getUserIdFromToken(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const postId = parseInt(req.params.id, 10);
+    if (isNaN(postId)) {
+      return res.status(400).json({ error: "Invalid postId" });
+    }
+
+    const { imageUrl } = req.body;
+
+    if (!imageUrl) {
+      return res.status(400).json({ error: "imageUrl is required" });
+    }
+
+    const postResult = await db.query(`SELECT user_id, images FROM posts WHERE id = $1`, [postId]);
+    if (postResult.rows.length === 0) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+
+    const post = postResult.rows[0];
+    if (post.user_id.toString() !== userId.toString()) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const images = post.images || [];
+    const updatedImages = images.filter((url) => url !== imageUrl);
+
+    if (updatedImages.length === images.length) {
+      return res.status(400).json({ error: "Image not found in post" });
+    }
+
+    if (updatedImages.length === 0) {
+      await db.query(`DELETE FROM posts WHERE id = $1`, [postId]);
+      return res.json({ success: true });
+    }
+
+    await db.query(`UPDATE posts SET images = $1 WHERE id = $2`, [updatedImages, postId]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Delete post image error:", err);
+    res.status(500).json({ error: "Failed to delete post image" });
+  }
+});
+
+// TEST ROUTES (at the end to avoid conflicts)
+router.get("/test", (req, res) => {
+  res.json({ message: "Posts routes are working", timestamp: new Date().toISOString() });
+});
+
+router.get("/:id/images/test", (req, res) => {
+  res.json({ message: "Delete image route exists", postId: req.params.id, method: "DELETE" });
 });
 
 export default router;

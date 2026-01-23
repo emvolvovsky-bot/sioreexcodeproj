@@ -29,6 +29,14 @@ struct EventStoryViewer: View {
     private var isHost: Bool {
         authViewModel.currentUser?.userType == .host
     }
+
+    private var isPartier: Bool {
+        authViewModel.currentUser?.userType == .partier
+    }
+
+    private var hostLabelTopPadding: CGFloat {
+        canDeleteCurrentPhoto ? 58 : Theme.Spacing.m
+    }
     
     private var maxPhotos: Int {
         // Hosts have no limit, partiers have limit of 7
@@ -379,7 +387,7 @@ struct EventStoryViewer: View {
                             .padding(.top, Theme.Spacing.m)
                         }
                     }
-                    
+
                     Spacer()
                     
                     // Bottom + button (only on own profile, and only if viewUserId is nil or matches current user)
@@ -403,6 +411,26 @@ struct EventStoryViewer: View {
                             .padding(.bottom, Theme.Spacing.xl)
                         }
                     }
+                }
+            }
+            .overlay(alignment: .topTrailing) {
+                if isPartier && !event.hostName.isEmpty {
+                    HStack(spacing: Theme.Spacing.xs) {
+                        Text("Hosted by")
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(.white)
+                            .blendMode(.difference)
+                        NavigationLink(destination: InboxProfileView(userId: event.hostId)) {
+                            Text(event.hostName)
+                                .font(.caption.weight(.bold))
+                                .foregroundColor(.white)
+                                .underline()
+                                .blendMode(.difference)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.top, hostLabelTopPadding)
+                    .padding(.trailing, Theme.Spacing.m)
                 }
             }
             .gesture(
@@ -563,10 +591,18 @@ struct EventStoryViewer: View {
         let postId = photo.post.id
         let eventId = event.id
         let deletedIndex = currentPhotoIndex
+        let imageUrl = photo.url
+        
+        let networkService = NetworkService()
+        let deletePublisher: AnyPublisher<Bool, Error>
+        if photo.post.images.count > 1 {
+            deletePublisher = networkService.deletePostImage(postId: postId, imageUrl: imageUrl)
+        } else {
+            deletePublisher = networkService.deletePost(postId: postId)
+        }
         
         // Delete from API
-        let networkService = NetworkService()
-        networkService.deletePost(postId: postId)
+        deletePublisher
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
@@ -574,13 +610,13 @@ struct EventStoryViewer: View {
                     case .finished:
                         print("✅ Photo deleted successfully")
                         // Also remove from local storage
-                        self.deletePhotoFromLocalStorage(postId: postId, eventId: eventId)
+                        self.deletePhotoFromLocalStorage(postId: postId, eventId: eventId, imageUrl: imageUrl)
                         // Refresh posts after deletion
                         self.loadPostsWithIndexAdjustment(deletedIndex: deletedIndex)
                     case .failure(let error):
                         print("❌ Failed to delete photo from API: \(error.localizedDescription)")
                         // Still try deleting from local storage as fallback
-                        self.deletePhotoFromLocalStorage(postId: postId, eventId: eventId)
+                        self.deletePhotoFromLocalStorage(postId: postId, eventId: eventId, imageUrl: imageUrl)
                         // Refresh posts
                         self.loadPostsWithIndexAdjustment(deletedIndex: deletedIndex)
                     }
@@ -637,12 +673,24 @@ struct EventStoryViewer: View {
         }
     }
     
-    private func deletePhotoFromLocalStorage(postId: String, eventId: String) {
+    private func deletePhotoFromLocalStorage(postId: String, eventId: String, imageUrl: String) {
         // Remove from local storage
         let storageKey = "event_photos_\(eventId)"
         var eventPhotos = UserDefaults.standard.array(forKey: storageKey) as? [[String: Any]] ?? []
-        eventPhotos.removeAll { photoData in
-            (photoData["id"] as? String) == postId
+        eventPhotos = eventPhotos.compactMap { photoData in
+            guard let id = photoData["id"] as? String else {
+                return photoData
+            }
+            guard id == postId else {
+                return photoData
+            }
+            var updated = photoData
+            let images = (photoData["images"] as? [String] ?? []).filter { $0 != imageUrl }
+            if images.isEmpty {
+                return nil
+            }
+            updated["images"] = images
+            return updated
         }
         UserDefaults.standard.set(eventPhotos, forKey: storageKey)
         print("🗑️ Deleted photo \(postId) from local storage")

@@ -114,7 +114,7 @@ struct HostProfileView: View {
             status == "in_review" ||
             connectStatus?.isReady == true
 
-        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+        return VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             HStack {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                     Text("Stripe payouts")

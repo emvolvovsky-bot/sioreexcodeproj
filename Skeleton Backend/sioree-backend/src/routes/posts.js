@@ -327,5 +327,48 @@ router.post("/fix-urls", async (req, res) => {
   }
 });
 
+// DELETE SINGLE IMAGE FROM POST
+router.patch("/:id/images", async (req, res) => {
+  try {
+    const userId = getUserIdFromToken(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const postId = req.params.id;
+    const { imageUrl } = req.body;
+
+    if (!imageUrl) {
+      return res.status(400).json({ error: "imageUrl is required" });
+    }
+
+    const postResult = await db.query(`SELECT user_id, media_urls FROM posts WHERE id = $1`, [postId]);
+    if (postResult.rows.length === 0) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+
+    const post = postResult.rows[0];
+    if (post.user_id.toString() !== userId.toString()) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const images = post.media_urls || [];
+    const updatedImages = images.filter((url) => url !== imageUrl);
+
+    if (updatedImages.length === images.length) {
+      return res.status(400).json({ error: "Image not found in post" });
+    }
+
+    if (updatedImages.length === 0) {
+      await db.query(`DELETE FROM posts WHERE id = $1`, [postId]);
+      return res.json({ success: true });
+    }
+
+    await db.query(`UPDATE posts SET media_urls = $1 WHERE id = $2`, [updatedImages, postId]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Delete post image error:", err);
+    res.status(500).json({ error: "Failed to delete post image" });
+  }
+});
+
 export default router;
 

@@ -38,7 +38,18 @@ const ensureStripeAccount = async ({ userId, email, stripeClient, req }) => {
     [userId]
   );
   const currentId = existing.rows[0]?.stripe_account_id;
-  if (currentId) return currentId;
+
+  // If we have a stored account ID, verify it still exists
+  if (currentId) {
+    try {
+      await stripeClient.accounts.retrieve(currentId);
+      return currentId; // Account exists, reuse it
+    } catch (error) {
+      // Account doesn't exist anymore, clear it and create new one
+      console.log(`⚠️ Stripe account ${currentId} not found, creating new one`);
+      await db.query("UPDATE users SET stripe_account_id = NULL WHERE id = $1", [userId]);
+    }
+  }
 
   const account = await stripeClient.accounts.create({
     type: "custom",

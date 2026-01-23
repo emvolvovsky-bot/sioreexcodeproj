@@ -44,7 +44,6 @@ struct AppEvent: Identifiable {
     let priceText: String
     let imageName: String
     let tags: [String]
-    let isFeatured: Bool
     let images: [String]
     
     init(id: String = UUID().uuidString,
@@ -56,7 +55,6 @@ struct AppEvent: Identifiable {
          priceText: String,
          imageName: String = "party.popper.fill",
          tags: [String] = [],
-         isFeatured: Bool = false,
          images: [String] = []) {
         self.id = id
         self.hostId = hostId
@@ -67,7 +65,6 @@ struct AppEvent: Identifiable {
         self.priceText = priceText
         self.imageName = imageName
         self.tags = tags
-        self.isFeatured = isFeatured
         self.images = images
     }
 }
@@ -188,7 +185,6 @@ struct MockData {
             priceText: "$75",
             imageName: "party.popper.fill",
             tags: ["House Party", "Halloween", "Mansion"],
-            isFeatured: true,
             images: ["Getty_515070156_EDITORIALONLY_LosAngeles_HollywoodBlvd_Web72DPI_0.jpg", "Lights_of_Rockefeller_Center_during_sunset.jpg", "iStock-528897870.jpg.webp"]
         ),
         AppEvent(
@@ -200,7 +196,6 @@ struct MockData {
             priceText: "$50",
             imageName: "sunset.fill",
             tags: ["Rooftop", "Sunset", "Electronic"],
-            isFeatured: true,
             images: ["Lights_of_Rockefeller_Center_during_sunset.jpg"]
         ),
         AppEvent(
@@ -212,7 +207,6 @@ struct MockData {
             priceText: "$40",
             imageName: "music.note.list",
             tags: ["Rave", "Warehouse", "Techno"],
-            isFeatured: false,
             images: ["iStock-528897870.jpg.webp"]
         ),
         AppEvent(
@@ -224,7 +218,6 @@ struct MockData {
             priceText: "Free",
             imageName: "briefcase.fill",
             tags: ["Corporate", "Networking", "Holiday"],
-            isFeatured: false,
             images: ["images.jpeg"]
         ),
         AppEvent(
@@ -236,7 +229,6 @@ struct MockData {
             priceText: "$30",
             imageName: "flame.fill",
             tags: ["Beach", "Bonfire", "Casual"],
-            isFeatured: true,
             images: ["cruise-to-los-angeles-usa.webp"]
         ),
         AppEvent(
@@ -248,7 +240,6 @@ struct MockData {
             priceText: "$150",
             imageName: "star.fill",
             tags: ["VIP", "Lounge", "Exclusive"],
-            isFeatured: false,
             images: ["download (2).jpeg"]
         ),
         AppEvent(
@@ -260,7 +251,6 @@ struct MockData {
             priceText: "$45",
             imageName: "music.mic",
             tags: ["Jazz", "Live Music", "Intimate"],
-            isFeatured: false,
             images: ["download (3).jpeg"]
         ),
         AppEvent(
@@ -272,7 +262,6 @@ struct MockData {
             priceText: "$35",
             imageName: "sun.max.fill",
             tags: ["Day Party", "Pool", "Daytime"],
-            isFeatured: true,
             images: ["cruise-to-los-angeles-usa.webp"]
         )
     ]

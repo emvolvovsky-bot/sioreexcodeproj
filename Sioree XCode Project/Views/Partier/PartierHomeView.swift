@@ -301,7 +301,7 @@ private extension PartierHomeView {
             LoadingView()
             .frame(maxWidth: .infinity)
             .padding(.vertical, Theme.Spacing.xxl)
-        } else if featuredDataSource.isEmpty && nearbyDataSource.isEmpty && viewModel.hasLoaded {
+        } else if nearbyDataSource.isEmpty && viewModel.hasLoaded {
             VStack(spacing: Theme.Spacing.m) {
                 Image(systemName: "calendar.badge.exclamationmark")
                     .font(.system(size: 64))
@@ -409,12 +409,6 @@ private extension PartierHomeView {
         }
     }
     
-    var featuredDataSource: [Event] {
-        if !viewModel.featuredEvents.isEmpty {
-            return viewModel.featuredEvents
-        }
-        return []
-    }
     
     var nearbyDataSource: [Event] {
         if !filteredNearbyEvents.isEmpty {
@@ -435,14 +429,24 @@ private extension PartierHomeView {
     
     var filteredEvents: [Event] {
         let events: [Event] = baseEvents.filter { event in
+            // Ensure both free and paid events are included - no price-based filtering
             matchesCategory(event) && matchesSearch(event)
         }
-        return events.filter { !hiddenEventIds.contains($0.id) }
+        let finalEvents = events.filter { !hiddenEventIds.contains($0.id) }
+
+        // Debug: Print event counts and prices to console
+        print("📊 Event filtering debug:")
+        print("   Base events: \(baseEvents.count)")
+        print("   After category/search filter: \(events.count)")
+        print("   After hidden filter: \(finalEvents.count)")
+        print("   Paid events in final list: \(finalEvents.filter { ($0.ticketPrice ?? 0) > 0 }.count)")
+        print("   Free events in final list: \(finalEvents.filter { ($0.ticketPrice ?? 0) == 0 }.count)")
+
+        return finalEvents
     }
     
     var baseEvents: [Event] {
-        let combined = featuredDataSource + nearbyDataSource
-        return combined.isEmpty ? featuredDataSource : combined
+        return nearbyDataSource
     }
     
     func matchesSearch(_ event: Event) -> Bool {

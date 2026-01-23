@@ -1,7 +1,6 @@
 import express from "express";
 import { db } from "../db/database.js";
 import jwt from "jsonwebtoken";
-import axios from "axios";
 
 const router = express.Router();
 
@@ -77,26 +76,38 @@ router.post("/instagram/exchange", async (req, res) => {
 
     // Exchange code for access token
     try {
-      const tokenResponse = await axios.post("https://api.instagram.com/oauth/access_token", {
-        client_id: clientId,
-        client_secret: clientSecret,
-        grant_type: "authorization_code",
-        redirect_uri: redirectUri,
-        code: code
-      }, {
+      const tokenResponse = await fetch("https://api.instagram.com/oauth/access_token", {
+        method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded"
-        }
+        },
+        body: new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          grant_type: "authorization_code",
+          redirect_uri: redirectUri,
+          code: code
+        })
       });
 
-      const { access_token, user_id } = tokenResponse.data;
+      if (!tokenResponse.ok) {
+        throw new Error(`Instagram API error: ${tokenResponse.status}`);
+      }
+
+      const tokenData = await tokenResponse.json();
+      const { access_token, user_id } = tokenData;
 
       // Get user info from Instagram Graph API
-      const userResponse = await axios.get(
+      const userResponse = await fetch(
         `https://graph.instagram.com/${user_id}?fields=id,username&access_token=${access_token}`
       );
 
-      const username = userResponse.data.username || `user_${user_id}`;
+      if (!userResponse.ok) {
+        throw new Error(`Instagram Graph API error: ${userResponse.status}`);
+      }
+
+      const userData = await userResponse.json();
+      const username = userData.username || `user_${user_id}`;
 
       // Save or update OAuth token in database
       // First check if table exists, if not create it

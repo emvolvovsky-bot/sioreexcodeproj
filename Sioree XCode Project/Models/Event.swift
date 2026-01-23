@@ -66,7 +66,6 @@ struct Event: Identifiable, Codable, Hashable {
     var likes: Int
     var isLiked: Bool
     var isSaved: Bool
-    var isFeatured: Bool
     var isRSVPed: Bool // Whether the current user has RSVPed to this event
     var qrCode: String? // Unique QR code for the event
     var lookingForTalentType: String? // Type of talent the host is looking for (e.g., "DJ", "Bartender")
@@ -87,7 +86,6 @@ struct Event: Identifiable, Codable, Hashable {
         case createdAt = "created_at"
         case isLiked = "isLiked"
         case isSaved = "isSaved"
-        case isFeatured = "isFeatured"
         case isRSVPed = "isRSVPed"
         case qrCode = "qrCode"
         case lookingForTalentType = "lookingForTalentType"
@@ -142,7 +140,6 @@ struct Event: Identifiable, Codable, Hashable {
         likes = try container.decodeIfPresent(Int.self, forKey: .likes) ?? 0
         isLiked = try container.decodeIfPresent(Bool.self, forKey: .isLiked) ?? false
         isSaved = try container.decodeIfPresent(Bool.self, forKey: .isSaved) ?? false
-        isFeatured = try container.decodeIfPresent(Bool.self, forKey: .isFeatured) ?? false
         isRSVPed = try container.decodeIfPresent(Bool.self, forKey: .isRSVPed) ?? false
         qrCode = try container.decodeIfPresent(String.self, forKey: .qrCode)
         let camelCaseIsPrivate = try container.decodeIfPresent(Bool.self, forKey: .isPrivate)
@@ -184,7 +181,6 @@ struct Event: Identifiable, Codable, Hashable {
          likes: Int = 0,
          isLiked: Bool = false,
          isSaved: Bool = false,
-         isFeatured: Bool = false,
         isRSVPed: Bool = false,
         qrCode: String? = nil,
         lookingForTalentType: String? = nil,
@@ -212,7 +208,6 @@ struct Event: Identifiable, Codable, Hashable {
         self.likes = likes
         self.isLiked = isLiked
         self.isSaved = isSaved
-        self.isFeatured = isFeatured
         self.isRSVPed = isRSVPed
         self.qrCode = qrCode
         self.isPrivate = isPrivate
@@ -253,7 +248,6 @@ struct Event: Identifiable, Codable, Hashable {
         try container.encode(likes, forKey: .likes)
         try container.encode(isLiked, forKey: .isLiked)
         try container.encode(isSaved, forKey: .isSaved)
-        try container.encode(isFeatured, forKey: .isFeatured)
         try container.encode(isRSVPed, forKey: .isRSVPed)
         try container.encodeIfPresent(qrCode, forKey: .qrCode)
         try container.encode(isPrivate, forKey: .isPrivate)

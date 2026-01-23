@@ -208,7 +208,7 @@ const ensureEventsLookingForColumns = async () => {
   return eventsLookingForColumnsPromise;
 };
 
-// GET FEATURED EVENTS (hosts/talent with 500+ followers)
+// GET FEATURED EVENTS (hosts/talent with 500+ followers OR explicitly featured events)
 router.get("/featured", async (req, res) => {
   try {
     const result = await db.query(
@@ -220,15 +220,25 @@ router.get("/featured", async (req, res) => {
         u.follower_count,
         u.user_type
       FROM events e
-      INNER JOIN users u ON e.creator_id = u.id
-      WHERE e.event_date > NOW()
-        AND u.user_type IN ('host', 'talent')
-        AND COALESCE(u.follower_count, 0) >= $1
+      LEFT JOIN users u ON e.creator_id = u.id
+      WHERE e.event_date >= CURRENT_DATE
         AND COALESCE(e.status, 'published') <> 'cancelled'
-      ORDER BY u.follower_count DESC, e.event_date ASC
+        AND (
+          (u.user_type IN ('host', 'talent') AND COALESCE(u.follower_count, 0) >= $1)
+          OR e.is_featured = true
+          OR u.user_type IS NULL  -- Include events with no creator
+        )
+      ORDER BY
+        CASE WHEN e.is_featured = true THEN 1 ELSE 0 END DESC,
+        u.follower_count DESC,
+        e.event_date ASC
       LIMIT 20`,
       [FEATURED_FOLLOWER_THRESHOLD]
     );
+
+    console.log(`⭐ FEATURED EVENTS QUERY RETURNED: ${result.rows.length} events`);
+    const paidFeatured = result.rows.filter(row => row.ticket_price && parseFloat(row.ticket_price) > 0);
+    console.log(`💰 PAID EVENTS IN FEATURED RESULTS: ${paidFeatured.length}`);
 
     const events = result.rows.map(row => {
       const eventId = row.id.toString();
@@ -237,6 +247,12 @@ router.get("/featured", async (req, res) => {
       const lookingForNotes = row.looking_for_notes || null;
       const lookingForLabel = buildLookingForLabel(lookingForRoles, row.looking_for_talent_type, lookingForNotes);
       const isFeatured = isFeaturedByFollowers(row);
+
+      const ticketPrice = row.ticket_price && parseFloat(row.ticket_price) > 0 ? parseFloat(row.ticket_price) : null;
+      if (ticketPrice) {
+        console.log(`💰 FEATURED EVENT "${row.title}" HAS TICKET PRICE: $${ticketPrice}`);
+      }
+
       return {
         id: eventId,
         title: row.title,
@@ -247,7 +263,7 @@ router.get("/featured", async (req, res) => {
         date: toISOString(row.event_date),
         location: row.location || "",
         images: normalizeImages(row.images),
-        ticketPrice: row.ticket_price && parseFloat(row.ticket_price) > 0 ? parseFloat(row.ticket_price) : null,
+        ticketPrice: ticketPrice,
         capacity: row.capacity || null,
         attendees: row.attendee_count || 0,
         isLiked: false,
@@ -262,6 +278,10 @@ router.get("/featured", async (req, res) => {
       };
     });
 
+    console.log(`📤 RETURNING ${events.length} FEATURED EVENTS TO CLIENT`);
+    const paidEventsReturned = events.filter(e => e.ticketPrice && e.ticketPrice > 0);
+    console.log(`💰 RETURNING ${paidEventsReturned.length} PAID EVENTS TO CLIENT`);
+
     res.json({ events });
   } catch (err) {
     console.error("Get featured events error:", err);
@@ -275,28 +295,41 @@ router.get("/nearby", async (req, res) => {
     // Get user location from query params or headers (in production, get from user's profile)
     const { latitude, longitude, radius = 50 } = req.query; // radius in km, default 50km
 
+    // First, get total count of all events for debugging
+    const totalCountResult = await db.query("SELECT COUNT(*) as total FROM events");
+    const totalEvents = totalCountResult.rows[0].total;
+    console.log(`📊 TOTAL EVENTS IN DATABASE: ${totalEvents}`);
+
+    const paidCountResult = await db.query("SELECT COUNT(*) as paid FROM events WHERE ticket_price > 0");
+    const paidEvents = paidCountResult.rows[0].paid;
+    console.log(`💰 PAID EVENTS IN DATABASE: ${paidEvents}`);
+
     // Return upcoming events (excluding featured ones, or include them but mark them)
     // In production, filter by location using PostGIS or calculate distance
     const result = await db.query(
-      `SELECT 
+      `SELECT
         e.*,
         u.username as host_username,
         u.name as host_name,
         u.avatar as host_avatar,
         u.follower_count,
         u.user_type,
-        CASE 
-          WHEN u.user_type IN ('host','talent') AND COALESCE(u.follower_count, 0) >= $1 THEN true 
-          ELSE false 
+        CASE
+          WHEN u.user_type IN ('host','talent') AND COALESCE(u.follower_count, 0) >= $1 THEN true
+          ELSE false
         END as auto_featured
       FROM events e
-      INNER JOIN users u ON e.creator_id = u.id
-      WHERE e.event_date > NOW()
+      LEFT JOIN users u ON e.creator_id = u.id
+      WHERE e.event_date >= CURRENT_DATE
         AND COALESCE(e.status, 'published') <> 'cancelled'
       ORDER BY e.event_date ASC
       LIMIT 50`,
       [FEATURED_FOLLOWER_THRESHOLD]
     );
+
+    console.log(`📍 NEARBY EVENTS QUERY RETURNED: ${result.rows.length} events`);
+    const paidNearby = result.rows.filter(row => row.ticket_price && parseFloat(row.ticket_price) > 0);
+    console.log(`💰 PAID EVENTS IN NEARBY RESULTS: ${paidNearby.length}`);
 
     // Format events to match iOS expectations
     const events = result.rows.map(row => {
@@ -305,6 +338,12 @@ router.get("/nearby", async (req, res) => {
       const lookingForRoles = normalizeRoles(row.looking_for_roles);
       const lookingForNotes = row.looking_for_notes || null;
       const lookingForLabel = buildLookingForLabel(lookingForRoles, row.looking_for_talent_type, lookingForNotes);
+
+      const ticketPrice = row.ticket_price && parseFloat(row.ticket_price) > 0 ? parseFloat(row.ticket_price) : null;
+      if (ticketPrice) {
+        console.log(`💰 NEARBY EVENT "${row.title}" HAS TICKET PRICE: $${ticketPrice}`);
+      }
+
       return {
         id: eventId,
         title: row.title,
@@ -315,7 +354,7 @@ router.get("/nearby", async (req, res) => {
         date: toISOString(row.event_date),
         location: row.location || "",
         images: normalizeImages(row.images),
-        ticketPrice: row.ticket_price && parseFloat(row.ticket_price) > 0 ? parseFloat(row.ticket_price) : null,
+        ticketPrice: ticketPrice,
         capacity: row.capacity || null,
         attendees: row.attendee_count || 0,
         isLiked: false,
@@ -329,6 +368,10 @@ router.get("/nearby", async (req, res) => {
         lookingForTalentType: lookingForLabel
       };
     });
+
+    console.log(`📤 RETURNING ${events.length} NEARBY EVENTS TO CLIENT`);
+    const paidEventsReturned = events.filter(e => e.ticketPrice && e.ticketPrice > 0);
+    console.log(`💰 RETURNING ${paidEventsReturned.length} PAID EVENTS TO CLIENT`);
 
     res.json({ events });
   } catch (err) {
@@ -380,8 +423,8 @@ router.get("/looking-for/:role?", async (req, res) => {
           ELSE false 
         END as auto_featured
       FROM events e
-      INNER JOIN users u ON e.creator_id = u.id
-      WHERE e.event_date > NOW()
+      LEFT JOIN users u ON e.creator_id = u.id
+      WHERE e.event_date >= CURRENT_DATE
         AND COALESCE(e.status, 'published') <> 'cancelled'
         AND (
           array_length(e.looking_for_roles, 1) > 0
@@ -532,9 +575,12 @@ router.post("/", async (req, res) => {
       // Skip Stripe check for local testing if ALLOW_LOCAL_TICKETS is set
       // This allows creating ticketed events without Stripe setup during development
       // Set ALLOW_LOCAL_TICKETS=true or NODE_ENV=development or RUN_LOCAL=true
+      const mode = req.body?.mode || req.query?.mode || req.headers["x-stripe-mode"];
       const allowLocalTickets = process.env.ALLOW_LOCAL_TICKETS === 'true' ||
                                process.env.NODE_ENV === 'development' ||
-                               process.env.RUN_LOCAL === 'true';
+                               process.env.RUN_LOCAL === 'true' ||
+                               mode === 'sioree sandbox' ||
+                               mode === 'test';
 
       if (!allowLocalTickets) {
         const stripeCheck = await ensureHostStripeReady(req, decoded.userId);
@@ -656,19 +702,19 @@ router.post("/", async (req, res) => {
 router.get("/", async (req, res) => {
   try {
     const result = await db.query(
-      `SELECT 
+      `SELECT
         e.*,
         u.username as host_username,
         u.name as host_name,
         u.avatar as host_avatar,
         u.follower_count,
         u.user_type,
-        CASE 
-          WHEN u.user_type IN ('host','talent') AND COALESCE(u.follower_count, 0) >= $1 THEN true 
-          ELSE false 
+        CASE
+          WHEN u.user_type IN ('host','talent') AND COALESCE(u.follower_count, 0) >= $1 THEN true
+          ELSE false
         END as auto_featured
       FROM events e
-      INNER JOIN users u ON e.creator_id = u.id
+      LEFT JOIN users u ON e.creator_id = u.id
       WHERE COALESCE(e.status, 'published') <> 'cancelled'
       ORDER BY e.event_date ASC
       LIMIT 100`,
@@ -746,9 +792,9 @@ router.get("/attending/upcoming", async (req, res) => {
         END as auto_featured
       FROM events e
       INNER JOIN event_attendees ea ON e.id = ea.event_id
-      INNER JOIN users u ON e.creator_id = u.id
+      LEFT JOIN users u ON e.creator_id = u.id
       WHERE ea.user_id = $1
-        AND e.event_date > NOW()
+        AND e.event_date >= CURRENT_DATE
         AND COALESCE(e.status, 'published') <> 'cancelled'
       ORDER BY e.event_date ASC`,
       [userId, FEATURED_FOLLOWER_THRESHOLD]
@@ -793,28 +839,115 @@ router.get("/attending/upcoming", async (req, res) => {
   }
 });
 
+// GET SAVED EVENTS
+router.get("/saved", async (req, res) => {
+  try {
+    const userId = getUserIdFromToken(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    // Get saved event IDs for this user
+    const savedEventsResult = await db.query(
+      `SELECT event_id FROM event_saves WHERE user_id = $1`,
+      [userId]
+    );
+
+    if (savedEventsResult.rows.length === 0) {
+      return res.json({ events: [] });
+    }
+
+    const eventIds = savedEventsResult.rows.map(row => row.event_id);
+
+    // Get full event details for saved events
+    const eventsResult = await db.query(
+      `
+      SELECT
+        e.*,
+        CASE WHEN esa.user_id IS NOT NULL THEN true ELSE false END as is_saved,
+        CASE WHEN ela.user_id IS NOT NULL THEN true ELSE false END as is_liked,
+        COALESCE(attendee_counts.attendee_count, 0) as attendee_count,
+        u.name as host_name,
+        u.avatar as host_avatar,
+        u.username as host_username
+      FROM events e
+      LEFT JOIN event_saves esa ON e.id = esa.event_id AND esa.user_id = $1
+      LEFT JOIN event_likes ela ON e.id = ela.event_id AND ela.user_id = $1
+      LEFT JOIN users u ON e.creator_id = u.id
+      LEFT JOIN (
+        SELECT event_id, COUNT(*) as attendee_count
+        FROM event_attendees
+        GROUP BY event_id
+      ) attendee_counts ON e.id = attendee_counts.event_id
+      WHERE e.id = ANY($2)
+        AND COALESCE(e.status, 'published') <> 'cancelled'
+        AND COALESCE(e.status, 'published') <> 'draft'
+      ORDER BY e.event_date ASC
+      `,
+      [userId, eventIds]
+    );
+
+    const events = eventsResult.rows.map(row => {
+      const eventId = row.id.toString();
+      const qrCode = row.qr_code || `sioree:event:${eventId}:${crypto.randomUUID()}`;
+      const lookingForRoles = normalizeRoles(row.looking_for_roles);
+      const lookingForNotes = row.looking_for_notes || null;
+      const lookingForLabel = buildLookingForLabel(lookingForRoles, row.looking_for_talent_type, lookingForNotes);
+
+      return {
+        id: eventId,
+        title: row.title,
+        description: row.description || "",
+        hostId: row.creator_id?.toString() || "",
+        hostName: row.host_name || row.host_username || "Unknown Host",
+        hostAvatar: row.host_avatar || null,
+        date: toISOString(row.event_date),
+        location: row.location || "",
+        images: normalizeImages(row.images),
+        ticketPrice: row.ticket_price && parseFloat(row.ticket_price) > 0 ? parseFloat(row.ticket_price) : null,
+        capacity: row.capacity || null,
+        attendeeCount: parseInt(row.attendee_count) || 0,
+        talentIds: normalizeTalentIds(row.talent_ids),
+        lookingForRoles,
+        lookingForNotes,
+        lookingForTalentType: lookingForLabel,
+        status: row.status || "published",
+        createdAt: toISOString(row.created_at),
+        likes: row.likes || 0,
+        isLiked: row.is_liked || false,
+        isSaved: row.is_saved || false,
+        isFeatured: row.is_featured || false,
+        qrCode: qrCode
+      };
+    });
+
+    res.json({ events });
+  } catch (err) {
+    console.error("Fetch saved events error:", err);
+    res.status(500).json({ error: "Failed to fetch saved events" });
+  }
+});
+
 // GET SINGLE EVENT
 router.get("/:id", async (req, res) => {
   try {
     const userId = getUserIdFromToken(req);
     
     const result = await db.query(
-      `SELECT 
+      `SELECT
         e.*,
         u.username as host_username,
         u.name as host_name,
         u.avatar as host_avatar,
         u.follower_count,
         u.user_type,
-        CASE 
-          WHEN u.user_type IN ('host','talent') AND COALESCE(u.follower_count, 0) >= $3 THEN true 
-          ELSE false 
+        CASE
+          WHEN u.user_type IN ('host','talent') AND COALESCE(u.follower_count, 0) >= $3 THEN true
+          ELSE false
         END as auto_featured,
         COALESCE(el.likes_count, 0) as likes,
         CASE WHEN ela.user_id IS NOT NULL THEN true ELSE false END as is_liked,
         CASE WHEN esa.user_id IS NOT NULL THEN true ELSE false END as is_saved
       FROM events e
-      INNER JOIN users u ON e.creator_id = u.id
+      LEFT JOIN users u ON e.creator_id = u.id
       LEFT JOIN (
         SELECT event_id, COUNT(*) as likes_count
         FROM event_likes
@@ -1107,88 +1240,6 @@ router.post("/:id/save", async (req, res) => {
   } catch (err) {
     console.error("Save event error:", err);
     res.status(500).json({ error: "Failed to save/unsave event" });
-  }
-});
-
-// GET SAVED EVENTS
-router.get("/saved", async (req, res) => {
-  try {
-    const userId = getUserIdFromToken(req);
-    if (!userId) return res.status(401).json({ error: "Unauthorized" });
-
-    // Get saved event IDs for this user
-    const savedEventsResult = await db.query(
-      `SELECT event_id FROM event_saves WHERE user_id = $1`,
-      [userId]
-    );
-
-    if (savedEventsResult.rows.length === 0) {
-      return res.json({ events: [] });
-    }
-
-    const eventIds = savedEventsResult.rows.map(row => row.event_id);
-
-    // Get full event details for saved events
-    const eventsResult = await db.query(
-      `
-      SELECT
-        e.*,
-        CASE WHEN esa.user_id IS NOT NULL THEN true ELSE false END as is_saved,
-        CASE WHEN ela.user_id IS NOT NULL THEN true ELSE false END as is_liked,
-        COALESCE(attendee_counts.attendee_count, 0) as attendee_count,
-        u.name as host_name,
-        u.avatar as host_avatar,
-        u.username as host_username
-      FROM events e
-      LEFT JOIN event_saves esa ON e.id = esa.event_id AND esa.user_id = $1
-      LEFT JOIN event_likes ela ON e.id = ela.event_id AND ela.user_id = $1
-      LEFT JOIN users u ON e.host_id = u.id
-      LEFT JOIN (
-        SELECT event_id, COUNT(*) as attendee_count
-        FROM event_attendees
-        GROUP BY event_id
-      ) attendee_counts ON e.id = attendee_counts.event_id
-      WHERE e.id = ANY($2)
-        AND e.status != 'cancelled'
-        AND e.status != 'draft'
-      ORDER BY e.date ASC
-      `,
-      [userId, eventIds]
-    );
-
-    const events = eventsResult.rows.map(row => ({
-      id: row.id,
-      title: row.title,
-      description: row.description,
-      hostId: row.host_id,
-      hostName: row.host_name,
-      hostAvatar: row.host_avatar,
-      hostUsername: row.host_username,
-      date: row.date,
-      time: row.time,
-      location: row.location,
-      locationDetails: row.location_details,
-      images: row.images || [],
-      ticketPrice: row.ticket_price,
-      capacity: row.capacity,
-      attendeeCount: parseInt(row.attendee_count) || 0,
-      talentIds: row.talent_ids || [],
-      lookingForRoles: row.looking_for_roles || [],
-      status: row.status,
-      createdAt: row.created_at,
-      likes: row.likes || 0,
-      isLiked: row.is_liked || false,
-      isSaved: row.is_saved || false,
-      isFeatured: row.is_featured || false,
-      isPrivate: row.is_private || false,
-      accessCode: row.access_code,
-      qrCode: row.qr_code
-    }));
-
-    res.json({ events });
-  } catch (err) {
-    console.error("Fetch saved events error:", err);
-    res.status(500).json({ error: "Failed to fetch saved events" });
   }
 });
 

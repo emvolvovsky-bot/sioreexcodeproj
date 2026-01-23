@@ -33,6 +33,9 @@ const resolveStripeClient = (req) => {
 };
 
 const ensureStripeAccount = async ({ userId, email, stripeClient, req }) => {
+  const mode = req.body?.mode || req.query?.mode || req.headers["x-stripe-mode"];
+  const isSandbox = mode === "sioree sandbox" || mode === "test";
+
   const existing = await db.query(
     "SELECT stripe_account_id FROM users WHERE id = $1",
     [userId]
@@ -52,10 +55,24 @@ const ensureStripeAccount = async ({ userId, email, stripeClient, req }) => {
   }
 
   const account = await stripeClient.accounts.create({
-    type: "custom",
+    type: "express",
     country: "US",
-    business_type: "individual",
-    capabilities: { transfers: { requested: true } }
+    capabilities: { transfers: { requested: true } },
+    business_profile: {
+      name: isSandbox ? "Sioree Sandbox" : "Sioree",
+      support_email: email,
+      url: isSandbox ? "https://sioree-sandbox.com" : "https://sioree.com"
+    },
+    settings: {
+      payouts: {
+        schedule: {
+          interval: "manual"
+        }
+      },
+      connect_onboarding: {
+        networked_onboarding: false
+      }
+    }
   });
 
   await db.query("UPDATE users SET stripe_account_id = $1 WHERE id = $2", [
@@ -118,18 +135,126 @@ router.post("/onboarding-link", async (req, res) => {
       return res.status(400).json({ error: "User email not found" });
     }
 
-    const stripeAccountId = await ensureStripeAccount({
-      userId,
-      email,
-      stripeClient,
-      req
-    });
+    // For onboarding, we want fresh accounts to ensure users see both sign up/sign in options
+    // Check if account exists and is in a "requires onboarding" state
+    const existing = await db.query(
+      "SELECT stripe_account_id FROM users WHERE id = $1",
+      [userId]
+    );
+    const currentId = existing.rows[0]?.stripe_account_id;
+
+    let stripeAccountId;
+    if (currentId) {
+      try {
+        const account = await stripeClient.accounts.retrieve(currentId);
+        // If account exists but requires information or is not fully onboarded,
+        // we can reuse it. Otherwise, create fresh for clean onboarding experience
+        const requiresInfo = account.requirements?.currently_due?.length > 0;
+        const notFullyOnboarded = !account.details_submitted || !account.charges_enabled;
+        if (requiresInfo || notFullyOnboarded) {
+          stripeAccountId = currentId;
+        } else {
+          // Account is fully onboarded, create fresh one for new onboarding session
+          console.log(`🔄 Account ${currentId} is fully onboarded, creating fresh account for onboarding`);
+          await db.query("UPDATE users SET stripe_account_id = NULL WHERE id = $1", [userId]);
+          const mode = req.body?.mode || req.query?.mode || req.headers["x-stripe-mode"];
+          const isSandbox = mode === "sioree sandbox" || mode === "test";
+          const newAccount = await stripeClient.accounts.create({
+            type: "express",
+            country: "US",
+            capabilities: { transfers: { requested: true } },
+            business_profile: {
+              name: isSandbox ? "Sioree Sandbox" : "Sioree",
+              support_email: email,
+              url: isSandbox ? "https://sioree-sandbox.com" : "https://sioree.com"
+            },
+            settings: {
+              payouts: {
+                schedule: {
+                  interval: "manual"
+                }
+              },
+              connect_onboarding: {
+                networked_onboarding: false
+              }
+            }
+          });
+          await db.query("UPDATE users SET stripe_account_id = $1 WHERE id = $2", [
+            newAccount.id,
+            userId
+          ]);
+          stripeAccountId = newAccount.id;
+        }
+      } catch (error) {
+        // Account doesn't exist, create new one
+        console.log(`⚠️ Stripe account ${currentId} not found, creating new one`);
+        await db.query("UPDATE users SET stripe_account_id = NULL WHERE id = $1", [userId]);
+        const mode = req.body?.mode || req.query?.mode || req.headers["x-stripe-mode"];
+        const isSandbox = mode === "sioree sandbox" || mode === "test";
+        const newAccount = await stripeClient.accounts.create({
+          type: "express",
+          country: "US",
+          capabilities: { transfers: { requested: true } },
+          business_profile: {
+            name: isSandbox ? "Sioree Sandbox" : "Sioree",
+            support_email: email,
+            url: isSandbox ? "https://sioree-sandbox.com" : "https://sioree.com"
+          },
+          settings: {
+            payouts: {
+              schedule: {
+                interval: "manual"
+              }
+            },
+            connect_onboarding: {
+              networked_onboarding: false
+            }
+          }
+        });
+        await db.query("UPDATE users SET stripe_account_id = $1 WHERE id = $2", [
+          newAccount.id,
+          userId
+        ]);
+        stripeAccountId = newAccount.id;
+      }
+    } else {
+      // No existing account, create new one
+      const mode = req.body?.mode || req.query?.mode || req.headers["x-stripe-mode"];
+      const isSandbox = mode === "sioree sandbox" || mode === "test";
+      const newAccount = await stripeClient.accounts.create({
+        type: "express",
+        country: "US",
+        capabilities: { transfers: { requested: true } },
+        business_profile: {
+          name: isSandbox ? "Sioree Sandbox" : "Sioree",
+          support_email: email,
+          url: isSandbox ? "https://sioree-sandbox.com" : "https://sioree.com"
+        },
+        settings: {
+          payouts: {
+            schedule: {
+              interval: "manual"
+            }
+          },
+          connect_onboarding: {
+            networked_onboarding: false
+          }
+        }
+      });
+      await db.query("UPDATE users SET stripe_account_id = $1 WHERE id = $2", [
+        newAccount.id,
+        userId
+      ]);
+      stripeAccountId = newAccount.id;
+    }
 
     const accountLink = await stripeClient.accountLinks.create({
       account: stripeAccountId,
       refresh_url: connectUrls.refreshUrl,
       return_url: connectUrls.returnUrl,
-      type: "account_onboarding"
+      type: "account_onboarding",
+      collect: "eventually_due",
+      state: `onboarding_${userId}_${Date.now()}`
     });
 
     return res.json({ url: accountLink.url });
@@ -139,7 +264,21 @@ router.post("/onboarding-link", async (req, res) => {
       error?.raw?.message ||
       error?.message ||
       "Failed to create onboarding link";
-    return res.status(500).json({ error: stripeMessage });
+
+    // Log additional details for debugging
+    console.error("Error details:", {
+      type: error?.type,
+      code: error?.code,
+      param: error?.param,
+      userId,
+      hasStripeAccountId: !!stripeAccountId
+    });
+
+    return res.status(500).json({
+      error: stripeMessage,
+      code: error?.code,
+      type: error?.type
+    });
   }
 });
 

@@ -427,7 +427,6 @@ struct AddPostFromEventView: View {
         likes: 10,
         isLiked: false,
         isSaved: false,
-        isFeatured: false,
         isRSVPed: false,
         qrCode: "test-qr",
         lookingForTalentType: nil

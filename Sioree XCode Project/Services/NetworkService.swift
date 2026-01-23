@@ -173,14 +173,6 @@ class NetworkService {
     }
     
     // MARK: - Events
-    func fetchFeaturedEvents() -> AnyPublisher<[Event], Error> {
-        struct Response: Codable {
-            let events: [Event]
-        }
-        return request("/api/events/featured")
-            .map { (response: Response) in response.events }
-            .eraseToAnyPublisher()
-    }
     
     func fetchNearbyEvents(latitude: Double? = nil, longitude: Double? = nil, radiusMiles: Int = 30) -> AnyPublisher<[Event], Error> {
         struct NearbyEventsResponse: Codable {

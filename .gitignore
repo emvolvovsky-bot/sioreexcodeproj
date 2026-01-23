@@ -38,6 +38,7 @@ database.db
 config/secrets.json
 secrets.json
 credentials.json
+local.txt
 *.pem
 *.key
 *.cert

@@ -3,8 +3,8 @@ import Stripe from "stripe";
 const normalizeMode = (mode) => {
   if (!mode) return undefined;
   const normalized = String(mode).trim().toLowerCase();
-  if (normalized === "test" || normalized === "live") {
-    return normalized;
+  if (normalized === "test" || normalized === "live" || normalized === "sioree sandbox") {
+    return normalized === "sioree sandbox" ? "test" : normalized;
   }
   return undefined;
 };

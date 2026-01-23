@@ -65,6 +65,9 @@ struct ContentView: View {
         .onAppear {
             print("📱 ContentView appeared - isAuthenticated: \(authViewModel.isAuthenticated)")
 
+            // Log which server the app is connecting to
+            logServerConnection()
+
             // Show splash until app is ready
             showSplash = true
             checkAppReady()
@@ -137,6 +140,16 @@ struct ContentView: View {
             return url.pathComponents.dropFirst(2).first
         }
         return nil
+    }
+
+    private func logServerConnection() {
+        let useLocal = Constants.shouldUseLocalServer()
+        let serverURL = Constants.API.baseURL
+        let serverType = useLocal ? "LOCAL DEVELOPMENT" : "RENDER PRODUCTION"
+        let serverIcon = useLocal ? "🏠" : "☁️"
+
+        print("\(serverIcon) App connecting to: \(serverType) server (determined by local.txt)")
+        print("🔗 API URL: \(serverURL)")
     }
 }
 

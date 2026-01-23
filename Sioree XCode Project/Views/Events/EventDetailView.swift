@@ -72,7 +72,7 @@ struct EventDetailView: View {
             }
             .onAppear {
                 // Track impression when event detail is viewed
-                if let event = viewModel.event, event.isFeatured {
+                if let _ = viewModel.event {
                     viewModel.trackImpression()
                 }
 
@@ -188,29 +188,6 @@ struct EventDetailView: View {
                 ZStack {
                     CoverPhotoView(imageURL: event.images.first, height: 300)
 
-                    // Brand promotion badge overlay (if featured)
-                    if event.isFeatured {
-                        VStack {
-                            HStack {
-                                Spacer()
-                                HStack(spacing: Theme.Spacing.xs) {
-                                    Image(systemName: "star.fill")
-                                        .font(.system(size: 10))
-                                        .foregroundColor(.sioreeWarmGlow)
-                                    Text("FEATURED")
-                                        .font(.sioreeCaption)
-                                        .fontWeight(.bold)
-                                        .foregroundColor(.sioreeWhite)
-                                }
-                                .padding(.horizontal, Theme.Spacing.s)
-                                .padding(.vertical, 4)
-                                .background(Color.sioreeIcyBlue.opacity(0.9))
-                                .cornerRadius(Theme.CornerRadius.small)
-                                .padding(Theme.Spacing.m)
-                            }
-                            Spacer()
-                        }
-                    }
                 }
                 .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous))
                 .frame(height: 300)
@@ -293,24 +270,6 @@ struct EventDetailView: View {
                         .buttonStyle(PlainButtonStyle())
 
                         Divider()
-                    }
-
-                    // Brand promotion info (if featured)
-                    if !isTalentMapMode, event.isFeatured {
-                        Divider()
-
-                        HStack(spacing: Theme.Spacing.s) {
-                            Image(systemName: "star.fill")
-                                .font(.system(size: 14))
-                                .foregroundColor(.sioreeWarmGlow)
-                            Text("Promoted by Brand")
-                                .font(.sioreeCaption)
-                                .foregroundColor(.sioreeWhite.opacity(0.7))
-                            Spacer()
-                        }
-                        .padding(Theme.Spacing.s)
-                        .background(Color.sioreeIcyBlue.opacity(0.1))
-                        .cornerRadius(Theme.CornerRadius.small)
                     }
 
                     Divider()

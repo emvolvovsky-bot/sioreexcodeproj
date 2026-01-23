@@ -863,7 +863,6 @@ struct EventsAttendedView: View {
         likes: 100,
         isLiked: false,
         isSaved: false,
-        isFeatured: true,
         isRSVPed: true,
         qrCode: "test-qr",
         lookingForTalentType: nil

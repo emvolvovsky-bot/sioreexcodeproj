@@ -149,8 +149,7 @@ router.post("/payment-sheet", async (req, res) => {
 
       paymentIntentParams.application_fee_amount = applicationFeeAmount;
       paymentIntentParams.transfer_data = {
-        destination: hostStripeAccountId,
-        amount: hostPayoutCents
+        destination: hostStripeAccountId
       };
       paymentIntentParams.metadata = {
         eventId,

@@ -7,6 +7,23 @@
 
 import Foundation
 
+// MARK: - Local Configuration Reader
+extension Constants {
+    static func shouldUseLocalServer() -> Bool {
+        // Try to read local.txt from the app bundle
+        if let path = Bundle.main.path(forResource: "local", ofType: "txt"),
+           let content = try? String(contentsOfFile: path, encoding: .utf8) {
+            let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            print("📄 Read local.txt: '\(content.trimmingCharacters(in: .whitespacesAndNewlines))' -> useLocal: \(trimmedContent == "true")")
+            return trimmedContent == "true"
+        }
+
+        // Default to localhost if file can't be read
+        print("⚠️ Could not read local.txt, defaulting to localhost")
+        return true
+    }
+}
+
 struct Constants {
     // MARK: - Environment Configuration
     // Set to .production when deploying to App Store
@@ -32,10 +49,11 @@ struct Constants {
     // MARK: - API
     struct API {
         // Change this to .production when ready for App Store
-        static let environment: Environment = .production
-        
+        static let environment: Environment = .development
+
         static var baseURL: String {
-            environment.baseURL
+            // Use local.txt file to determine server
+            return shouldUseLocalServer() ? "http://localhost:4000" : "https://sioree-api.onrender.com"
         }
         static let timeout: TimeInterval = 30 // 30 seconds timeout (increased for slower connections)
     }

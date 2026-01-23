@@ -217,24 +217,6 @@ struct TalentGigEventCard: View {
                             .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
 
-                    // Featured badge
-                    if event.isFeatured {
-                        VStack {
-                            HStack {
-                                Spacer()
-                                Text("FEATURED")
-                                    .font(.sioreeCaption)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.sioreeWhite)
-                                    .padding(.horizontal, Theme.Spacing.s)
-                                    .padding(.vertical, 4)
-                                    .background(Color.sioreeIcyBlue.opacity(0.9))
-                                    .cornerRadius(Theme.CornerRadius.small)
-                                    .padding(Theme.Spacing.s)
-                            }
-                            Spacer()
-                        }
-                    }
                 }
 
                 // Event Details

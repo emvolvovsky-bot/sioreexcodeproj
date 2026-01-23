@@ -719,7 +719,6 @@ struct EventStoryViewer: View {
         likes: 10,
         isLiked: false,
         isSaved: false,
-        isFeatured: false,
         isRSVPed: false
     ))
     .environmentObject(AuthViewModel())

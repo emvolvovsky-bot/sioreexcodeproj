@@ -23,11 +23,9 @@ struct PartierMapView: View {
     @State private var selectedDate: Date? = nil
     @State private var showDatePicker = false
 
-    // All events combined from featured and nearby
+    // All events (nearby only, featured removed)
     private var allEvents: [Event] {
-        let featured = viewModel.featuredEvents
-        let nearby = viewModel.nearbyEvents
-        return featured + nearby
+        return viewModel.nearbyEvents
     }
 
     // Filtered events based on selected date

@@ -40,17 +40,6 @@ struct AppEventCard: View {
                             .frame(height: 44) // Fixed height for title
                         
                         Spacer()
-                        
-                        if event.isFeatured {
-                            Text("FEATURED")
-                                .font(.sioreeCaption)
-                                .fontWeight(.bold)
-                                .foregroundColor(Color.sioreeIcyBlue)
-                                .padding(.horizontal, Theme.Spacing.s)
-                                .padding(.vertical, 2)
-                                .background(Color.sioreeIcyBlue.opacity(0.2))
-                                .cornerRadius(Theme.CornerRadius.small)
-                        }
                     }
                     
                     HStack {
@@ -122,8 +111,7 @@ struct AppEventCard: View {
             hostName: "Sample Host",
             date: Date(),
             time: Date(),
-            location: "Sample Location",
-            isFeatured: true
+            location: "Sample Location"
         ),
         onTap: {}
     )

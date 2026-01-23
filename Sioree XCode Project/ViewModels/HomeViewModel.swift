@@ -11,7 +11,6 @@ import Combine
 import CoreLocation
 
 class HomeViewModel: ObservableObject {
-    @Published var featuredEvents: [Event] = []
     @Published var nearbyEvents: [Event] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
@@ -21,7 +20,6 @@ class HomeViewModel: ObservableObject {
     @Published var lastRadiusMiles: Int = 30
     
     // Store all loaded events before filtering
-    private var allFeaturedEvents: [Event] = []
     private var allNearbyEvents: [Event] = []
     
     let networkService = NetworkService()
@@ -62,22 +60,17 @@ class HomeViewModel: ObservableObject {
     }
     
     private func removeEventFromLists(eventId: String) {
-        // Remove from displayed featured events
-        featuredEvents.removeAll { $0.id == eventId }
-        // Remove from stored featured events
-        allFeaturedEvents.removeAll { $0.id == eventId }
-
         // Remove from displayed nearby events
         nearbyEvents.removeAll { $0.id == eventId }
         // Remove from stored nearby events
         allNearbyEvents.removeAll { $0.id == eventId }
 
-        print("✅ Removed event \(eventId) from nearby/featured lists")
+        print("✅ Removed event \(eventId) from nearby events list")
     }
 
     private func addNewEventToLists(event: Event) {
         // Check if event already exists to avoid duplicates
-        let eventExists = allFeaturedEvents.contains { $0.id == event.id } || allNearbyEvents.contains { $0.id == event.id }
+        let eventExists = allNearbyEvents.contains { $0.id == event.id }
         if eventExists {
             print("⚠️ Event \(event.id) already exists, skipping duplicate add")
             return
@@ -97,28 +90,17 @@ class HomeViewModel: ObservableObject {
             completeEvent.likes = 0
         }
 
-        // Add to the appropriate list based on event properties
-        if completeEvent.isFeatured {
-            // Add to featured events
-            allFeaturedEvents.insert(completeEvent, at: 0) // Add to beginning
-            print("✅ Added new featured event: \(completeEvent.title)")
-        } else {
-            // Add to nearby events (default for new events)
-            allNearbyEvents.insert(completeEvent, at: 0) // Add to beginning
-            print("✅ Added new nearby event: \(completeEvent.title)")
-        }
+        // Add to nearby events
+        allNearbyEvents.insert(completeEvent, at: 0) // Add to beginning
+        print("✅ Added new event: \(completeEvent.title)")
 
         // Only apply date filter if we have loaded events before
         // This prevents filtering out the new event before the user sees it
         if hasLoaded {
             applyDateFilter()
         } else {
-            // If not loaded yet, just update the display arrays
-            if completeEvent.isFeatured {
-                featuredEvents = allFeaturedEvents
-            } else {
-                nearbyEvents = allNearbyEvents
-            }
+            // If not loaded yet, just update the display array
+            nearbyEvents = allNearbyEvents
         }
     }
     
@@ -130,39 +112,12 @@ class HomeViewModel: ObservableObject {
             lastKnownCoordinate = userLocation
         }
         lastRadiusMiles = radiusMiles
-        
+
         let skipNearby = lastKnownCoordinate == nil && userLocation == nil
-        
-        // Load featured events (promoted by brands)
-        networkService.fetchFeaturedEvents()
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { [weak self] completion in
-                    if case .failure(let error) = completion {
-                        print("❌ Failed to load featured events: \(error)")
-                        self?.allFeaturedEvents = []
-                        self?.applyDateFilter()
-                    }
-                },
-                receiveValue: { [weak self] events in
-                    if events.isEmpty {
-                        self?.allFeaturedEvents = []
-                    } else {
-                        // Merge server events with locally created events that might not be in server response yet
-                        let serverEventIds = Set(events.map { $0.id })
-                        let existingLocalEvents = self?.allFeaturedEvents.filter { !serverEventIds.contains($0.id) } ?? []
-                        self?.allFeaturedEvents = events + existingLocalEvents
-                        print("✅ Loaded \(events.count) featured events from server, kept \(existingLocalEvents.count) local events")
-                    }
-                    // Apply date filter if one is selected
-                    self?.applyDateFilter()
-                }
-            )
-            .store(in: &cancellables)
-        
+
         // Load nearby events
         if skipNearby {
-            // No location available; clear nearby and finish loading featured only.
+            // No location available; clear nearby events
             allNearbyEvents = []
             nearbyEvents = []
             DispatchQueue.main.async { [weak self] in
@@ -171,7 +126,7 @@ class HomeViewModel: ObservableObject {
             }
             return
         }
-        
+
         networkService.fetchNearbyEvents(
             latitude: lastKnownCoordinate?.latitude,
             longitude: lastKnownCoordinate?.longitude,
@@ -198,7 +153,7 @@ class HomeViewModel: ObservableObject {
                     let serverEventIds = Set(events.map { $0.id })
                     let existingLocalEvents = self?.allNearbyEvents.filter { !serverEventIds.contains($0.id) } ?? []
                     self?.allNearbyEvents = events + existingLocalEvents
-                    print("✅ Loaded \(events.count) nearby events from server, kept \(existingLocalEvents.count) local events")
+                    print("✅ Loaded \(events.count) events from server, kept \(existingLocalEvents.count) local events")
                 }
                 // Apply date filter if one is selected
                 self?.applyDateFilter()
@@ -209,82 +164,6 @@ class HomeViewModel: ObservableObject {
         .store(in: &cancellables)
     }
     
-    // Generate realistic placeholder featured events (promoted by brands)
-    func generatePlaceholderFeaturedEvents() -> [Event] {
-        let calendar = Calendar.current
-        let now = Date()
-        
-        let featuredTitles = [
-            "Summer Music Festival NYC",
-            "Rooftop Party at The Highline",
-            "Electronic Dance Night",
-            "Jazz & Wine Tasting Experience",
-            "Underground Rave Brooklyn"
-        ]
-        
-        let featuredHosts = [
-            "Red Bull Events",
-            "Spotify Live",
-            "Coachella Presents",
-            "Live Nation",
-            "AEG Presents"
-        ]
-        
-        let featuredLocations = [
-            "Brooklyn, NY",
-            "Manhattan, NY",
-            "Queens, NY",
-            "Manhattan, NY",
-            "Brooklyn, NY"
-        ]
-        
-        let featuredDescriptions = [
-            "Join us for an unforgettable night of music and dancing under the stars.",
-            "Experience the best rooftop party in NYC with stunning city views.",
-            "Electronic music meets underground culture in this exclusive event.",
-            "Sip fine wines while enjoying live jazz performances.",
-            "The most talked-about underground event in Brooklyn."
-        ]
-        
-        let featuredImages = ["party1", "party2", "party3", "party4", "party5"]
-        
-        return (0..<5).map { index in
-            let daysFromNow = index + 1
-            let eventDate = calendar.date(byAdding: .day, value: daysFromNow, to: now) ?? now
-            let hour = 19 + (index % 4) // 7 PM to 10 PM
-            let eventDateTime = calendar.date(bySettingHour: hour, minute: 0, second: 0, of: eventDate) ?? eventDate
-            
-            // Make the first event (Summer Music Festival) private with access code
-            let isPrivate = index == 0
-            let accessCode = isPrivate ? "MUSIC2024" : nil
-            
-            return Event(
-                id: "featured-\(index)",
-                title: featuredTitles[index],
-                description: featuredDescriptions[index],
-                hostId: "brand-\(index)",
-                hostName: featuredHosts[index],
-                hostAvatar: nil,
-                date: eventDateTime,
-                time: eventDateTime,
-                location: featuredLocations[index],
-                locationDetails: nil,
-                images: [featuredImages[index % featuredImages.count]],
-                ticketPrice: Double.random(in: 25...150),
-                capacity: Int.random(in: 100...500),
-                attendeeCount: Int.random(in: 50...300),
-                talentIds: [],
-                status: .published,
-                createdAt: now,
-                likes: Int.random(in: 100...1000),
-                isLiked: false,
-                isSaved: false,
-                isFeatured: true,
-                isPrivate: isPrivate,
-                accessCode: accessCode
-            )
-        }
-    }
     
     // Generate realistic placeholder nearby events
     func generatePlaceholderNearbyEvents() -> [Event] {
@@ -367,8 +246,7 @@ class HomeViewModel: ObservableObject {
                 createdAt: now,
                 likes: Int.random(in: 10...500),
                 isLiked: false,
-                isSaved: false,
-                isFeatured: false
+                isSaved: false
             )
         }
     }
@@ -387,32 +265,23 @@ class HomeViewModel: ObservableObject {
     func applyDateFilter() {
         guard let selectedDate = selectedDate else {
             // No filter - show all events
-            featuredEvents = allFeaturedEvents
             nearbyEvents = allNearbyEvents
             return
         }
-        
+
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: selectedDate)
         let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? startOfDay
-        
-        // Filter featured events - ONLY events on the selected date
-        featuredEvents = allFeaturedEvents.filter { event in
-            let eventDate = calendar.startOfDay(for: event.date)
-            // Only include events that are exactly on the selected date
-            return eventDate >= startOfDay && eventDate < endOfDay
-        }
-        
+
         // Filter nearby events - ONLY events on the selected date
         nearbyEvents = allNearbyEvents.filter { event in
             let eventDate = calendar.startOfDay(for: event.date)
             // Only include events that are exactly on the selected date
             return eventDate >= startOfDay && eventDate < endOfDay
         }
-        
+
         print("📅 Filtered events for date: \(selectedDate.formatted(date: .abbreviated, time: .omitted))")
-        print("   Featured: \(featuredEvents.count) / \(allFeaturedEvents.count)")
-        print("   Nearby: \(nearbyEvents.count) / \(allNearbyEvents.count)")
+        print("   Events: \(nearbyEvents.count) / \(allNearbyEvents.count)")
     }
     
     // Clear date filter
@@ -424,35 +293,27 @@ class HomeViewModel: ObservableObject {
     // Toggle save event
     func toggleSaveEvent(_ event: Event) {
         // Optimistic update
-        if let index = featuredEvents.firstIndex(where: { $0.id == event.id }) {
-            featuredEvents[index].isSaved.toggle()
-        } else if let index = nearbyEvents.firstIndex(where: { $0.id == event.id }) {
+        if let index = nearbyEvents.firstIndex(where: { $0.id == event.id }) {
             nearbyEvents[index].isSaved.toggle()
         }
-        
-        // Also update in all events arrays
-        if let index = allFeaturedEvents.firstIndex(where: { $0.id == event.id }) {
-            allFeaturedEvents[index].isSaved.toggle()
-        } else if let index = allNearbyEvents.firstIndex(where: { $0.id == event.id }) {
+
+        // Also update in all events array
+        if let index = allNearbyEvents.firstIndex(where: { $0.id == event.id }) {
             allNearbyEvents[index].isSaved.toggle()
         }
-        
+
         notifyFavoriteChange(for: event.id)
-        
+
         networkService.toggleEventSave(eventId: event.id)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { [weak self] completion in
                     if case .failure = completion {
                         // Revert optimistic update
-                        if let index = self?.featuredEvents.firstIndex(where: { $0.id == event.id }) {
-                            self?.featuredEvents[index].isSaved.toggle()
-                        } else if let index = self?.nearbyEvents.firstIndex(where: { $0.id == event.id }) {
+                        if let index = self?.nearbyEvents.firstIndex(where: { $0.id == event.id }) {
                             self?.nearbyEvents[index].isSaved.toggle()
                         }
-                        if let index = self?.allFeaturedEvents.firstIndex(where: { $0.id == event.id }) {
-                            self?.allFeaturedEvents[index].isSaved.toggle()
-                        } else if let index = self?.allNearbyEvents.firstIndex(where: { $0.id == event.id }) {
+                        if let index = self?.allNearbyEvents.firstIndex(where: { $0.id == event.id }) {
                             self?.allNearbyEvents[index].isSaved.toggle()
                         }
                         self?.notifyFavoriteChange(for: event.id)
@@ -464,9 +325,7 @@ class HomeViewModel: ObservableObject {
     }
     
     private func notifyFavoriteChange(for eventId: String) {
-        if let updated = featuredEvents.first(where: { $0.id == eventId }) ??
-            nearbyEvents.first(where: { $0.id == eventId }) ??
-            allFeaturedEvents.first(where: { $0.id == eventId }) ??
+        if let updated = nearbyEvents.first(where: { $0.id == eventId }) ??
             allNearbyEvents.first(where: { $0.id == eventId }) {
             NotificationCenter.default.post(
                 name: .favoriteStatusChanged,

@@ -359,9 +359,21 @@ router.post("/", async (req, res) => {
     console.log("💰 Ticket price received:", ticketPriceField, "→ parsed:", ticketPriceValue, "→ DB:", dbTicketPrice);
 
     if (dbTicketPrice > 0) {
-      const stripeCheck = await ensureHostStripeReady(decoded.userId);
-      if (!stripeCheck.ok) {
-        return res.status(stripeCheck.status).json({ error: stripeCheck.message });
+      // Skip Stripe check for local testing if ALLOW_LOCAL_TICKETS is set
+      // This allows creating ticketed events without Stripe setup during development
+      // Set ALLOW_LOCAL_TICKETS=true or NODE_ENV=development or RUN_LOCAL=true
+      const mode = req.body?.mode || req.query?.mode || req.headers["x-stripe-mode"];
+      const allowLocalTickets = process.env.ALLOW_LOCAL_TICKETS === 'true' ||
+                               process.env.NODE_ENV === 'development' ||
+                               process.env.RUN_LOCAL === 'true' ||
+                               mode === 'sioree sandbox' ||
+                               mode === 'test';
+
+      if (!allowLocalTickets) {
+        const stripeCheck = await ensureHostStripeReady(decoded.userId);
+        if (!stripeCheck.ok) {
+          return res.status(stripeCheck.status).json({ error: stripeCheck.message });
+        }
       }
     }
 
@@ -595,6 +607,84 @@ function getUserIdFromToken(req) {
     return null;
   }
 }
+
+// GET SAVED EVENTS
+router.get("/saved", async (req, res) => {
+  try {
+    const userId = getUserIdFromToken(req);
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    // Get saved event IDs for this user
+    const savedEventsResult = await db.query(
+      `SELECT event_id FROM event_saves WHERE user_id = $1`,
+      [userId]
+    );
+
+    if (savedEventsResult.rows.length === 0) {
+      return res.json({ events: [] });
+    }
+
+    const eventIds = savedEventsResult.rows.map(row => row.event_id);
+
+    // Get full event details for saved events
+    const eventsResult = await db.query(
+      `
+      SELECT
+        e.*,
+        CASE WHEN esa.user_id IS NOT NULL THEN true ELSE false END as is_saved,
+        CASE WHEN ela.user_id IS NOT NULL THEN true ELSE false END as is_liked,
+        COALESCE(attendee_counts.attendee_count, 0) as attendee_count,
+        u.name as host_name,
+        u.avatar as host_avatar,
+        u.username as host_username
+      FROM events e
+      LEFT JOIN event_saves esa ON e.id = esa.event_id AND esa.user_id = $1
+      LEFT JOIN event_likes ela ON e.id = ela.event_id AND ela.user_id = $1
+      LEFT JOIN users u ON e.creator_id = u.id
+      LEFT JOIN (
+        SELECT event_id, COUNT(*) as attendee_count
+        FROM event_attendees
+        GROUP BY event_id
+      ) attendee_counts ON e.id = attendee_counts.event_id
+      WHERE e.id = ANY($2)
+        AND e.status != 'cancelled'
+        AND e.status != 'draft'
+      ORDER BY e.event_date ASC
+      `,
+      [userId, eventIds]
+    );
+
+    const events = eventsResult.rows.map(row => ({
+      id: row.id.toString(),
+      title: row.title,
+      description: row.description || "",
+      hostId: row.creator_id?.toString() || "",
+      hostName: row.host_name || row.host_username || "Unknown Host",
+      hostAvatar: row.host_avatar || null,
+      date: toISOString(row.event_date),
+      location: row.location || "",
+      images: normalizeImages(row.images),
+      ticketPrice: row.ticket_price && parseFloat(row.ticket_price) > 0 ? parseFloat(row.ticket_price) : null,
+      capacity: row.capacity || null,
+      attendees: row.attendee_count || 0,
+      isLiked: row.is_liked || false,
+      isSaved: row.is_saved || false,
+      likes: row.likes || 0,
+      isFeatured: row.is_featured || false,
+      talentIds: normalizeTalentIds(row.talent_ids),
+      lookingForRoles: normalizeRoles(row.looking_for_roles),
+      lookingForNotes: row.looking_for_notes || null,
+      status: "published",
+      createdAt: toISOString(row.created_at),
+      qrCode: row.qr_code || `sioree:event:${row.id}:${crypto.randomUUID()}`
+    }));
+
+    res.json({ events });
+  } catch (err) {
+    console.error("Fetch saved events error:", err);
+    res.status(500).json({ error: "Failed to fetch saved events" });
+  }
+});
 
 // GET SINGLE EVENT
 router.get("/:id", async (req, res) => {

@@ -59,14 +59,13 @@ router.get('/', async (req, res) => {
         e.ticket_price_cents,
         e.capacity,
         e.tags,
-        e.is_featured,
         e.images,
         e.status,
         u.name as host_name
       FROM events e
       JOIN users u ON e.host_id = u.id
       ${whereClause} AND e.status = 'published'
-      ORDER BY e.is_featured DESC, e.date ASC
+      ORDER BY e.date ASC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
       params
     );
@@ -86,7 +85,6 @@ router.get('/', async (req, res) => {
       priceText: row.ticket_price ? `$${row.ticket_price}` : 'Free',
       imageName: 'party.popper.fill', // Default, can be determined from tags
       tags: row.tags || [],
-      isFeatured: row.is_featured,
       images: row.images || [],
     }));
     
@@ -102,67 +100,6 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/events/featured (public, no auth required)
-router.get('/featured', async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
-    const offset = (page - 1) * limit;
-
-    const result = await query(
-      `SELECT
-        e.id,
-        e.host_id,
-        e.title,
-        e.description,
-        e.date,
-        e.location,
-        e.latitude,
-        e.longitude,
-        e.ticket_price,
-        e.capacity,
-        e.tags,
-        e.is_featured,
-        e.images,
-        u.name as host_name
-      FROM events e
-      JOIN users u ON e.host_id = u.id
-      WHERE e.is_featured = true
-      ORDER BY e.date ASC
-      LIMIT $1 OFFSET $2`,
-      [limit, offset]
-    );
-
-    const countResult = await query(
-      `SELECT COUNT(*) FROM events e WHERE e.is_featured = true`,
-      []
-    );
-
-    const events = result.rows.map(row => ({
-      id: row.id,
-      hostId: row.host_id,
-      title: row.title,
-      hostName: row.host_name,
-      date: row.date,
-      location: row.location,
-      priceText: row.ticket_price ? `$${row.ticket_price}` : 'Free',
-      imageName: 'party.popper.fill', // Default, can be determined from tags
-      tags: row.tags || [],
-      isFeatured: row.is_featured,
-      images: row.images || [],
-    }));
-
-    res.json({
-      events,
-      total: parseInt(countResult.rows[0].count),
-      page,
-      limit,
-    });
-  } catch (error) {
-    console.error('Get featured events error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
 
 // GET /api/events/nearby (public, no auth required)
 router.get('/nearby', async (req, res) => {
@@ -191,7 +128,6 @@ router.get('/nearby', async (req, res) => {
     let whereClause = `
       WHERE e.latitude BETWEEN $1 AND $2
       AND e.longitude BETWEEN $3 AND $4
-      AND e.is_featured = false
     `;
     const params = [minLat, maxLat, minLng, maxLng];
     let paramIndex = 5;
@@ -217,7 +153,6 @@ router.get('/nearby', async (req, res) => {
         e.ticket_price,
         e.capacity,
         e.tags,
-        e.is_featured,
         e.images,
         u.name as host_name
       FROM events e
@@ -243,7 +178,6 @@ router.get('/nearby', async (req, res) => {
       priceText: row.ticket_price ? `$${row.ticket_price}` : 'Free',
       imageName: 'party.popper.fill', // Default, can be determined from tags
       tags: row.tags || [],
-      isFeatured: row.is_featured,
       images: row.images || [],
     }));
 
@@ -290,8 +224,8 @@ router.post('/', authenticate, [
 
     const result = await query(
       `INSERT INTO events
-       (host_id, title, description, date, location, latitude, longitude, ticket_price, ticket_price_cents, capacity, tags, is_featured, images, status, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'draft', NOW(), NOW())
+       (host_id, title, description, date, location, latitude, longitude, ticket_price, ticket_price_cents, capacity, tags, images, status, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'draft', NOW(), NOW())
        RETURNING id, host_id, title, date, location, created_at`,
       [
         req.user.id,
@@ -305,7 +239,6 @@ router.post('/', authenticate, [
         ticketPriceCents,
         capacity || null,
         tags || [],
-        isFeatured || false,
         images || [],
       ]
     );
@@ -452,7 +385,7 @@ router.put('/:id', authenticate, [
       UPDATE events 
       SET ${updates.join(', ')}
       WHERE id = $${paramIndex}
-      RETURNING id, host_id, title, description, date, location, latitude, longitude, ticket_price, capacity, tags, is_featured, images, created_at, updated_at
+      RETURNING id, host_id, title, description, date, location, latitude, longitude, ticket_price, capacity, tags, images, created_at, updated_at
     `;
     
     const result = await query(updateQuery, params);
@@ -478,7 +411,6 @@ router.put('/:id', authenticate, [
       ticketPrice: updatedEvent.ticket_price,
       capacity: updatedEvent.capacity,
       tags: updatedEvent.tags || [],
-      isFeatured: updatedEvent.is_featured || false,
       images: updatedEvent.images || [],
       created_at: updatedEvent.created_at,
       description: updatedEvent.description || '',
@@ -514,7 +446,6 @@ router.get('/my-events', authenticate, async (req, res) => {
         e.ticket_price_cents,
         e.capacity,
         e.tags,
-        e.is_featured,
         e.images,
         e.status,
         e.published_at,
@@ -535,7 +466,6 @@ router.get('/my-events', authenticate, async (req, res) => {
       priceText: row.ticket_price ? `$${row.ticket_price}` : 'Free',
       imageName: 'party.popper.fill',
       tags: row.tags || [],
-      isFeatured: row.is_featured,
       images: row.images || [],
       status: row.status,
       publishedAt: row.published_at,
@@ -571,7 +501,6 @@ router.get('/:id', async (req, res) => {
           e.ticket_price_cents,
           e.capacity,
           e.tags,
-          e.is_featured,
           e.images,
           e.status,
           e.published_at,
@@ -598,7 +527,6 @@ router.get('/:id', async (req, res) => {
           e.ticket_price_cents,
           e.capacity,
           e.tags,
-          e.is_featured,
           e.images,
           e.status,
           e.published_at,
@@ -632,7 +560,6 @@ router.get('/:id', async (req, res) => {
       ticketPriceCents: event.ticket_price_cents,
       capacity: event.capacity,
       tags: event.tags || [],
-      isFeatured: event.is_featured,
       images: event.images || [],
       status: event.status,
       publishedAt: event.published_at,

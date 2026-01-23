@@ -376,7 +376,6 @@ struct TalentRequestView: View {
         likes: 0,
         isLiked: false,
         isSaved: false,
-        isFeatured: false,
         isRSVPed: false,
         qrCode: nil,
         lookingForTalentType: nil

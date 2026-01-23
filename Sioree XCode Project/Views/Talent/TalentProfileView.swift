@@ -79,6 +79,7 @@ struct TalentProfileView: View {
     @State private var isLoadingConnectStatus = false
     @State private var connectStatus: BankConnectStatus?
     @State private var payoutErrorMessage: String?
+    @State private var showOnboardingForStripe = false
 
     private let bankService = BankAccountService.shared
     
@@ -357,6 +358,10 @@ struct TalentProfileView: View {
                 AddPostFromEventView(event: event)
                     .environmentObject(authViewModel)
             }
+            .sheet(isPresented: $showOnboardingForStripe) {
+                OnboardingView()
+                    .environmentObject(authViewModel)
+            }
             .onAppear {
                 viewModel.setAuthViewModel(authViewModel)
                 viewModel.loadProfile()
@@ -366,6 +371,15 @@ struct TalentProfileView: View {
                 viewModel.setAuthViewModel(authViewModel)
                 viewModel.loadProfile()
                 loadStripeConnectStatus()
+            }
+            .onChange(of: authViewModel.isAuthenticated) { isAuthenticated in
+                if isAuthenticated && showOnboardingForStripe {
+                    showOnboardingForStripe = false
+                    // Small delay to ensure authentication is fully processed
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        startStripeOnboarding()
+                    }
+                }
             }
             .alert("Stripe Setup Error", isPresented: .constant(payoutErrorMessage != nil)) {
                 Button("OK") {
@@ -400,6 +414,13 @@ struct TalentProfileView: View {
 
     private func startStripeOnboarding() {
         guard !isStartingOnboarding else { return }
+
+        // Check if user is authenticated
+        if !authViewModel.isAuthenticated {
+            showOnboardingForStripe = true
+            return
+        }
+
         isStartingOnboarding = true
         bankService.createOnboardingLink()
             .receive(on: DispatchQueue.main)

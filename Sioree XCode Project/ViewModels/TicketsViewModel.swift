@@ -114,8 +114,7 @@ class TicketsViewModel: ObservableObject {
             createdAt: Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date(),
             likes: 120,
             isLiked: false,
-            isSaved: false,
-            isFeatured: false
+            isSaved: false
         )
         
         if pastEvents.isEmpty {

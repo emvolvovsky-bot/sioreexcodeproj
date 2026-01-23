@@ -19,9 +19,9 @@ class AuthViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     
     init() {
-        checkAuthenticationStatus()
+        // Removed automatic authentication check - users must manually login each time
     }
-    
+
     func checkAuthenticationStatus() {
         if let token = StorageService.shared.getAuthToken(), !token.isEmpty {
             // Validate token and fetch user

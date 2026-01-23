@@ -52,7 +52,7 @@ const ensureStripeAccount = async ({ userId, email, stripeClient, req }) => {
   }
 
   const account = await stripeClient.accounts.create({
-    type: "custom",
+    type: "express",
     country: "US",
     email,
     business_type: "individual",

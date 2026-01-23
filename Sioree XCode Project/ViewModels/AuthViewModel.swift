@@ -19,7 +19,7 @@ class AuthViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     
     init() {
-        // Removed automatic authentication check - users must manually login each time
+        checkAuthenticationStatus()
     }
 
     func checkAuthenticationStatus() {

@@ -49,7 +49,10 @@ const ensureStripeAccount = async ({ userId, email, req }) => {
     type: "express",
     country: "US",
     email,
-    capabilities: { transfers: { requested: true } }
+    capabilities: {
+      transfers: { requested: true },
+      card_payments: { requested: true }
+    }
   });
 
   await db.query("UPDATE users SET stripe_account_id = $1 WHERE id = $2", [

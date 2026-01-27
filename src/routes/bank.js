@@ -57,7 +57,10 @@ const ensureStripeAccount = async ({ userId, email, stripeClient, req }) => {
   const account = await stripeClient.accounts.create({
     type: "express",
     country: "US",
-    capabilities: { transfers: { requested: true } },
+    capabilities: {
+      transfers: { requested: true },
+      card_payments: { requested: true },
+    },    
     business_profile: {
       name: isSandbox ? "Sioree Sandbox" : "Sioree",
       support_email: email,

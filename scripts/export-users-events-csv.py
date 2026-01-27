@@ -92,9 +92,7 @@ def normalize_database_url(database_url: str) -> str:
 
 def resolve_ssl_mode(database_url: str) -> str:
     hostname = urlparse(database_url).hostname or ""
-    is_local = hostname in {"localhost", "127.0.0.1"} or (
-        "supabase" not in database_url and "amazonaws" not in database_url
-    )
+    is_local = hostname in {"localhost", "127.0.0.1"}
     return "disable" if is_local else "require"
 
 

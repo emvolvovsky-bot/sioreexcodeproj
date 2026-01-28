@@ -255,33 +255,63 @@ class HomeViewModel: ObservableObject {
     func loadNearbyEvents() {
         loadEvents()
     }
+
+    // Deterministic coordinate generator used when events don't include lat/lng.
+    // Mirrors the fallback logic used in EventsMapView so map pins and distance filtering align.
+    static func coordinateForEvent(_ event: Event) -> CLLocationCoordinate2D {
+        let hash = abs(event.location.hashValue)
+        let lat = 34.0522 + Double(hash % 100) / 1000.0 - 0.05
+        let lon = -118.2437 + Double((hash / 100) % 100) / 1000.0 - 0.05
+        return CLLocationCoordinate2D(latitude: lat, longitude: lon)
+    }
     
     // Computed property for backward compatibility
     var events: [Event] {
         nearbyEvents
     }
+
+    // Expose total loaded events count (before client-side filtering) for UI decisions
+    var totalLoadedEventsCount: Int {
+        allNearbyEvents.count
+    }
     
     // Filter events by selected date - ONLY show events for that specific day
     func applyDateFilter() {
-        guard let selectedDate = selectedDate else {
-            // No filter - show all events
-            nearbyEvents = allNearbyEvents
-            return
-        }
-
+        // Apply both date and radius filters together so the user sees only events that match both constraints.
         let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: selectedDate)
-        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? startOfDay
 
-        // Filter nearby events - ONLY events on the selected date
-        nearbyEvents = allNearbyEvents.filter { event in
-            let eventDate = calendar.startOfDay(for: event.date)
-            // Only include events that are exactly on the selected date
-            return eventDate >= startOfDay && eventDate < endOfDay
+        // Date filtering (if selectedDate is set)
+        var results = allNearbyEvents
+        if let selectedDate = selectedDate {
+            let startOfDay = calendar.startOfDay(for: selectedDate)
+            let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? startOfDay
+            results = results.filter { event in
+                let eventDate = calendar.startOfDay(for: event.date)
+                return eventDate >= startOfDay && eventDate < endOfDay
+            }
+            print("📅 Filtered events for date: \(selectedDate.formatted(date: .abbreviated, time: .omitted))")
+        } else {
+            print("📅 No date filter applied")
         }
 
-        print("📅 Filtered events for date: \(selectedDate.formatted(date: .abbreviated, time: .omitted))")
-        print("   Events: \(nearbyEvents.count) / \(allNearbyEvents.count)")
+        // Radius filtering (if lastRadiusMiles > 0 and we have a known coordinate)
+        if lastRadiusMiles > 0, let center = lastKnownCoordinate {
+            results = results.filter { event in
+                // Compute coordinates using the same deterministic hash fallback used by map view
+                let coord = Self.coordinateForEvent(event)
+                let eventLocation = CLLocation(latitude: coord.latitude, longitude: coord.longitude)
+                let centerLocation = CLLocation(latitude: center.latitude, longitude: center.longitude)
+                let distanceMeters = eventLocation.distance(from: centerLocation)
+                let distanceMiles = distanceMeters / 1609.34
+                return distanceMiles <= Double(lastRadiusMiles)
+            }
+            print("📍 Applied radius filter: \(lastRadiusMiles) mi from \(String(describing: lastKnownCoordinate))")
+        } else {
+            print("📍 No radius filter applied (showing all distances)")
+        }
+
+        nearbyEvents = results
+        print("   Events after filters: \(nearbyEvents.count) / \(allNearbyEvents.count)")
     }
     
     // Clear date filter

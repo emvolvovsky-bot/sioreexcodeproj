@@ -9,13 +9,13 @@ import SwiftUI
 import CoreLocation
 import UIKit
 import MapKit
-
 struct PartierHomeView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = HomeViewModel()
     @StateObject private var locationManager = LocationManager()
     @State private var showDatePicker = false
     @State private var showMapView = false
+    @State private var showLocationDeniedAlert = false
     @State private var selectedCategory: EventCategory = .all
     @State private var searchText: String = ""
     @Namespace private var chipAnimation
@@ -33,7 +33,6 @@ struct PartierHomeView: View {
     @State private var favoritesTargetPoint: CGPoint = .zero
     @State private var hiddenEventIds: Set<String> = []
     @State private var showSavedAlert = false
-
     var body: some View {
         NavigationStack {
             ZStack {
@@ -103,8 +102,12 @@ struct PartierHomeView: View {
                 }
             }
             .onAppear {
-                viewModel.loadEvents(userLocation: locationManager.location, radiusMiles: Int(radiusMiles))
-                locationManager.requestLocation()
+                // Only load events if location access already granted; otherwise request permission
+                if locationManager.authorizationStatus == .authorizedAlways || locationManager.authorizationStatus == .authorizedWhenInUse {
+                    viewModel.loadEvents(userLocation: locationManager.location, radiusMiles: Int(radiusMiles))
+                } else {
+                    locationManager.requestLocation()
+                }
             }
             .onReceive(locationManager.$location.compactMap { $0 }) { coordinate in
                 applyLocationIfChanged(coordinate)
@@ -121,10 +124,15 @@ struct PartierHomeView: View {
             } message: {
                 Text("This event has been saved to your favorites.")
             }
+            .alert("Location Access Required", isPresented: $showLocationDeniedAlert) {
+                Button("Open Settings") { openAppSettings() }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("Enable Location Services for Sioree in your device Settings to view nearby events.")
+            }
         }
     }
 }
-
 private extension PartierHomeView {
     func applyLocationIfChanged(_ coordinate: CLLocationCoordinate2D) {
         if let existing = viewModel.lastKnownCoordinate {
@@ -164,7 +172,16 @@ private extension PartierHomeView {
     
     var floatingButtons: some View {
         HStack(spacing: Theme.Spacing.m) {
-            Button(action: { showMapView = true }) {
+            Button(action: {
+                // Only allow map when we have permission; otherwise request or guide the user to Settings
+                if locationManager.authorizationStatus == .authorizedWhenInUse || locationManager.authorizationStatus == .authorizedAlways {
+                    showMapView = true
+                } else if locationManager.authorizationStatus == .notDetermined {
+                    locationManager.requestLocation()
+                } else {
+                    showLocationDeniedAlert = true
+                }
+            }) {
                 Image(systemName: "map.fill")
                     .font(.body.bold())
                     .foregroundColor(.sioreeWhite)
@@ -297,7 +314,37 @@ private extension PartierHomeView {
     
     @ViewBuilder
     var tabContent: some View {
-        if viewModel.isLoading && !viewModel.hasLoaded {
+        // If the user has explicitly denied location access, prompt them to enable it in Settings
+        if locationManager.authorizationStatus == .denied || locationManager.authorizationStatus == .restricted {
+            VStack(spacing: Theme.Spacing.m) {
+                Image(systemName: "location.slash")
+                    .font(.system(size: 64))
+                    .foregroundColor(Color.sioreeLightGrey)
+                Text("Allow location in Settings to see events")
+                    .font(.sioreeH3)
+                    .foregroundColor(.sioreeWhite)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, Theme.Spacing.l)
+                Text("Enable Location Services for Sioree in your device Settings to view nearby events.")
+                    .font(.sioreeBody)
+                    .foregroundColor(.sioreeLightGrey.opacity(0.8))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, Theme.Spacing.l)
+                Button(action: openAppSettings) {
+                    Text("Open Settings")
+                        .font(.sioreeBody)
+                        .foregroundColor(.sioreeWhite)
+                        .padding(.horizontal, Theme.Spacing.xxl)
+                        .padding(.vertical, Theme.Spacing.s)
+                        .background(
+                            LinearGradient(colors: [Color.sioreeIcyBlue.opacity(0.9), Color.sioreeIcyBlue], startPoint: .topLeading, endPoint: .bottomTrailing)
+                        )
+                        .cornerRadius(Theme.CornerRadius.medium)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, Theme.Spacing.xxl)
+        } else if viewModel.isLoading && !viewModel.hasLoaded {
             LoadingView()
             .frame(maxWidth: .infinity)
             .padding(.vertical, Theme.Spacing.xxl)
@@ -306,12 +353,24 @@ private extension PartierHomeView {
                 Image(systemName: "calendar.badge.exclamationmark")
                     .font(.system(size: 64))
                     .foregroundColor(Color.sioreeLightGrey)
-                Text("No events yet")
-                    .font(.sioreeH3)
-                    .foregroundColor(Color.sioreeWhite)
-                Text("Check back later for new parties")
-                    .font(.sioreeBody)
-                    .foregroundColor(Color.sioreeLightGrey.opacity(0.7))
+                if radiusMiles > 0 {
+                    // Radius applied but no events returned
+                    Text("No events in this area")
+                        .font(.sioreeH3)
+                        .foregroundColor(Color.sioreeWhite)
+                    Text("Try increasing the search radius or remove map restrictions to see more events.")
+                        .font(.sioreeBody)
+                        .foregroundColor(Color.sioreeLightGrey.opacity(0.7))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, Theme.Spacing.l)
+                } else {
+                    Text("No events yet")
+                        .font(.sioreeH3)
+                        .foregroundColor(Color.sioreeWhite)
+                    Text("Check back later for new parties")
+                        .font(.sioreeBody)
+                        .foregroundColor(Color.sioreeLightGrey.opacity(0.7))
+                }
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, Theme.Spacing.xxl)
@@ -391,7 +450,6 @@ private extension PartierHomeView {
             .padding(.bottom, Theme.Spacing.l)
         }
     }
-
     var listPadding: CGFloat { Theme.Spacing.l }
     
     func circleDiameter(for radius: Double) -> CGFloat {
@@ -433,7 +491,6 @@ private extension PartierHomeView {
             matchesCategory(event) && matchesSearch(event)
         }
         let finalEvents = events.filter { !hiddenEventIds.contains($0.id) }
-
         // Debug: Print event counts and prices to console
         print("📊 Event filtering debug:")
         print("   Base events: \(baseEvents.count)")
@@ -441,7 +498,6 @@ private extension PartierHomeView {
         print("   After hidden filter: \(finalEvents.count)")
         print("   Paid events in final list: \(finalEvents.filter { ($0.ticketPrice ?? 0) > 0 }.count)")
         print("   Free events in final list: \(finalEvents.filter { ($0.ticketPrice ?? 0) == 0 }.count)")
-
         return finalEvents
     }
     
@@ -512,8 +568,11 @@ private extension PartierHomeView {
         favoritesTargetPoint = CGPoint(x: x, y: y)
     }
 
+    func openAppSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url, options: [:], completionHandler: nil)
+    }
 }
-
 private struct EventCardFrameKey: PreferenceKey {
     static var defaultValue: [String: Anchor<CGRect>] = [:]
     
@@ -521,7 +580,6 @@ private struct EventCardFrameKey: PreferenceKey {
         value.merge(nextValue(), uniquingKeysWith: { $1 })
     }
 }
-
 private struct EventSaveThumbnail: View {
     let event: Event
     let accent: Color
@@ -548,7 +606,6 @@ private struct EventSaveThumbnail: View {
         }
     }
 }
-
 private struct GlassChip: View {
     let title: String
     let isSelected: Bool
@@ -594,7 +651,6 @@ private struct GlassChip: View {
         .buttonStyle(.plain)
     }
 }
-
 struct NightEventCard: View {
     let event: Event
     let accent: Color
@@ -857,7 +913,6 @@ struct NightEventCard: View {
         ]
     }
 }
-
 private struct AvatarBubble: View {
     let initials: String
     let color: Color
@@ -880,13 +935,11 @@ private struct AvatarBubble: View {
             .shadow(color: color.opacity(0.25), radius: 10, x: 0, y: 6)
     }
 }
-
 private struct AvatarParticipant: Identifiable, Hashable {
     let id = UUID()
     let initials: String
     let color: Color
 }
-
 // Date Filter View
 struct DateFilterView: View {
     @Binding var selectedDate: Date?
@@ -978,7 +1031,6 @@ struct DateFilterView: View {
         }
     }
 }
-
 private struct MapRadiusView: View {
     @Binding var radiusMiles: Double
     let location: CLLocationCoordinate2D?
@@ -1015,9 +1067,21 @@ private struct MapRadiusView: View {
                                 .frame(height: 450)
                                 .cornerRadius(Theme.CornerRadius.large)
                             
-                            Circle()
-                                .stroke(Color.sioreeIcyBlue.opacity(0.6), lineWidth: 2)
-                                .frame(width: circleDiameter(for: tempRadius), height: circleDiameter(for: tempRadius))
+                            // Only draw radius circle when a numeric radius is selected (> 0).
+                            if tempRadius > 0 {
+                                Circle()
+                                    .stroke(Color.sioreeIcyBlue.opacity(0.6), lineWidth: 2)
+                                    .frame(width: circleDiameter(for: tempRadius), height: circleDiameter(for: tempRadius))
+                            } else {
+                                // When tempRadius == 0 we show no restrictions — maybe indicate "All" with a subtle label
+                                Text("All distances")
+                                    .font(.sioreeCaption)
+                                    .foregroundColor(.sioreeLightGrey)
+                                    .padding(6)
+                                    .background(Color.black.opacity(0.35))
+                                    .cornerRadius(8)
+                                    .offset(y: 160)
+                            }
                         }
                         .padding(.horizontal, Theme.Spacing.m)
                     }
@@ -1028,33 +1092,49 @@ private struct MapRadiusView: View {
                                 .font(.sioreeH4)
                                 .foregroundColor(.sioreeWhite)
                             Spacer()
-                            Text("\(Int(tempRadius)) mi")
+                        Text(tempRadius == 0 ? "All" : "\(Int(tempRadius)) mi")
                                 .font(.sioreeBody)
                                 .foregroundColor(.sioreeIcyBlue)
                         }
                         .padding(.horizontal, Theme.Spacing.m)
                         
-                        Slider(value: $tempRadius, in: 1...50, step: 1)
+                        // Allow 0 to represent "no restrictions"
+                        Slider(value: $tempRadius, in: 0...50, step: 1)
                             .tint(.sioreeIcyBlue)
                             .padding(.horizontal, Theme.Spacing.m)
                         
-                        Button(action: {
-                            radiusMiles = tempRadius
-                            dismiss()
-                        }) {
-                            Text("Apply")
-                                .font(.sioreeBody)
-                                .foregroundColor(.sioreeWhite)
-                                .frame(maxWidth: .infinity)
-                                .padding(Theme.Spacing.m)
-                                .background(
-                                    LinearGradient(
-                                        colors: [Color.sioreeIcyBlue.opacity(0.8), Color.sioreeIcyBlue],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
+                        HStack(spacing: Theme.Spacing.m) {
+                            Button(action: {
+                                // No restrictions mode
+                                tempRadius = 0
+                            }) {
+                                Text("No restrictions")
+                                    .font(.sioreeBody)
+                                    .foregroundColor(.sioreeWhite)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(Theme.Spacing.m)
+                                    .background(Color.sioreeLightGrey.opacity(0.15))
+                                    .cornerRadius(Theme.CornerRadius.medium)
+                            }
+
+                            Button(action: {
+                                radiusMiles = tempRadius
+                                dismiss()
+                            }) {
+                                Text("Apply")
+                                    .font(.sioreeBody)
+                                    .foregroundColor(.sioreeWhite)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(Theme.Spacing.m)
+                                    .background(
+                                        LinearGradient(
+                                            colors: [Color.sioreeIcyBlue.opacity(0.8), Color.sioreeIcyBlue],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
                                     )
-                                )
-                                .cornerRadius(Theme.CornerRadius.medium)
+                                    .cornerRadius(Theme.CornerRadius.medium)
+                            }
                         }
                         .padding(.horizontal, Theme.Spacing.m)
                     }
@@ -1082,7 +1162,6 @@ private struct MapRadiusView: View {
         return 60 + CGFloat(normalized) * 240
     }
 }
-
 private struct PrivateEventCodeView: View {
     let event: Event
     @Binding var enteredCode: String
@@ -1212,8 +1291,9 @@ private struct PrivateEventCodeView: View {
         }
     }
 }
-
 #Preview {
     PartierHomeView()
 }
+
+
 

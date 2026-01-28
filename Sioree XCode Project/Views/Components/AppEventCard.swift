@@ -27,7 +27,9 @@ struct AppEventCard: View {
         }) {
             VStack(alignment: .leading, spacing: 0) {
                 // Event Image - Cover photo ONLY, no fallback
-                CoverPhotoView(imageURL: event.images.first, height: 200)
+                CoverPhotoView(imageURL: event.images.first, height: 300)
+
+
                 
                 // Content - Fixed height container
                 VStack(alignment: .leading, spacing: Theme.Spacing.s) {

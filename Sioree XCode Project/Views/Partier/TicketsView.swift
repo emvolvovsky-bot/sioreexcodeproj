@@ -159,7 +159,6 @@ struct TicketCard: View {
     let event: Event
     let isPast: Bool
     @State private var showTicketDetail = false
-    @State private var showReview = false
     
     // Create ticket from event
     private var ticket: Ticket {
@@ -260,9 +259,7 @@ struct TicketCard: View {
             .disabled(isPast)
             
             // Review Section (only for past events)
-            if isPast {
-                reviewSection
-            }
+            // (Removed review UI for past events)
         }
         .sheet(isPresented: $showTicketDetail) {
             TicketDetailView(ticket: ticket)
@@ -324,67 +321,7 @@ struct TicketCard: View {
     }
     
     private var reviewSection: some View {
-        VStack(spacing: Theme.Spacing.s) {
-            // Host Review Button
-            NavigationLink(destination: UserProfileView(userId: event.hostId)) {
-                HStack(spacing: Theme.Spacing.s) {
-                    Image(systemName: "star.fill")
-                        .font(.system(size: 14))
-                        .foregroundColor(.sioreeWarmGlow)
-                    Text("Review Host: \(event.hostName)")
-                        .font(.sioreeBodySmall)
-                        .fontWeight(.medium)
-                        .foregroundColor(.sioreeWhite)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 12))
-                        .foregroundColor(.sioreeIcyBlue.opacity(0.7))
-                }
-                .padding(.horizontal, Theme.Spacing.m)
-                .padding(.vertical, Theme.Spacing.s)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color.white.opacity(0.04))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 1)
-                        )
-                )
-            }
-            .buttonStyle(.plain)
-            
-            // Talent Review Buttons
-            if !event.talentIds.isEmpty {
-                ForEach(Array(event.talentIds.enumerated()), id: \.element) { index, talentId in
-                    NavigationLink(destination: UserProfileView(userId: talentId)) {
-                        HStack(spacing: Theme.Spacing.s) {
-                            Image(systemName: "star.fill")
-                                .font(.system(size: 12))
-                                .foregroundColor(.sioreeWarmGlow)
-                            Text("Review Talent")
-                                .font(.sioreeCaption)
-                                .fontWeight(.medium)
-                                .foregroundColor(.sioreeWhite)
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 10))
-                                .foregroundColor(.sioreeIcyBlue.opacity(0.7))
-                        }
-                        .padding(.horizontal, Theme.Spacing.m)
-                        .padding(.vertical, Theme.Spacing.xs)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(Color.white.opacity(0.04))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 1)
-                                )
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
+        EmptyView()
     }
 }
 

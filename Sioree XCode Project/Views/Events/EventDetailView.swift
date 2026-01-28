@@ -188,6 +188,8 @@ struct EventDetailView: View {
                 ZStack {
                     CoverPhotoView(imageURL: event.images.first, height: 300)
 
+
+
                 }
                 .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous))
                 .frame(height: 300)
@@ -683,16 +685,9 @@ struct EventDetailView: View {
         isRequestingHelp = true
         let messageText = "Hi! I'm a \(currentUser.userType.rawValue) and can help at \"\(event.title)\"."
 
+        // Send message directly without pre-creating a conversation. Backend will create it if needed.
         MessagingService.shared
-            .getOrCreateConversation(with: event.hostId)
-            .flatMap { convo in
-                MessagingService.shared.sendMessage(
-                    conversationId: convo.id,
-                    receiverId: event.hostId,
-                    text: messageText,
-                    senderRole: nil
-                )
-            }
+            .sendMessage(conversationId: nil, receiverId: event.hostId, text: messageText, senderRole: nil)
             .receive(on: DispatchQueue.main)
             .sink { completion in
                 isRequestingHelp = false

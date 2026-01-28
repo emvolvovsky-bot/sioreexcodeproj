@@ -18,6 +18,9 @@ struct HostTalentRequestsView: View {
     @StateObject private var viewModel = TalentRequestsViewModel()
     @State private var selectedTab: TalentRequestTab = .pending
     @State private var selectedConversation: Conversation?
+    @State private var showCreateConversation = false
+    @State private var selectedTalentIdForComposer: String? = nil
+    @State private var selectedTalentNameForComposer: String? = nil
 
     var body: some View {
         NavigationStack {
@@ -58,6 +61,14 @@ struct HostTalentRequestsView: View {
             .toolbar(.hidden, for: .navigationBar)
             .sheet(item: $selectedConversation) { conversation in
                 RealMessageView(conversation: conversation)
+            }
+            .sheet(isPresented: $showCreateConversation) {
+                if let uid = selectedTalentIdForComposer, let name = selectedTalentNameForComposer {
+                    CreateConversationView(userId: uid, userName: name)
+                } else {
+                    // Fallback empty view
+                    EmptyView()
+                }
             }
             .onAppear {
                 viewModel.loadTalentRequests()
@@ -124,24 +135,9 @@ struct HostTalentRequestsView: View {
     }
 
     private func startConversation(with talentId: String, talentName: String) {
-        // Create conversation with talent request context
-        MessagingService.shared.getOrCreateConversation(
-            with: talentId,
-            eventId: nil, // Could be linked to the event if needed
-            bookingId: nil  // Talent request conversations are different from bookings
-        )
-        .receive(on: DispatchQueue.main)
-        .sink(
-            receiveCompletion: { completion in
-                if case .failure(let error) = completion {
-                    print("❌ Failed to create conversation: \(error)")
-                }
-            },
-            receiveValue: { conversation in
-                selectedConversation = conversation
-            }
-        )
-        .store(in: &viewModel.cancellables)
+        selectedTalentIdForComposer = talentId
+        selectedTalentNameForComposer = talentName
+        showCreateConversation = true
     }
     
     private var backgroundGlow: some View {

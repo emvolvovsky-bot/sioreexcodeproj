@@ -16,6 +16,7 @@ struct InboxProfileView: View {
     @State private var selectedEventForPhotos: Event?
     @State private var cancellables = Set<AnyCancellable>()
     private let networkService = NetworkService()
+    @State private var showCreateConversation = false
     
     init(userId: String) {
         self.userId = userId
@@ -111,6 +112,9 @@ struct InboxProfileView: View {
             .sheet(item: $selectedConversation) { conversation in
                 RealMessageView(conversation: conversation)
             }
+            .sheet(isPresented: $showCreateConversation) {
+                CreateConversationView(userId: userId, userName: viewModel.user?.name ?? "Message")
+            }
             .fullScreenCover(item: $selectedEventForPhotos) { event in
                 if isCurrentUser || (viewModel.user?.userType == .partier) {
                     EventStoryViewer(event: event, viewUserId: isCurrentUser ? nil : userId)
@@ -179,19 +183,8 @@ struct InboxProfileView: View {
     }
     
     private func startConversation() {
-        MessagingService.shared.getOrCreateConversation(with: userId)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        print("❌ Failed to create conversation: \(error)")
-                    }
-                },
-                receiveValue: { conversation in
-                    selectedConversation = conversation
-                }
-            )
-            .store(in: &cancellables)
+        // Open the composer. Do not create a conversation until a message is sent.
+        showCreateConversation = true
     }
     
     private func loadAttendedEvents() {

@@ -105,11 +105,11 @@ struct HostProfileView: View {
             case "more_info_needed":
                 return "More information needed"
             case "not_started":
-                return "Complete your payout setup on Stripe using the same email you use for your Sioree account"
+                return "Complete your payout setup on Stripe using the same email you use for your Sioree account. For the website field, use..."
             default:
                 return connectStatus?.isReady == true
                     ? "Verified"
-                    : "Complete your payout setup on Stripe using the same email you use for your Sioree account."
+                    : "Complete your payout setup on Stripe using the same email you use for your Sioree account. For the website field, use..."
             }
         }()
 

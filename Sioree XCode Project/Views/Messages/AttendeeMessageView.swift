@@ -17,6 +17,8 @@ struct AttendeeMessageView: View {
     @State private var conversation: Conversation?
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var showCheck = false
+    @State private var checkScale: CGFloat = 0.6
     
     var body: some View {
         NavigationStack {
@@ -97,17 +99,8 @@ struct AttendeeMessageView: View {
                 }
             }
             .onAppear {
-                // Get or create conversation
-                messagingService.getOrCreateConversation(with: attendee.id)
-                    .receive(on: DispatchQueue.main)
-                    .sink(
-                        receiveCompletion: { _ in },
-                        receiveValue: { conversation in
-                            self.conversation = conversation
-                            loadMessages()
-                        }
-                    )
-                    .store(in: &cancellables)
+                // Do NOT create a conversation when opening this view.
+                // Leave `conversation` nil until a message is actually sent.
             }
             .alert("Error", isPresented: .constant(errorMessage != nil)) {
                 Button("OK") {
@@ -137,15 +130,8 @@ struct AttendeeMessageView: View {
     
     private func createConversationAndSend(text: String) {
         isLoading = true
-        messagingService.getOrCreateConversation(with: attendee.id)
-            .flatMap { conversation -> AnyPublisher<Message, Error> in
-                self.conversation = conversation
-                return self.messagingService.sendMessage(
-                    conversationId: conversation.id,
-                    receiverId: attendee.id,
-                    text: text
-                )
-            }
+        // Send message without pre-creating a conversation. Backend will create it if needed.
+        messagingService.sendMessage(conversationId: nil, receiverId: attendee.id, text: text)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
@@ -156,8 +142,14 @@ struct AttendeeMessageView: View {
                     }
                 },
                 receiveValue: { message in
-                    messages.append(message)
-                    loadMessages()
+                    // Show checkmark animation and dismiss the message composer.
+                    withAnimation {
+                        showCheck = true
+                    }
+                    NotificationCenter.default.post(name: .refreshInbox, object: nil)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+                        dismiss()
+                    }
                 }
             )
             .store(in: &cancellables)

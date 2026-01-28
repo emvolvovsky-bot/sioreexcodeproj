@@ -82,4 +82,3 @@ struct CoverPhotoView: View {
         }
     }
 }
-

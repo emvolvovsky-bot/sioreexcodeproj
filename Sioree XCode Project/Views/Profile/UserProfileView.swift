@@ -22,6 +22,7 @@ struct UserProfileView: View {
     @State private var selectedEventForPhotos: Event? = nil
     @State private var selectedEventForDetail: Event? = nil
     @State private var talentEvents: [Event] = []
+    @State private var showCreateConversation = false
     private let networkService = NetworkService()
     
     init(userId: String, showOnlyEventCircles: Bool = false) {
@@ -159,6 +160,9 @@ struct UserProfileView: View {
             .navigationBarTitleDisplayMode(.large)
             .sheet(item: $selectedConversation) { conversation in
                 RealMessageView(conversation: conversation)
+            }
+            .sheet(isPresented: $showCreateConversation) {
+                CreateConversationView(userId: userId, userName: viewModel.user?.name ?? "Message")
             }
             .onAppear {
             }
@@ -526,19 +530,8 @@ struct UserProfileView: View {
     }
     
     private func startConversation() {
-        MessagingService.shared.getOrCreateConversation(with: self.userId)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        print("❌ Failed to create conversation: \(error)")
-                    }
-                },
-                receiveValue: { conversation in
-                    selectedConversation = conversation
-                }
-            )
-            .store(in: &cancellables)
+        // Do not auto-create a conversation. Present the composer — create only when a message is sent.
+        showCreateConversation = true
     }
 }
 

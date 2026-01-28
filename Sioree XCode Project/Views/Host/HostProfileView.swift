@@ -91,8 +91,11 @@ struct HostProfileView: View {
         eventsContent
     }
 
+    // ✅ CHANGED: label becomes "View" when verified, button stays clickable when verified,
+    // and it still opens your existing Express onboarding/dashboard link from Render.
     private var stripePayoutsCard: some View {
         let status = connectStatus?.status
+
         let statusText: String = {
             switch status {
             case "verified":
@@ -102,17 +105,21 @@ struct HostProfileView: View {
             case "more_info_needed":
                 return "More information needed"
             case "not_started":
-                return "Complete setup to receive payouts"
+                return "Complete your payout setup on Stripe using the same email you use for your Sioree account"
             default:
-                return connectStatus?.isReady == true ? "Verified" : "Complete setup to receive payouts"
+                return connectStatus?.isReady == true
+                    ? "Verified"
+                    : "Complete your payout setup on Stripe using the same email you use for your Sioree account."
             }
         }()
-        let buttonLabel = status == "more_info_needed" ? "Provide info" : "Set up"
-        let isButtonDisabled =
-            isStartingOnboarding ||
-            status == "verified" ||
-            status == "in_review" ||
-            connectStatus?.isReady == true
+
+        let isVerified = (status == "verified" || connectStatus?.isReady == true)
+
+        let buttonLabel: String = {
+            if isVerified { return "View" }
+            if status == "more_info_needed" { return "Provide info" }
+            return "Set up"
+        }()
 
         return VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             HStack {
@@ -126,8 +133,17 @@ struct HostProfileView: View {
                 }
                 Spacer()
                 Button(action: {
-                    startStripeOnboarding()
-                }) {
+    if isVerified {
+        if let url = URL(string: "https://connect.stripe.com/express_login") {
+            openURL(url)
+        } else {
+            payoutErrorMessage = "Unable to open Stripe Express dashboard."
+        }
+    } else {
+        startStripeOnboarding()
+    }
+}) {
+
                     Text(isStartingOnboarding ? "Starting..." : buttonLabel)
                         .font(.sioreeBodySmall)
                         .foregroundColor(.sioreeBlack)
@@ -136,7 +152,8 @@ struct HostProfileView: View {
                         .background(Color.sioreeIcyBlue)
                         .cornerRadius(Theme.CornerRadius.large)
                 }
-                .disabled(isButtonDisabled)
+                // Only disable while the request is actively starting
+                .disabled(isStartingOnboarding)
             }
         }
         .padding(.horizontal, Theme.Spacing.m)

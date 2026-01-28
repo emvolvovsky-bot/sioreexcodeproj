@@ -10,6 +10,8 @@ import Combine
 
 struct UserProfileView: View {
     let userId: String
+    // When true, show only the circular event bubbles grid (used when opened from Partier Inbox '+')
+    let showOnlyEventCircles: Bool
     @StateObject private var viewModel: ProfileViewModel
     @EnvironmentObject var authViewModel: AuthViewModel
     @State private var showMessageView = false
@@ -22,8 +24,9 @@ struct UserProfileView: View {
     @State private var talentEvents: [Event] = []
     private let networkService = NetworkService()
     
-    init(userId: String) {
+    init(userId: String, showOnlyEventCircles: Bool = false) {
         self.userId = userId
+        self.showOnlyEventCircles = showOnlyEventCircles
         // Initialize with default settings, will be updated when user data loads
         _viewModel = StateObject(wrappedValue: ProfileViewModel(userId: userId))
     }
@@ -134,9 +137,17 @@ struct UserProfileView: View {
                                     // Posts for hosts
                                     postsSection
                                 case .talent:
-                                    talentContent(user: user)
-                                    // Posts for talents
-                                    postsSection
+                                    if showOnlyEventCircles {
+                                        // Show only the circular event bubbles grid (like Partier view)
+                                        partierEventsCirclesView(events: talentEvents)
+                                            .onAppear {
+                                                loadTalentEvents()
+                                            }
+                                    } else {
+                                        talentContent(user: user)
+                                        // Posts for talents
+                                        postsSection
+                                    }
                                 }
                             }
                         }
@@ -329,61 +340,7 @@ struct UserProfileView: View {
                     .padding(.top, Theme.Spacing.m)
                 }
 
-                // Host History - show for all hosts
-                NavigationLink(destination: HostHistoryView(hostId: user.id, hostName: user.name ?? user.username)) {
-                    HStack {
-                        Image(systemName: "video.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(Color.sioreeIcyBlue)
-
-                        Text("View Video Compilation")
-                            .font(.sioreeBody)
-                            .foregroundColor(Color.sioreeWhite)
-
-                        Spacer()
-
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 14))
-                            .foregroundColor(Color.sioreeLightGrey)
-                    }
-                    .padding(Theme.Spacing.m)
-                    .background(Color.sioreeLightGrey.opacity(0.1))
-                    .cornerRadius(Theme.CornerRadius.medium)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                            .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 2)
-                    )
-                }
-                .padding(.horizontal, Theme.Spacing.m)
-                .padding(.top, Theme.Spacing.m)
-
-                // Talent Media - show for all hosts
-                NavigationLink(destination: TalentMediaView(hostId: user.id)) {
-                    HStack {
-                        Image(systemName: "person.2.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(Color.sioreeIcyBlue)
-
-                        Text("Talent Media")
-                            .font(.sioreeBody)
-                            .foregroundColor(Color.sioreeWhite)
-
-                        Spacer()
-
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 14))
-                            .foregroundColor(Color.sioreeLightGrey)
-                    }
-                    .padding(Theme.Spacing.m)
-                    .background(Color.sioreeLightGrey.opacity(0.1))
-                    .cornerRadius(Theme.CornerRadius.medium)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
-                            .stroke(Color.sioreeIcyBlue.opacity(0.3), lineWidth: 1)
-                    )
-                }
-                .padding(.horizontal, Theme.Spacing.m)
-                .padding(.top, Theme.Spacing.m)
+                // Host-specific sections removed: Video Compilation and Talent Media no longer shown
             }
         }
     }

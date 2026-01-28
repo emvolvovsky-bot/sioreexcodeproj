@@ -80,7 +80,7 @@ struct UserSearchView: View {
                         ScrollView {
                             LazyVStack(spacing: Theme.Spacing.s) {
                                 ForEach(users) { user in
-                                    NavigationLink(destination: UserProfileView(userId: user.id)) {
+                                    NavigationLink(destination: destinationFor(user: user)) {
                                         UserSearchRow(
                                             user: user,
                                             isInitiallyFollowing: followingIds.contains(user.id)
@@ -186,6 +186,18 @@ struct UserSearchView: View {
                 }
             )
             .store(in: &cancellables)
+    }
+
+    private func destinationFor(user: User) -> AnyView {
+        switch user.userType {
+        case .host:
+            return AnyView(InboxProfileView(userId: user.id))
+        case .talent:
+            // Show only circular event bubbles grid for talents when opening from this flow
+            return AnyView(UserProfileView(userId: user.id, showOnlyEventCircles: true))
+        default:
+            return AnyView(UserProfileView(userId: user.id))
+        }
     }
 }
 

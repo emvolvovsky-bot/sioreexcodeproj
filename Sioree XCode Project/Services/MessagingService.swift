@@ -317,5 +317,28 @@ class MessagingService: ObservableObject {
             .map { (response: Response) in response.success }
             .eraseToAnyPublisher()
     }
+
+    // MARK: - Delete Conversation
+    func deleteConversation(conversationId: String) -> AnyPublisher<Bool, Error> {
+        let useMockMessaging = false
+
+        if useMockMessaging {
+            return Future { promise in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    promise(.success(true))
+                }
+            }
+            .eraseToAnyPublisher()
+        }
+
+        struct Response: Codable {
+            let success: Bool
+        }
+
+        // Try the conversations endpoint for deletion
+        return networkService.request("/api/messages/conversations/\(conversationId)", method: "DELETE")
+            .map { (response: Response) in response.success }
+            .eraseToAnyPublisher()
+    }
 }
 

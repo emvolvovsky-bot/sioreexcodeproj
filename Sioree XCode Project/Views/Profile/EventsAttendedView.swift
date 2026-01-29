@@ -256,7 +256,7 @@ struct EventPhotosViewer: View {
     }
 
     private var allImages: [EventPhoto] {
-        filteredPosts.flatMap { post in
+        var images = filteredPosts.flatMap { post in
             post.images.enumerated().map { (index, imageUrl) in
                 EventPhoto(
                     url: imageUrl,
@@ -265,6 +265,47 @@ struct EventPhotosViewer: View {
                 )
             }
         }
+
+        // Ensure event cover is present as first image when available
+        let coverKey = "event_cover_\(event.id)"
+        var coverImageUrl: String? = UserDefaults.standard.string(forKey: coverKey)
+        if coverImageUrl == nil {
+            coverImageUrl = event.images.first
+        }
+
+        if let cover = coverImageUrl, !cover.isEmpty {
+            if let existingIndex = images.firstIndex(where: { $0.url == cover }) {
+                let coverPhoto = images.remove(at: existingIndex)
+                images.insert(coverPhoto, at: 0)
+            } else {
+                let coverPhoto = EventPhoto(
+                    url: cover,
+                    post: Post(
+                        id: "cover_\(event.id)",
+                        userId: event.hostId,
+                        userName: event.hostName,
+                        userAvatar: event.hostAvatar,
+                        images: [cover],
+                        caption: nil,
+                        eventId: event.id,
+                        createdAt: event.createdAt
+                    ),
+                    imageIndex: 0
+                )
+                images.insert(coverPhoto, at: 0)
+            }
+        }
+
+        return images
+    }
+
+    // Fallback cover image (stored or event first image)
+    private func coverImageUrl(for event: Event) -> String? {
+        let coverKey = "event_cover_\(event.id)"
+        if let stored = UserDefaults.standard.string(forKey: coverKey), !stored.isEmpty {
+            return stored
+        }
+        return event.images.first
     }
 
     var body: some View {
@@ -330,9 +371,38 @@ struct EventPhotosViewer: View {
                     } else if allImages.isEmpty {
                         VStack(spacing: Theme.Spacing.l) {
                             Spacer()
-                            Image(systemName: "camera.fill")
-                                .font(.system(size: 80))
-                                .foregroundColor(Color.sioreeIcyBlue.opacity(0.6))
+                            if let cover = coverImageUrl(for: event), let url = URL(string: cover) {
+                                AsyncImage(url: url) { phase in
+                                    switch phase {
+                                    case .empty:
+                                        Rectangle()
+                                            .fill(Color.sioreeCharcoal)
+                                            .frame(height: 240)
+                                            .overlay(ProgressView().tint(Color.sioreeIcyBlue))
+                                    case .success(let image):
+                                        image
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(height: 240)
+                                            .clipped()
+                                    case .failure:
+                                        Image(systemName: "camera.fill")
+                                            .font(.system(size: 80))
+                                            .foregroundColor(Color.sioreeIcyBlue.opacity(0.6))
+                                    @unknown default:
+                                        Image(systemName: "camera.fill")
+                                            .font(.system(size: 80))
+                                            .foregroundColor(Color.sioreeIcyBlue.opacity(0.6))
+                                    }
+                                }
+                                .cornerRadius(12)
+                                .padding(.horizontal, Theme.Spacing.m)
+                            } else {
+                                Image(systemName: "camera.fill")
+                                    .font(.system(size: 80))
+                                    .foregroundColor(Color.sioreeIcyBlue.opacity(0.6))
+                            }
+
                             VStack(spacing: Theme.Spacing.s) {
                                 Text(emptyStateTitle)
                                     .font(.sioreeH2)

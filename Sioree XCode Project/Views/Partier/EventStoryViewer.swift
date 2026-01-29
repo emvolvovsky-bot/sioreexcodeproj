@@ -83,16 +83,14 @@ struct EventStoryViewer: View {
             coverImageUrl = event.images.first
         }
         
-        // If we have a cover image, prioritize it as the first photo
+        // If we have a cover image, ensure it's the first photo.
         if let coverImageUrl = coverImageUrl, !coverImageUrl.isEmpty {
-            // Check if cover image is already in user's photos
+            // If the cover is already present in user's photos, move it to front.
             if let coverIndex = images.firstIndex(where: { $0.url == coverImageUrl }) {
-                // Move cover image to first position if it exists in user's photos
                 let coverPhoto = images.remove(at: coverIndex)
                 images.insert(coverPhoto, at: 0)
-            } else if isHost || images.count < maxPhotos {
-                // Add event cover image as first photo if user has space and it's not already there
-                // Hosts have no limit, so always add if not already present
+            } else {
+                // Otherwise, insert a synthetic cover photo at the front so viewers always see it.
                 let coverPhoto = EventPhoto(
                     url: coverImageUrl,
                     post: Post(
@@ -110,13 +108,26 @@ struct EventStoryViewer: View {
                 images.insert(coverPhoto, at: 0)
             }
         }
-        
-        // Limit photos only for partiers (hosts have no limit)
+
+        // Enforce max photos for non-host viewers, but always keep the cover as the first photo.
         if isHost {
             return images
         } else {
-            return Array(images.prefix(maxPhotos))
+            guard !images.isEmpty else { return images }
+            let cover = images[0]
+            let rest = Array(images.dropFirst())
+            let restLimited = Array(rest.prefix(maxPhotos - 1))
+            return [cover] + restLimited
         }
+    }
+
+    // Extract cover image URL (stored cover or event first image)
+    private var coverImageUrl: String? {
+        let coverKey = "event_cover_\(event.id)"
+        if let stored = UserDefaults.standard.string(forKey: coverKey), !stored.isEmpty {
+            return stored
+        }
+        return event.images.first
     }
     
     private var canDeleteCurrentPhoto: Bool {
@@ -183,9 +194,8 @@ struct EventStoryViewer: View {
     
     private var emptyStateView: some View {
         VStack(spacing: Theme.Spacing.l) {
-            // Close button at top
+            // Close button at top (left)
             HStack {
-                Spacer()
                 Button(action: {
                     dismiss()
                 }) {
@@ -196,15 +206,45 @@ struct EventStoryViewer: View {
                         .background(Color.black.opacity(0.6))
                         .clipShape(Circle())
                 }
-                .padding(.trailing, Theme.Spacing.m)
+                .padding(.leading, Theme.Spacing.m)
                 .padding(.top, Theme.Spacing.m)
+
+                Spacer()
             }
             
             Spacer()
             
-            Image(systemName: "camera.fill")
-                .font(.system(size: 80))
-                .foregroundColor(Color.sioreeIcyBlue.opacity(0.6))
+            if let cover = coverImageUrl, let url = URL(string: cover) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        Rectangle()
+                            .fill(Color.sioreeCharcoal)
+                            .frame(height: 240)
+                            .overlay(ProgressView().tint(Color.sioreeIcyBlue))
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                            .frame(height: 240)
+                            .clipped()
+                    case .failure:
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: 80))
+                            .foregroundColor(Color.sioreeIcyBlue.opacity(0.6))
+                    @unknown default:
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: 80))
+                            .foregroundColor(Color.sioreeIcyBlue.opacity(0.6))
+                    }
+                }
+                .cornerRadius(12)
+                .padding(.horizontal, Theme.Spacing.m)
+            } else {
+                Image(systemName: "camera.fill")
+                    .font(.system(size: 80))
+                    .foregroundColor(Color.sioreeIcyBlue.opacity(0.6))
+            }
             
             VStack(spacing: Theme.Spacing.s) {
                 Text("No photos yet")
@@ -414,7 +454,7 @@ struct EventStoryViewer: View {
                 }
             }
             .overlay(alignment: .topTrailing) {
-                if isPartier && !event.hostName.isEmpty {
+                if !event.hostName.isEmpty {
                     HStack(spacing: Theme.Spacing.xs) {
                         Text("Hosted by")
                             .font(.caption.weight(.semibold))

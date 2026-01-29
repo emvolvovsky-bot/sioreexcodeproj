@@ -189,15 +189,10 @@ struct UserProfileView: View {
                 UserListListView(userId: userId, listType: .following, userType: getUserTypeFromRole())
             }
             .fullScreenCover(item: $selectedEventForPhotos) { event in
-                if isCurrentUser || (viewModel.user?.userType == .partier) {
-                    // For partiers, use EventStoryViewer (stories view)
-                    EventStoryViewer(event: event, viewUserId: isCurrentUser ? nil : userId)
-                        .environmentObject(authViewModel)
-                } else {
-                    // For hosts/talents, use EventPhotosViewer
-                    EventPhotosViewer(event: event, viewUserId: userId)
-                        .environmentObject(authViewModel)
-                }
+                // Always open the story-style viewer. If viewing another user's profile,
+                // pass their userId so the viewer shows their photos in read-only mode.
+                EventStoryViewer(event: event, viewUserId: isCurrentUser ? nil : userId)
+                    .environmentObject(authViewModel)
             }
             .navigationDestination(item: $selectedEventForDetail) { event in
                 // For hosts viewing their own upcoming events, show EventDetailView which will have edit capability

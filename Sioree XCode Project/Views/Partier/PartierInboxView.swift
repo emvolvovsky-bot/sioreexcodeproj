@@ -69,6 +69,13 @@ struct PartierInboxView: View {
                                         PartierConversationRow(conversation: conversation)
                                     }
                                     .buttonStyle(PlainButtonStyle())
+                                    .swipeActions(edge: .trailing) {
+                                        Button(role: .destructive) {
+                                            deleteConversation(conversation)
+                                        } label: {
+                                            Label("Delete", systemImage: "trash")
+                                        }
+                                    }
                                     .padding(.horizontal, Theme.Spacing.l)
                                 }
                             }
@@ -142,6 +149,25 @@ struct PartierInboxView: View {
                 .blur(radius: 140)
                 .offset(x: 160, y: 220)
         }
+    }
+    
+    private func deleteConversation(_ conversation: Conversation) {
+        messagingService.deleteConversation(conversationId: conversation.id)
+            .receive(on: DispatchQueue.main)
+            .sink { completion in
+                if case .failure(let error) = completion {
+                    print("❌ Failed to delete conversation: \(error)")
+                }
+            } receiveValue: { success in
+                if success {
+                    withAnimation {
+                        conversations.removeAll { $0.id == conversation.id }
+                    }
+                } else {
+                    print("⚠️ Delete conversation returned false for id: \(conversation.id)")
+                }
+            }
+            .store(in: &cancellables)
     }
 
     private var filteredConversations: [Conversation] {

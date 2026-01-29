@@ -116,13 +116,9 @@ struct InboxProfileView: View {
                 CreateConversationView(userId: userId, userName: viewModel.user?.name ?? "Message")
             }
             .fullScreenCover(item: $selectedEventForPhotos) { event in
-                if isCurrentUser || (viewModel.user?.userType == .partier) {
-                    EventStoryViewer(event: event, viewUserId: isCurrentUser ? nil : userId)
-                        .environmentObject(authViewModel)
-                } else {
-                    EventPhotosViewer(event: event, viewUserId: userId)
-                        .environmentObject(authViewModel)
-                }
+                // Always open the story-style viewer (read-only when viewing another user's profile)
+                EventStoryViewer(event: event, viewUserId: isCurrentUser ? nil : userId)
+                    .environmentObject(authViewModel)
             }
             .onAppear {
                 viewModel.setAuthViewModel(authViewModel)

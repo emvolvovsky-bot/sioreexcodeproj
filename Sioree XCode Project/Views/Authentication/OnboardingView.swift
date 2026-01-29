@@ -90,28 +90,27 @@ struct OnboardingView: View {
                         Spacer(minLength: geo.size.height * 0.04)
                         
                         VStack(spacing: 6) {
-                            Text("By continuing, you agree to")
-                                .font(.sioreeCaption)
-                                .foregroundColor(.sioreeLightGrey.opacity(0.9))
-                                .multilineTextAlignment(.center)
-                            
-                            HStack(spacing: 4) {
-                                Button("Terms of Service") {
-                                    showTermsSheet = true
-                                }
-                                    .font(.sioreeCaption)
-                                    .foregroundColor(.sioreeIcyBlue)
-                                Text("and")
-                                    .font(.sioreeCaption)
-                                    .foregroundColor(.sioreeLightGrey.opacity(0.9))
-                                Button("Privacy Policy") {
-                                    showPrivacySheet = true
-                                }
-                                    .font(.sioreeCaption)
-                                    .foregroundColor(.sioreeIcyBlue)
-                            }
-                            .multilineTextAlignment(.center)
-                        }
+    Text("By continuing, you agree to")
+        .font(.sioreeCaption)
+        .foregroundColor(.sioreeLightGrey.opacity(0.9))
+        .multilineTextAlignment(.center)
+
+    HStack(spacing: 4) {
+        Link("Terms of Service", destination: URL(string: "https://emvolvovsky-bot.github.io/sioreexcodeproj/terms.html")!)
+            .font(.sioreeCaption)
+            .foregroundColor(.sioreeIcyBlue)
+
+        Text("and")
+            .font(.sioreeCaption)
+            .foregroundColor(.sioreeLightGrey.opacity(0.9))
+
+        Link("Privacy Policy", destination: URL(string: "https://emvolvovsky-bot.github.io/sioreexcodeproj/privacy_policy.html")!)
+            .font(.sioreeCaption)
+            .foregroundColor(.sioreeIcyBlue)
+    }
+    .multilineTextAlignment(.center)
+}
+
                         .padding(.bottom, max(Theme.Spacing.l * 3.0, geo.safeAreaInsets.bottom + Theme.Spacing.xl * 1.6))
                         .padding(.horizontal, Theme.Spacing.l)
                     }

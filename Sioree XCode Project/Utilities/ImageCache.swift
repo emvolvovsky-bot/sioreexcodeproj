@@ -14,6 +14,7 @@ class ImageCache {
     private let cache = NSCache<NSString, UIImage>()
     private let fileManager = FileManager.default
     private let cacheDirectory: URL
+    private let maxDiskCacheSize: Int = 200 * 1024 * 1024 // 200MB
 
     private init() {
         cache.countLimit = 100 // Maximum number of images to cache in memory
@@ -24,6 +25,10 @@ class ImageCache {
 
         // Create cache directory if it doesn't exist
         try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+        // Create avatars subdirectory
+        try? fileManager.createDirectory(at: cacheDirectory.appendingPathComponent("avatars"), withIntermediateDirectories: true)
+        // Enforce disk cache size limit
+        enforceDiskCacheLimit()
     }
 
     func getImage(for url: URL) -> UIImage? {
@@ -63,12 +68,69 @@ class ImageCache {
         }
     }
 
+    // Avatar helpers - store avatar by userId for deterministic lookup
+    func avatarURL(for userId: String) -> URL {
+        return cacheDirectory.appendingPathComponent("avatars").appendingPathComponent("\(userId).jpg")
+    }
+
+    func storeAvatarData(_ data: Data, for userId: String) {
+        let fileURL = avatarURL(for: userId)
+        DispatchQueue.global(qos: .background).async {
+            try? data.write(to: fileURL)
+            if let image = UIImage(data: data) {
+                let key = fileURL.absoluteString as NSString
+                self.cache.setObject(image, forKey: key)
+            }
+        }
+    }
+
+    func getAvatarImage(for userId: String) -> UIImage? {
+        let fileURL = avatarURL(for: userId)
+        let key = fileURL.absoluteString as NSString
+        if let img = cache.object(forKey: key) {
+            return img
+        }
+        if let data = try? Data(contentsOf: fileURL), let image = UIImage(data: data) {
+            cache.setObject(image, forKey: key)
+            return image
+        }
+        return nil
+    }
+
     func clearCache() {
         cache.removeAllObjects()
 
         // Clear disk cache
         try? fileManager.removeItem(at: cacheDirectory)
         try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+        try? fileManager.createDirectory(at: cacheDirectory.appendingPathComponent("avatars"), withIntermediateDirectories: true)
+    }
+
+    private func enforceDiskCacheLimit() {
+        DispatchQueue.global(qos: .background).async {
+            let folderURL = self.cacheDirectory
+            guard let files = try? self.fileManager.contentsOfDirectory(at: folderURL, includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey], options: .skipsHiddenFiles) else { return }
+            // Compute total size
+            var fileInfos: [(url: URL, size: Int, date: Date)] = []
+            var totalSize = 0
+            for url in files {
+                if let attrs = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey]),
+                   let size = attrs.fileSize,
+                   let date = attrs.contentModificationDate {
+                    fileInfos.append((url: url, size: size, date: date))
+                    totalSize += size
+                }
+            }
+            if totalSize <= self.maxDiskCacheSize { return }
+            // Sort by oldest first
+            fileInfos.sort { $0.date < $1.date }
+            var bytesToFree = totalSize - self.maxDiskCacheSize
+            for info in fileInfos {
+                guard bytesToFree > 0 else { break }
+                try? self.fileManager.removeItem(at: info.url)
+                bytesToFree -= info.size
+            }
+        }
     }
 }
 

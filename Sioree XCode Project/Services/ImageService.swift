@@ -25,7 +25,12 @@ class ImageService {
             return Just(nil).eraseToAnyPublisher()
         }
         
-        // Check cache first
+        // Check persistent disk cache first (ImageCache)
+        if let persistent = ImageCache.shared.getImage(for: url) {
+            return Just(persistent).eraseToAnyPublisher()
+        }
+
+        // Check in-memory NSCache
         if let cachedImage = cache.object(forKey: urlString as NSString) {
             return Just(cachedImage).eraseToAnyPublisher()
         }
@@ -35,6 +40,8 @@ class ImageService {
             .handleEvents(receiveOutput: { [weak self] image in
                 if let image = image {
                     self?.cache.setObject(image, forKey: urlString as NSString)
+                    // Persist to disk cache for future launches
+                    ImageCache.shared.storeImage(image, for: url)
                 }
             })
             .replaceError(with: nil)
@@ -48,6 +55,24 @@ class ImageService {
         return Just("https://example.com/image.jpg")
             .setFailureType(to: Error.self)
             .eraseToAnyPublisher()
+    }
+}
+
+extension ImageService {
+    // Return a local avatar file URL if present for userId
+    func localAvatarPath(for userId: String) -> URL? {
+        let fileURL = ImageCache.shared.avatarURL(for: userId)
+        if FileManager.default.fileExists(atPath: fileURL.path) {
+            return fileURL
+        }
+        return nil
+    }
+    
+    // Save avatar bytes (e.g., base64 decoded) to disk cache and return URL
+    func saveAvatarData(_ data: Data, for userId: String) -> URL? {
+        ImageCache.shared.storeAvatarData(data, for: userId)
+        let fileURL = ImageCache.shared.avatarURL(for: userId)
+        return FileManager.default.fileExists(atPath: fileURL.path) ? fileURL : nil
     }
 }
 

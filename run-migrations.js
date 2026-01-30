@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import db from "./src/db/database.js";
+import { db } from "./src/db/database.js";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -27,7 +27,8 @@ async function runMigrations() {
       "008_add_looking_for_roles_array.sql",
       "009_add_payment_workflows.sql",
       "010_add_follow_relationships.sql",
-      "013_add_stripe_connect.sql"
+      "013_add_stripe_connect.sql",
+      "015_add_updated_at_and_client_tempid.sql"
     ];
     
     for (const file of migrationFiles) {

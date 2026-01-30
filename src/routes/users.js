@@ -66,6 +66,7 @@ const buildLookingForLabel = (roles = [], legacy = null, notes = null) => {
 router.get("/search", async (req, res) => {
   try {
     const query = req.query.q || "";
+    const updatedAfter = req.query.updated_after;
     const currentUserId = getUserIdFromToken(req);
     
     // If query is empty or "*", return all users (for inbox "all users" feature)
@@ -76,23 +77,47 @@ router.get("/search", async (req, res) => {
     if (returnAllUsers) {
       // Return all users (excluding current user if logged in)
       if (currentUserId) {
-        result = await db.query(
-          `SELECT id, username, email, name, bio, avatar, user_type, location, verified, 
-                  follower_count, following_count, event_count, created_at
-           FROM users 
-           WHERE id != $1
-           ORDER BY username
-           LIMIT 100`,
-          [currentUserId]
-        );
+        if (updatedAfter) {
+          result = await db.query(
+            `SELECT id, username, email, name, bio, avatar, user_type, location, verified, 
+                    follower_count, following_count, event_count, created_at, updated_at
+             FROM users 
+             WHERE id != $1 AND updated_at > $2
+             ORDER BY username
+             LIMIT 100`,
+            [currentUserId, updatedAfter]
+          );
+        } else {
+          result = await db.query(
+            `SELECT id, username, email, name, bio, avatar, user_type, location, verified, 
+                    follower_count, following_count, event_count, created_at
+             FROM users 
+             WHERE id != $1
+             ORDER BY username
+             LIMIT 100`,
+            [currentUserId]
+          );
+        }
       } else {
-        result = await db.query(
-          `SELECT id, username, email, name, bio, avatar, user_type, location, verified, 
-                  follower_count, following_count, event_count, created_at
-           FROM users 
-           ORDER BY username
-           LIMIT 100`
-        );
+        if (updatedAfter) {
+          result = await db.query(
+            `SELECT id, username, email, name, bio, avatar, user_type, location, verified, 
+                    follower_count, following_count, event_count, created_at, updated_at
+             FROM users 
+             WHERE updated_at > $1
+             ORDER BY username
+             LIMIT 100`,
+            [updatedAfter]
+          );
+        } else {
+          result = await db.query(
+            `SELECT id, username, email, name, bio, avatar, user_type, location, verified, 
+                    follower_count, following_count, event_count, created_at
+             FROM users 
+             ORDER BY username
+             LIMIT 100`
+          );
+        }
       }
     } else if (query.length < 2) {
       return res.json({ users: [] });
@@ -101,40 +126,81 @@ router.get("/search", async (req, res) => {
       const searchPattern = `%${query}%`;
       
       if (currentUserId) {
-        result = await db.query(
-          `SELECT id, username, email, name, bio, avatar, user_type, location, verified, 
-                  follower_count, following_count, event_count, created_at
-           FROM users 
-           WHERE (LOWER(username) LIKE LOWER($1) OR LOWER(name) LIKE LOWER($1))
-             AND id != $2
-           ORDER BY 
-             CASE 
-               WHEN LOWER(username) = LOWER($3) THEN 1
-               WHEN LOWER(username) LIKE LOWER($4) THEN 2
-               WHEN LOWER(name) LIKE LOWER($4) THEN 3
-               ELSE 4
-             END,
-             username
-           LIMIT 20`,
-          [searchPattern, currentUserId, query, `%${query}%`]
-        );
+        if (updatedAfter) {
+          result = await db.query(
+            `SELECT id, username, email, name, bio, avatar, user_type, location, verified, 
+                    follower_count, following_count, event_count, created_at, updated_at
+             FROM users 
+             WHERE (LOWER(username) LIKE LOWER($1) OR LOWER(name) LIKE LOWER($1))
+               AND id != $2
+               AND updated_at > $3
+             ORDER BY 
+               CASE 
+                 WHEN LOWER(username) = LOWER($4) THEN 1
+                 WHEN LOWER(username) LIKE LOWER($5) THEN 2
+                 WHEN LOWER(name) LIKE LOWER($5) THEN 3
+                 ELSE 4
+               END,
+               username
+             LIMIT 20`,
+            [searchPattern, currentUserId, updatedAfter, query, `%${query}%`]
+          );
+        } else {
+          result = await db.query(
+            `SELECT id, username, email, name, bio, avatar, user_type, location, verified, 
+                    follower_count, following_count, event_count, created_at
+             FROM users 
+             WHERE (LOWER(username) LIKE LOWER($1) OR LOWER(name) LIKE LOWER($1))
+               AND id != $2
+             ORDER BY 
+               CASE 
+                 WHEN LOWER(username) = LOWER($3) THEN 1
+                 WHEN LOWER(username) LIKE LOWER($4) THEN 2
+                 WHEN LOWER(name) LIKE LOWER($4) THEN 3
+                 ELSE 4
+               END,
+               username
+             LIMIT 20`,
+            [searchPattern, currentUserId, query, `%${query}%`]
+          );
+        }
       } else {
-        result = await db.query(
-          `SELECT id, username, email, name, bio, avatar, user_type, location, verified, 
-                  follower_count, following_count, event_count, created_at
-           FROM users 
-           WHERE (LOWER(username) LIKE LOWER($1) OR LOWER(name) LIKE LOWER($1))
-           ORDER BY 
-             CASE 
-               WHEN LOWER(username) = LOWER($2) THEN 1
-               WHEN LOWER(username) LIKE LOWER($3) THEN 2
-               WHEN LOWER(name) LIKE LOWER($3) THEN 3
-               ELSE 4
-             END,
-             username
-           LIMIT 20`,
-          [searchPattern, query, `%${query}%`]
-        );
+        if (updatedAfter) {
+          result = await db.query(
+            `SELECT id, username, email, name, bio, avatar, user_type, location, verified, 
+                    follower_count, following_count, event_count, created_at, updated_at
+             FROM users 
+             WHERE (LOWER(username) LIKE LOWER($1) OR LOWER(name) LIKE LOWER($1))
+               AND updated_at > $2
+             ORDER BY 
+               CASE 
+                 WHEN LOWER(username) = LOWER($3) THEN 1
+                 WHEN LOWER(username) LIKE LOWER($4) THEN 2
+                 WHEN LOWER(name) LIKE LOWER($4) THEN 3
+                 ELSE 4
+               END,
+               username
+             LIMIT 20`,
+            [searchPattern, updatedAfter, query, `%${query}%`]
+          );
+        } else {
+          result = await db.query(
+            `SELECT id, username, email, name, bio, avatar, user_type, location, verified, 
+                    follower_count, following_count, event_count, created_at
+             FROM users 
+             WHERE (LOWER(username) LIKE LOWER($1) OR LOWER(name) LIKE LOWER($1))
+             ORDER BY 
+               CASE 
+                 WHEN LOWER(username) = LOWER($2) THEN 1
+                 WHEN LOWER(username) LIKE LOWER($3) THEN 2
+                 WHEN LOWER(name) LIKE LOWER($3) THEN 3
+                 ELSE 4
+               END,
+               username
+             LIMIT 20`,
+            [searchPattern, query, `%${query}%`]
+          );
+        }
       }
     }
     
@@ -178,6 +244,14 @@ router.get("/:id", async (req, res) => {
     }
 
     const userRow = result.rows[0];
+    // If client requested updated_after and nothing changed, return 204 Not Modified
+    if (req.query.updated_after) {
+      const since = new Date(req.query.updated_after);
+      const updatedAt = userRow.updated_at ? new Date(userRow.updated_at) : null;
+      if (updatedAt && updatedAt <= since) {
+        return res.status(204).send();
+      }
+    }
     const user = {
       id: userRow.id.toString(),
       email: userRow.email,
@@ -189,6 +263,7 @@ router.get("/:id", async (req, res) => {
       location: userRow.location || null,
       verified: userRow.verified || false,
       createdAt: userRow.created_at ? new Date(userRow.created_at).toISOString() : new Date().toISOString(),
+    updatedAt: userRow.updated_at ? new Date(userRow.updated_at).toISOString() : null,
       followerCount: userRow.follower_count || 0,
       followingCount: userRow.following_count || 0,
       eventCount: userRow.event_count || 0,

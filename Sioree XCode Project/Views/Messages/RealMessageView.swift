@@ -137,9 +137,17 @@ struct RealMessageView: View {
                 }
             }
             .onAppear {
-                // Only load messages if conversation is valid
+                // Render from local cache first
                 if !conversation.participantId.isEmpty && !conversation.id.isEmpty {
-                    loadMessages()
+                    let local = MessageRepository.shared.fetchMessagesLocally(conversationId: conversation.id)
+                    if !local.isEmpty {
+                        self.messages = local
+                    } else {
+                        // Fallback to network if no local messages
+                        loadMessagesFromNetwork()
+                    }
+                    // Trigger background delta sync
+                    SyncManager.shared.syncConversationsDelta()
                     markAsRead()
                 } else {
                     errorMessage = "Invalid conversation data"
@@ -178,6 +186,33 @@ struct RealMessageView: View {
                     self.messages = response.messages.sorted { $0.timestamp < $1.timestamp }
                 }
             )
+            .store(in: &cancellables)
+    }
+
+    private func loadMessagesFromNetwork() {
+        isLoading = true
+        messagingService.getMessages(conversationId: conversation.id, role: nil)
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { completion in
+                isLoading = false
+                if case .failure(let error) = completion {
+                    errorMessage = error.localizedDescription
+                }
+            }, receiveValue: { response in
+                self.messages = response.messages.sorted { $0.timestamp < $1.timestamp }
+                // Persist into local DB
+                for msg in response.messages {
+                    let dict: [String: Any] = [
+                        "id": msg.id,
+                        "conversationId": msg.conversationId,
+                        "senderId": msg.senderId,
+                        "receiverId": msg.receiverId,
+                        "text": msg.text,
+                        "timestamp": msg.timestamp.iso8601String()
+                    ]
+                    MessageRepository.shared.upsertMessageFromServer(messageDict: dict)
+                }
+            })
             .store(in: &cancellables)
     }
     

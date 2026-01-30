@@ -118,7 +118,15 @@ struct HostInboxView: View {
                 CreateGroupChatView()
             }
             .onAppear {
-                loadConversations()
+                // Load from local cache first
+                let local = ConversationRepository.shared.fetchConversationsLocally()
+                if !local.isEmpty {
+                    self.conversations = local
+                } else {
+                    loadConversations()
+                }
+                // Trigger background delta sync
+                SyncManager.shared.syncConversationsDelta()
             }
             .onReceive(NotificationCenter.default.publisher(for: .refreshInbox)) { _ in
                 loadConversations()

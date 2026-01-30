@@ -87,7 +87,13 @@ struct TalentInboxView: View {
                 CreateGroupChatView()
             }
             .onAppear {
-                loadConversations()
+                let local = ConversationRepository.shared.fetchConversationsLocally()
+                if !local.isEmpty {
+                    self.conversations = local
+                } else {
+                    loadConversations()
+                }
+                SyncManager.shared.syncConversationsDelta()
             }
             .onReceive(NotificationCenter.default.publisher(for: .refreshInbox)) { _ in
                 loadConversations()

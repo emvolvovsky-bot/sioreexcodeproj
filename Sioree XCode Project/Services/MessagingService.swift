@@ -199,13 +199,21 @@ class MessagingService: ObservableObject {
     }
     
     // MARK: - Send Message
-    func sendMessage(conversationId: String?, receiverId: String, text: String, senderRole: String? = nil) -> AnyPublisher<Message, Error> {
+    func sendMessage(conversationId: String?, receiverId: String, text: String, senderRole: String? = nil, clientTempId: String? = nil) -> AnyPublisher<Message, Error> {
         let useMockMessaging = false  // ✅ Using real backend
         
+        // Generate client temp id for optimistic send if not provided
+        let tempId = clientTempId ?? UUID().uuidString
+        // Persist pending message locally
+        if let currentUser = StorageService.shared.getUserId() {
+            MessageRepository.shared.savePendingMessage(conversationId: conversationId ?? UUID().uuidString, text: text, senderId: currentUser, receiverId: receiverId, clientTempId: tempId)
+        }
+
         var body: [String: Any] = [
             "receiverId": receiverId,
             "text": text,
-            "messageType": "text"
+            "messageType": "text",
+            "clientTempId": tempId
         ]
         
         if let conversationId = conversationId {
@@ -240,6 +248,15 @@ class MessagingService: ObservableObject {
         }
         
         return networkService.request("/api/messages", method: "POST", body: jsonData)
+            .map { (response: Message) -> Message in
+                // When server responds, upsert server message into local DB to reconcile pending state
+                if let data = try? JSONEncoder().encode(response),
+                   let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    MessageRepository.shared.upsertMessageFromServer(messageDict: dict)
+                }
+                return response
+            }
+            .eraseToAnyPublisher()
     }
     
     // MARK: - Mark as Read

@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS talent_earnings (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
-ALTER TABLE talent_earnings ADD CONSTRAINT IF NOT EXISTS uniq_talent_earnings_booking UNIQUE (booking_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_talent_earnings_booking_idx ON talent_earnings(booking_id);
 
 CREATE INDEX IF NOT EXISTS idx_talent_earnings_talent ON talent_earnings(talent_id);
 CREATE INDEX IF NOT EXISTS idx_talent_earnings_status ON talent_earnings(status);

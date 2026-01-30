@@ -51,7 +51,8 @@ async function runMigrationsOnBoot() {
     "011_add_event_talent_table.sql",
     "012_add_brand_insights_tables.sql",
     "013_add_user_type_to_follows.sql",
-    "014_add_earnings_tables.sql"
+    "014_add_earnings_tables.sql",
+    "015_add_updated_at_and_client_tempid.sql"
   ];
 
   for (const file of migrationFiles) {

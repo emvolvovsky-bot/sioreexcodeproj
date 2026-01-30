@@ -95,7 +95,14 @@ struct PartierInboxView: View {
                 UserSearchView()
             }
             .onAppear {
-                loadConversations()
+                let local = ConversationRepository.shared.fetchConversationsLocally()
+                if !local.isEmpty {
+                    self.conversations = local
+                    self.isLoading = false
+                } else {
+                    loadConversations()
+                }
+                SyncManager.shared.syncConversationsDelta()
             }
             .onReceive(NotificationCenter.default.publisher(for: .refreshInbox)) { _ in
                 loadConversations()

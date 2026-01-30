@@ -11,6 +11,7 @@ import Combine
 struct SettingsView: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var authViewModel: AuthViewModel
+    @Environment(\.openURL) var openURL
     @State private var notificationsEnabled = true
     @State private var emailNotifications = true
     @State private var pushNotifications = true
@@ -126,17 +127,21 @@ struct SettingsView: View {
                     // Support Section
                     Section {
                         Button(action: {
-                            showTerms = true
+                            if let url = URL(string: "https://emvolvovsky-bot.github.io/sioreexcodeproj/terms.html") {
+                                openURL(url)
+                            }
                         }) {
                             SettingsRow(icon: "doc.text", title: "Terms of Service", color: .sioreeLightGrey)
                         }
-                        
+
                         Button(action: {
-                            showPrivacy = true
+                            if let url = URL(string: "https://emvolvovsky-bot.github.io/sioreexcodeproj/privacy_policy.html") {
+                                openURL(url)
+                            }
                         }) {
                             SettingsRow(icon: "hand.raised", title: "Privacy Policy", color: .sioreeLightGrey)
                         }
-                        
+
                         Button(action: {
                             showAbout = true
                         }) {

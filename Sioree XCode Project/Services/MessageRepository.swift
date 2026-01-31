@@ -80,8 +80,25 @@ final class MessageRepository {
                 msg.setValue("sent", forKey: "status")
 
                 try ctx.save()
-                // Notify UI that a server message was upserted/updated locally
+                // Also update conversation's updatedAt / lastMessage so inbox ordering changes
                 if let convId = msg.value(forKey: "conversationId") as? String {
+                    // compute ISO timestamp from createdAt (if available)
+                    var isoTimestamp: String? = nil
+                    if let ts = msg.value(forKey: "createdAt") as? Date {
+                        let fmt = ISO8601DateFormatter()
+                        fmt.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                        isoTimestamp = fmt.string(from: ts)
+                    } else if let createdAtStr = messageDict["timestamp"] as? String {
+                        isoTimestamp = createdAtStr
+                    }
+
+                    // Pass minimal conversation dict to upsert updatedAt and lastMessage
+                    var convDict: [String: Any] = ["id": convId]
+                    if let iso = isoTimestamp { convDict["updatedAt"] = iso }
+                    if let lastMsg = messageDict["text"] as? String { convDict["lastMessage"] = lastMsg }
+                    ConversationRepository.shared.upsertConversation(convDict: convDict)
+
+                    // Notify UI that a server message was upserted/updated locally
                     NotificationCenter.default.post(name: .messageUpserted, object: nil, userInfo: ["conversationId": convId])
                 }
             } catch {
@@ -108,7 +125,7 @@ final class MessageRepository {
                 let ts = obj.value(forKey: "createdAt") as? Date ?? Date()
                 let isRead = obj.value(forKey: "isRead") as? Bool ?? false
                 let messageType = obj.value(forKey: "messageType") as? String ?? "text"
-                let message = Message(id: id, conversationId: conversationId, senderId: senderId, receiverId: receiverId, text: text, timestamp: ts, isRead: isRead, messageType: messageType)
+                let message = Message(id: id, conversationId: conversationId, senderId: senderId, receiverId: receiverId, text: text, timestamp: ts, isRead: isRead, messageType: messageType, reaction: nil)
                 out.append(message)
             }
             return out

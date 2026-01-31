@@ -270,5 +270,31 @@ class StorageService {
             return []
         }
     }
+
+    // MARK: - Avatar metadata (versioning and last-check timestamps)
+    private func avatarVersionKey(forUserId userId: String) -> String {
+        return "avatarVersion:\(userId)"
+    }
+
+    private func avatarLastCheckKey(forUserId userId: String) -> String {
+        return "avatarLastCheck:\(userId)"
+    }
+
+    func saveAvatarVersion(_ version: String?, forUserId userId: String) {
+        userDefaults.set(version, forKey: avatarVersionKey(forUserId: userId))
+    }
+
+    func getAvatarVersion(forUserId userId: String) -> String? {
+        return userDefaults.string(forKey: avatarVersionKey(forUserId: userId))
+    }
+
+    func saveLastAvatarCheckAt(_ date: Date, forUserId userId: String) {
+        userDefaults.set(date.timeIntervalSince1970, forKey: avatarLastCheckKey(forUserId: userId))
+    }
+
+    func getLastAvatarCheckAt(forUserId userId: String) -> Date? {
+        guard let ts = userDefaults.object(forKey: avatarLastCheckKey(forUserId: userId)) as? TimeInterval else { return nil }
+        return Date(timeIntervalSince1970: ts)
+    }
 }
 

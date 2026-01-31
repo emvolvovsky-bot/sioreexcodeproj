@@ -56,7 +56,7 @@ struct MessageView: View {
                     
                     // Input
                     HStack(spacing: Theme.Spacing.s) {
-                        TextField("Type a message...", text: $messageText, axis: .vertical)
+                        TextField("Message...", text: $messageText, axis: .vertical)
                             .font(.sioreeBody)
                             .foregroundColor(.sioreeWhite)
                             .padding(Theme.Spacing.m)
@@ -131,16 +131,8 @@ struct MessageBubble: View {
             }
             
             VStack(alignment: message.isFromCurrentUser ? .trailing : .leading, spacing: Theme.Spacing.xs) {
-                Text(message.text)
-                    .font(.sioreeBody)
-                    .foregroundColor(message.isFromCurrentUser ? Color.sioreeWhite : Color.sioreeWhite)
-                    .padding(Theme.Spacing.m)
-                    .background(message.isFromCurrentUser ? Color.sioreeIcyBlue : Color.sioreeLightGrey.opacity(0.2))
-                    .cornerRadius(Theme.CornerRadius.medium)
-                
-                Text(message.timestamp.formatted(date: .omitted, time: .shortened))
-                    .font(.sioreeCaption)
-                    .foregroundColor(Color.sioreeLightGrey)
+                // Message text with long-press reactions
+                MessageTextBubble(text: message.text, isFromCurrentUser: message.isFromCurrentUser)
             }
             .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: message.isFromCurrentUser ? .trailing : .leading)
             
@@ -148,6 +140,19 @@ struct MessageBubble: View {
                 Spacer()
             }
         }
+    }
+}
+
+private struct MessageTextBubble: View {
+    let text: String
+    let isFromCurrentUser: Bool
+    var body: some View {
+        Text(text)
+            .font(.sioreeBody)
+            .foregroundColor(.sioreeWhite)
+            .padding(Theme.Spacing.m)
+            .background(isFromCurrentUser ? Color.sioreeIcyBlue : Color.sioreeLightGrey.opacity(0.2))
+            .cornerRadius(Theme.CornerRadius.medium)
     }
 }
 

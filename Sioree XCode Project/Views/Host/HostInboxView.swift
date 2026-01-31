@@ -38,7 +38,6 @@ struct HostInboxView: View {
     @State private var selectedConversation: Conversation?
     @State private var errorMessage: String?
     @State private var showSearch = false
-    @State private var showCreateGroup = false
     @State private var chatSearchText = ""
     
     var body: some View {
@@ -82,13 +81,6 @@ struct HostInboxView: View {
                                         HostConversationRow(conversation: conversation)
                                     }
                                     .buttonStyle(PlainButtonStyle())
-                                    .swipeActions(edge: .trailing) {
-                                        Button(role: .destructive) {
-                                            deleteConversation(conversation)
-                                        } label: {
-                                            Label("Delete", systemImage: "trash")
-                                        }
-                                    }
                                     .padding(.horizontal, Theme.Spacing.l)
                                 }
                             }
@@ -103,9 +95,6 @@ struct HostInboxView: View {
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showSearch) {
                 UserSearchView()
-            }
-            .sheet(isPresented: $showCreateGroup) {
-                CreateGroupChatView()
             }
             .sheet(item: $selectedConversation) { conversation in
                 RealMessageView(conversation: conversation)
@@ -132,17 +121,20 @@ struct HostInboxView: View {
             .onAppear {
                 // Always render from local cache first (no loading UI)
                 let local = ConversationRepository.shared.fetchConversationsLocally()
-                if !local.isEmpty {
-                    self.conversations = local
-                } else {
-                    // First-run: fetch from network but don't show loading UI
-                    loadConversations(showLoading: false)
-                }
-                // Trigger background delta sync
-                SyncManager.shared.syncConversationsDelta()
+                // Ensure local conversations are ordered newest-first
+                self.conversations = local.sorted { $0.lastMessageTime > $1.lastMessageTime }
+                // Do not trigger network fetch here — conversations are synced after login
             }
             .onReceive(NotificationCenter.default.publisher(for: .refreshInbox)) { _ in
                 // Background refresh without blocking UI
+                loadConversations(showLoading: false)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .messageUpserted)) { _ in
+                // New message arrived — refresh inbox so conversation moves to top
+                loadConversations(showLoading: false)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .messageSavedLocally)) { _ in
+                // Local pending message saved — refresh inbox
                 loadConversations(showLoading: false)
             }
         }
@@ -181,24 +173,11 @@ struct HostInboxView: View {
         let query = trimmedQuery.lowercased()
         return conversations.filter { conversation in
             conversation.participantName.lowercased().contains(query)
-                || conversation.lastMessage.lowercased().contains(query)
         }
     }
 
     private var inboxSearchHeader: some View {
         HStack(spacing: Theme.Spacing.s) {
-            Button(action: {
-                showCreateGroup = true
-            }) {
-                Image(systemName: "person.2.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.sioreeIcyBlue)
-                    .frame(width: 34, height: 34)
-                    .background(Color.sioreeIcyBlue.opacity(0.15))
-                    .clipShape(Circle())
-            }
-            .accessibilityLabel("Create group chat")
-            
             HStack(spacing: Theme.Spacing.s) {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(Color.sioreeLightGrey.opacity(0.8))
@@ -335,10 +314,6 @@ struct HostConversationRow: View {
                     }
                 }
                 
-                Text(conversation.lastMessage)
-                    .font(.sioreeBodySmall)
-                    .foregroundColor(conversation.unreadCount > 0 ? Color.sioreeWhite.opacity(0.9) : Color.sioreeLightGrey.opacity(0.7))
-                    .lineLimit(1)
             }
             
             Spacer()
@@ -425,7 +400,7 @@ struct HostMessageView: View {
                     
                     // Input
                     HStack(spacing: Theme.Spacing.s) {
-                        TextField("Type a message...", text: $messageText, axis: .vertical)
+                        TextField("Message...", text: $messageText, axis: .vertical)
                             .font(.sioreeBody)
                             .foregroundColor(.sioreeWhite)
                             .padding(Theme.Spacing.m)

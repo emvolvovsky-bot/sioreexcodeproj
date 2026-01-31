@@ -136,6 +136,8 @@ class ProfileViewModel: ObservableObject {
                     },
                     receiveValue: { [weak self] user in
                         self?.user = user
+                        // Handle avatar cache/versioning
+                        self?.handleAvatarCaching(for: user, isCurrentUser: self?.userId == nil || self?.userId == StorageService.shared.getUserId())
                         // Use locally cached counts immediately when available
                         if let uid = self?.user?.id,
                            let cachedFollowers = self?.storageService.getFollowerCount(forUserId: uid) {
@@ -172,6 +174,8 @@ class ProfileViewModel: ObservableObject {
                     },
                     receiveValue: { [weak self] user in
                         self?.user = user
+                        // Handle avatar cache/versioning for profile being viewed
+                        self?.handleAvatarCaching(for: user, isCurrentUser: self?.userId == nil || self?.userId == StorageService.shared.getUserId())
                         // Use locally cached counts immediately when available
                         if let uid = self?.user?.id,
                            let cachedFollowers = self?.storageService.getFollowerCount(forUserId: uid) {
@@ -440,6 +444,79 @@ class ProfileViewModel: ObservableObject {
                 }
             )
             .store(in: &cancellables)
+    }
+
+    // MARK: - Avatar caching/versioning
+    private func handleAvatarCaching(for user: User, isCurrentUser: Bool) {
+        guard let avatarUrl = user.avatar, !avatarUrl.isEmpty else { return }
+        let uid = user.id
+        let serverVersion = user.avatarVersion
+
+        // Always check server for current user when profile opens
+        if isCurrentUser {
+            // If server provided version and it differs, fetch immediately
+            let cachedVersion = StorageService.shared.getAvatarVersion(forUserId: uid)
+            if serverVersion != nil && serverVersion != cachedVersion {
+                fetchAndStoreAvatar(avatarUrl: avatarUrl, userId: uid, version: serverVersion)
+            } else if cachedVersion == nil {
+                // No cached version present — fetch once to populate cache
+                fetchAndStoreAvatar(avatarUrl: avatarUrl, userId: uid, version: serverVersion)
+            } else {
+                // update last check time
+                StorageService.shared.saveLastAvatarCheckAt(Date(), forUserId: uid)
+            }
+            return
+        }
+
+        // For other users: only re-check if at least 5 minutes have passed since last check
+        if let lastCheck = StorageService.shared.getLastAvatarCheckAt(forUserId: uid),
+           Date().timeIntervalSince(lastCheck) < 5 * 60 {
+            // Too soon to re-check
+            return
+        }
+
+        // Compare serverVersion with cached version (if provided)
+        let cachedVersion = StorageService.shared.getAvatarVersion(forUserId: uid)
+        if serverVersion != nil {
+            if serverVersion != cachedVersion {
+                fetchAndStoreAvatar(avatarUrl: avatarUrl, userId: uid, version: serverVersion)
+            } else {
+                // versions match; just update last check timestamp
+                StorageService.shared.saveLastAvatarCheckAt(Date(), forUserId: uid)
+            }
+        } else {
+            // No server version provided — do a lightweight fetch to ensure we have the image (but still respect 5-minute rule)
+            if ImageCache.shared.getAvatarImage(for: uid, version: nil) == nil {
+                fetchAndStoreAvatar(avatarUrl: avatarUrl, userId: uid, version: nil)
+            } else {
+                StorageService.shared.saveLastAvatarCheckAt(Date(), forUserId: uid)
+            }
+        }
+    }
+
+    private func fetchAndStoreAvatar(avatarUrl: String, userId: String, version: String?) {
+        // Build URL with version query param if provided
+        guard var comps = URLComponents(string: avatarUrl) else { return }
+        if let v = version, !v.isEmpty {
+            var query = comps.queryItems ?? []
+            query.append(URLQueryItem(name: "v", value: v))
+            comps.queryItems = query
+        }
+        guard let url = comps.url else { return }
+
+        // Try to load via URLSession
+        URLSession.shared.dataTask(with: url) { data, response, error in
+            defer {
+                StorageService.shared.saveLastAvatarCheckAt(Date(), forUserId: userId)
+            }
+            guard let data = data, error == nil else { return }
+            // Persist to disk + memory cache
+            ImageCache.shared.storeAvatarData(data, for: userId, version: version)
+            // Save version metadata if present
+            if let v = version {
+                StorageService.shared.saveAvatarVersion(v, forUserId: userId)
+            }
+        }.resume()
     }
 }
 

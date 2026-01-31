@@ -68,24 +68,36 @@ class ImageCache {
         }
     }
 
-    // Avatar helpers - store avatar by userId for deterministic lookup
-    func avatarURL(for userId: String) -> URL {
-        return cacheDirectory.appendingPathComponent("avatars").appendingPathComponent("\(userId).jpg")
+    // Avatar helpers - store avatar by userId + version for deterministic lookup.
+    // Filenames: avatars/<userId>_v<version>.jpg
+    func avatarFileURL(for userId: String, version: String?) -> URL {
+        let avatarsDir = cacheDirectory.appendingPathComponent("avatars")
+        if let v = version, !v.isEmpty {
+            let safe = "\(userId)_v\(v).jpg"
+            return avatarsDir.appendingPathComponent(safe)
+        } else {
+            return avatarsDir.appendingPathComponent("\(userId).jpg")
+        }
     }
 
-    func storeAvatarData(_ data: Data, for userId: String) {
-        let fileURL = avatarURL(for: userId)
+    func storeAvatarData(_ data: Data, for userId: String, version: String?) {
+        let fileURL = avatarFileURL(for: userId, version: version)
         DispatchQueue.global(qos: .background).async {
             try? data.write(to: fileURL)
             if let image = UIImage(data: data) {
                 let key = fileURL.absoluteString as NSString
                 self.cache.setObject(image, forKey: key)
+                // Notify UI that avatar updated for this user so views can reload
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(name: .avatarUpdated, object: nil, userInfo: ["userId": userId, "version": version ?? ""])
+                }
             }
         }
     }
 
-    func getAvatarImage(for userId: String) -> UIImage? {
-        let fileURL = avatarURL(for: userId)
+    func getAvatarImage(for userId: String, version: String?) -> UIImage? {
+        // Try versioned file first
+        let fileURL = avatarFileURL(for: userId, version: version)
         let key = fileURL.absoluteString as NSString
         if let img = cache.object(forKey: key) {
             return img
@@ -94,6 +106,20 @@ class ImageCache {
             cache.setObject(image, forKey: key)
             return image
         }
+
+        // Fallback to non-versioned avatar file
+        if version != nil {
+            let fallbackURL = avatarFileURL(for: userId, version: nil)
+            let fallbackKey = fallbackURL.absoluteString as NSString
+            if let img = cache.object(forKey: fallbackKey) {
+                return img
+            }
+            if let data = try? Data(contentsOf: fallbackURL), let image = UIImage(data: data) {
+                cache.setObject(image, forKey: fallbackKey)
+                return image
+            }
+        }
+
         return nil
     }
 
@@ -194,18 +220,63 @@ extension CachedAsyncImage where Content == Image {
 
 // Helper extension to convert SwiftUI Image to UIImage
 extension Image {
-    @MainActor
-    func asUIImage() -> UIImage? {
-        let controller = UIHostingController(rootView: self)
-        guard let view = controller.view else { return nil }
+    func asUIImage(maxDimension: CGFloat = 2048) -> UIImage? {
+        // Helper that performs all UIKit/view work on the main thread synchronously.
+        func renderOnMain() -> UIImage? {
+            let controller = UIHostingController(rootView: self)
+            guard let view = controller.view else { return nil }
 
-        let targetSize = view.intrinsicContentSize
-        view.bounds = CGRect(origin: .zero, size: targetSize)
-        view.backgroundColor = .clear
+            // Ensure the view has a chance to layout its content
+            view.setNeedsLayout()
+            view.layoutIfNeeded()
 
-        let renderer = UIGraphicsImageRenderer(size: targetSize)
-        return renderer.image { _ in
-            view.drawHierarchy(in: view.bounds, afterScreenUpdates: true)
+            // Start with intrinsic content size but fall back if it's invalid
+            var targetSize = view.intrinsicContentSize
+            if targetSize.width <= 0 || targetSize.height <= 0 {
+                targetSize = view.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
+                if targetSize.width <= 0 || targetSize.height <= 0 {
+                    // Last resort: small default size to avoid huge allocations
+                    targetSize = CGSize(width: 100, height: 100)
+                }
+            }
+
+            // Cap logical dimensions to avoid excessive memory use
+            let cappedWidth = min(maxDimension, max(1, targetSize.width))
+            let cappedHeight = min(maxDimension, max(1, targetSize.height))
+            var cappedSize = CGSize(width: cappedWidth, height: cappedHeight)
+
+            // Also ensure pixel dimensions aren't astronomical (consider screen scale)
+            let scale = UIScreen.main.scale
+            let maxPixelDim: CGFloat = 8192 // conservative maximum per-dimension in pixels
+            let pixelWidth = cappedSize.width * scale
+            let pixelHeight = cappedSize.height * scale
+            if pixelWidth > maxPixelDim || pixelHeight > maxPixelDim {
+                let factor = min(maxPixelDim / pixelWidth, maxPixelDim / pixelHeight)
+                cappedSize = CGSize(width: cappedSize.width * factor, height: cappedSize.height * factor)
+            }
+
+            view.bounds = CGRect(origin: .zero, size: cappedSize)
+            view.backgroundColor = .clear
+
+            let renderer = UIGraphicsImageRenderer(size: cappedSize)
+            return renderer.image { _ in
+                view.drawHierarchy(in: view.bounds, afterScreenUpdates: true)
+            }
+        }
+
+        if Thread.isMainThread {
+            return renderOnMain()
+        } else {
+            var image: UIImage?
+            DispatchQueue.main.sync {
+                image = renderOnMain()
+            }
+            return image
         }
     }
+}
+
+// Notification names for avatar updates
+extension Notification.Name {
+    static let avatarUpdated = Notification.Name("AvatarUpdatedNotification")
 }

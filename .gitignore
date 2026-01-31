@@ -115,4 +115,4 @@ Skeleton Backend/sioree-backend/node_modules/
 # Setup guides with sensitive information
 STRIPE_SETUP_GUIDE.md
 # Master API key file
-Sioree XCode Project/sioree_master_word.txt
+Sioree XCode Project/Models/sioree_master_word.txt

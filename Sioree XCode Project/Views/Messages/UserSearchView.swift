@@ -250,12 +250,12 @@ struct UserSearchRow: View {
             
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 HStack(spacing: Theme.Spacing.xs) {
-                    Text(firstName)
+                    Text("\(firstName)\(lastName.isEmpty ? "" : " \(lastName)")")
                         .font(.sioreeBody)
                         .foregroundColor(.sioreeWhite)
                         .lineLimit(1)
                         .truncationMode(.tail)
-                    
+
                     if user.verified {
                         Image(systemName: "checkmark.seal.fill")
                             .font(.system(size: 14))
@@ -263,25 +263,10 @@ struct UserSearchRow: View {
                     }
                 }
                 
-                if !lastName.isEmpty {
-                    Text(lastName)
-                        .font(.sioreeBody)
-                        .foregroundColor(.sioreeWhite)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
-                
                 Text("@\(user.username)")
                     .font(.sioreeBodySmall)
                     .foregroundColor(.sioreeLightGrey)
                     .lineLimit(1)
-                
-                if let bio = user.bio, !bio.isEmpty {
-                    Text(bio)
-                        .font(.sioreeCaption)
-                        .foregroundColor(.sioreeLightGrey)
-                        .lineLimit(1)
-                }
             }
             
             Spacer()
@@ -329,21 +314,16 @@ struct UserSearchRow: View {
                     }
                 }
                 
-                // Follow/Unfollow Button
+                // Follow/Unfollow Button (icons only in inbox user search) — small rounded icon like message button
                 Button(action: {
                     toggleFollow()
                 }) {
-                    Text(isFollowing ? "Following" : "Follow")
-                        .font(.sioreeBody)
-                        .fontWeight(.semibold)
+                    Image(systemName: isFollowing ? "person.fill.checkmark" : "person.badge.plus")
+                        .font(.system(size: 18, weight: .semibold))
                         .foregroundColor(isFollowing ? .sioreeWhite : .sioreeIcyBlue)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                        .frame(minWidth: 108, minHeight: 38)
-                        .padding(.horizontal, Theme.Spacing.s)
-                        .padding(.vertical, Theme.Spacing.xs)
+                        .frame(width: 36, height: 36)
                         .background(isFollowing ? Color.sioreeIcyBlue : Color.sioreeIcyBlue.opacity(0.1))
-                        .cornerRadius(Theme.CornerRadius.medium)
+                        .cornerRadius(18)
                 }
                 .disabled(isRequesting)
             }

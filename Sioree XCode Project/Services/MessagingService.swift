@@ -17,6 +17,8 @@ struct Message: Identifiable, Codable {
     let timestamp: Date
     let isRead: Bool
     let messageType: String // "text", "image", "event_invite"
+    // Optional reaction (emoji) set by users locally or from server
+    let reaction: String?
 }
 
 struct Conversation: Identifiable, Codable {
@@ -239,7 +241,8 @@ class MessagingService: ObservableObject {
                         text: text,
                         timestamp: Date(),
                         isRead: false,
-                        messageType: "text"
+                        messageType: "text",
+                        reaction: nil
                     )
                     promise(.success(message))
                 }

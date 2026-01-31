@@ -61,17 +61,24 @@ class ImageService {
 extension ImageService {
     // Return a local avatar file URL if present for userId
     func localAvatarPath(for userId: String) -> URL? {
-        let fileURL = ImageCache.shared.avatarURL(for: userId)
+        // Try versioned file first if we have stored version metadata
+        let version = StorageService.shared.getAvatarVersion(forUserId: userId)
+        let fileURL = ImageCache.shared.avatarFileURL(for: userId, version: version)
         if FileManager.default.fileExists(atPath: fileURL.path) {
             return fileURL
+        }
+        // Fallback to non-versioned avatar
+        let fallback = ImageCache.shared.avatarFileURL(for: userId, version: nil)
+        if FileManager.default.fileExists(atPath: fallback.path) {
+            return fallback
         }
         return nil
     }
     
     // Save avatar bytes (e.g., base64 decoded) to disk cache and return URL
-    func saveAvatarData(_ data: Data, for userId: String) -> URL? {
-        ImageCache.shared.storeAvatarData(data, for: userId)
-        let fileURL = ImageCache.shared.avatarURL(for: userId)
+    func saveAvatarData(_ data: Data, for userId: String, version: String? = nil) -> URL? {
+        ImageCache.shared.storeAvatarData(data, for: userId, version: version)
+        let fileURL = ImageCache.shared.avatarFileURL(for: userId, version: version)
         return FileManager.default.fileExists(atPath: fileURL.path) ? fileURL : nil
     }
 }

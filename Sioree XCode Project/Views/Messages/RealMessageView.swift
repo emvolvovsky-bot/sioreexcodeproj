@@ -53,6 +53,36 @@ struct RealMessageView: View {
                     }
                 } else {
                     VStack(spacing: 0) {
+                        // Custom header (back button left, centered name)
+                        HStack {
+                            Button(action: { dismiss() }) {
+                                Image(systemName: "chevron.left")
+                                    .font(.system(size: 18))
+                                    .foregroundColor(.sioreeIcyBlue)
+                                    .padding(8) // tappable area without visible background
+                            }
+                            .contentShape(Rectangle())
+
+                            Spacer()
+
+                            Text(conversation.participantName.isEmpty ? "Message" : conversation.participantName)
+                                .font(.sioreeH3)
+                                .foregroundColor(.sioreeWhite)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                                .frame(maxWidth: .infinity)
+
+                            Spacer()
+
+                            // Keep a same-size placeholder to balance layout (matches back button size)
+                            Image(systemName: "chevron.left")
+                                .opacity(0)
+                                .padding(8)
+                                .frame(width: 44, alignment: .trailing)
+                        }
+                        .padding(.horizontal, Theme.Spacing.l)
+                        .padding(.vertical, Theme.Spacing.s)
+
                         // Messages
                         ScrollViewReader { proxy in
                             ScrollView {
@@ -103,7 +133,7 @@ struct RealMessageView: View {
                         
                         // Input
                         HStack(spacing: Theme.Spacing.s) {
-                            TextField("Type a message...", text: $messageText, axis: .vertical)
+                            TextField("Message...", text: $messageText, axis: .vertical)
                                 .font(.sioreeBody)
                                 .foregroundColor(.sioreeWhite)
                                 .padding(Theme.Spacing.m)
@@ -126,16 +156,7 @@ struct RealMessageView: View {
                     }
                 }
             }
-            .navigationTitle(conversation.participantName.isEmpty ? "Message" : conversation.participantName)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                    .foregroundColor(.sioreeIcyBlue)
-                }
-            }
+            .navigationBarHidden(true)
             .onAppear {
                 // Render from local cache first
                 if !conversation.participantId.isEmpty && !conversation.id.isEmpty {
@@ -146,8 +167,7 @@ struct RealMessageView: View {
                         // Fallback to network if no local messages
                         loadMessagesFromNetwork()
                     }
-                    // Trigger background delta sync
-                    SyncManager.shared.syncConversationsDelta()
+                    // Do not trigger background sync here — sync is performed only after login
                     markAsRead()
                 } else {
                     errorMessage = "Invalid conversation data"

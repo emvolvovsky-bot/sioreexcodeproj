@@ -179,8 +179,19 @@ struct InboxProfileView: View {
     }
     
     private func startConversation() {
-        // Open the composer. Do not create a conversation until a message is sent.
-        showCreateConversation = true
+        // Open or create a 1:1 conversation and present it immediately (same behavior as inbox message icon)
+        MessagingService.shared.getOrCreateConversation(with: userId)
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { completion in
+                if case .failure(let error) = completion {
+                    print("❌ Failed to get/create conversation: \(error.localizedDescription)")
+                    // Fallback to composer if conversation creation fails
+                    showCreateConversation = true
+                }
+            }, receiveValue: { conversation in
+                self.selectedConversation = conversation
+            })
+            .store(in: &cancellables)
     }
     
     private func loadAttendedEvents() {

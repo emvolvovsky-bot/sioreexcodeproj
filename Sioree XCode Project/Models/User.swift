@@ -20,6 +20,7 @@ struct User: Identifiable, Codable, Equatable {
     var name: String
     var bio: String?
     var avatar: String?
+    var avatarVersion: String?
     var userType: UserType
     var location: String?
     var verified: Bool
@@ -38,6 +39,8 @@ struct User: Identifiable, Codable, Equatable {
         case name
         case bio
         case avatar
+        case avatarVersion
+        case avatarUpdatedAt = "avatar_updated_at"
         case userType
         case role
         case location
@@ -68,6 +71,12 @@ struct User: Identifiable, Codable, Equatable {
         name = try container.decode(String.self, forKey: .name)
         bio = try container.decodeIfPresent(String.self, forKey: .bio)
         avatar = try container.decodeIfPresent(String.self, forKey: .avatar)
+        // New optional avatarVersion field (backend may provide either `avatarVersion` or `avatar_updated_at`)
+        avatarVersion = try container.decodeIfPresent(String.self, forKey: .avatarVersion)
+        if avatarVersion == nil {
+            // try alternative key which some backends may use
+            avatarVersion = try container.decodeIfPresent(String.self, forKey: .avatarUpdatedAt)
+        }
         
         // Handle userType as string
         if let userTypeString = try? container.decode(String.self, forKey: .userType),

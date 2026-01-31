@@ -14,8 +14,10 @@ struct ProfileHeaderView: View {
         VStack(spacing: Theme.Spacing.m) {
             AvatarView(
                 imageURL: user.avatar,
+                userId: user.id,
                 size: .large,
-                showBorder: user.verified
+                showBorder: user.verified,
+                avatarVersion: user.avatarVersion
             )
             
             VStack(spacing: Theme.Spacing.xs) {

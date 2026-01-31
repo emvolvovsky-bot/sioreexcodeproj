@@ -47,8 +47,10 @@ struct InstagramStyleProfileHeader: View {
                 // Profile photo on left
                 AvatarView(
                     imageURL: user.avatar,
+                    userId: user.id,
                     size: .large,
-                    showBorder: user.verified
+                    showBorder: user.verified,
+                    avatarVersion: user.avatarVersion
                 )
                 .frame(width: 90, height: 90)
                 

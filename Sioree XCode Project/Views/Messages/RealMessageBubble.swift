@@ -30,37 +30,10 @@ struct RealMessageBubble: View {
                         .italic()
                         .padding(Theme.Spacing.m)
                 } else {
-                    Text(message.text)
-                        .font(.sioreeBody)
-                        .foregroundColor(isFromCurrentUser ? Color.sioreeWhite : Color.sioreeWhite)
-                        .padding(Theme.Spacing.m)
-                        .background(
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .fill(isFromCurrentUser ? Color.sioreeIcyBlue : Color.sioreeLightGrey.opacity(0.15))
-                                .background(
-                                    .ultraThinMaterial.opacity(0.3),
-                                    in: RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                        .stroke(
-                                            isFromCurrentUser ? Color.sioreeIcyBlue.opacity(0.4) : Color.white.opacity(0.1),
-                                            lineWidth: 1
-                                        )
-                                )
-                                .shadow(
-                                    color: isFromCurrentUser ? Color.sioreeIcyBlue.opacity(0.3) : Color.black.opacity(0.2),
-                                    radius: isFromCurrentUser ? 12 : 8,
-                                    x: 0,
-                                    y: 4
-                                )
-                        )
+                    // Message text with long-press reactions support
+                    MessageTextBubble(text: message.text, isFromCurrentUser: isFromCurrentUser)
                 }
-                
-                Text(message.timestamp.formatted(date: .omitted, time: .shortened))
-                    .font(.sioreeCaption)
-                    .foregroundColor(Color.sioreeLightGrey.opacity(0.8))
-                    .padding(.horizontal, 4)
+                // reactions intentionally removed (no UI)
             }
             .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: isFromCurrentUser ? .trailing : .leading)
             
@@ -71,12 +44,33 @@ struct RealMessageBubble: View {
     }
 }
 
+// Small reusable view for the message text that supports long-press reactions
+private struct MessageTextBubble: View {
+    let text: String
+    let isFromCurrentUser: Bool
+
+    var body: some View {
+        let bgColor = isFromCurrentUser ? Color.sioreeIcyBlue : Color.sioreeLightGrey.opacity(0.15)
+        let strokeColor = isFromCurrentUser ? Color.sioreeIcyBlue.opacity(0.4) : Color.white.opacity(0.1)
+        let shadowColor = isFromCurrentUser ? Color.sioreeIcyBlue.opacity(0.3) : Color.black.opacity(0.2)
+
+        Text(text)
+            .font(.sioreeBody)
+            .foregroundColor(Color.sioreeWhite)
+            .padding(Theme.Spacing.m)
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(bgColor))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(strokeColor, lineWidth: 1))
+            .shadow(color: shadowColor, radius: isFromCurrentUser ? 12 : 8, x: 0, y: 4)
+    }
+}
+
 // Swipeable message bubble with delete functionality
 struct SwipeableMessageBubble: View {
     let message: Message
     let onDelete: () -> Void
     
     @State private var dragOffset: CGFloat = 0
+    @State private var showTimestamp: Bool = false
     @State private var isDeleting = false
     private let currentUserId = StorageService.shared.getUserId() ?? ""
     
@@ -89,61 +83,58 @@ struct SwipeableMessageBubble: View {
         isFromCurrentUser && message.messageType != "deleted" && message.text != "[Message deleted]"
     }
     
+    // Feature flag: disable swipe-to-delete UI (keeps delete API intact)
+    private let allowSwipeDelete = false
+    
     var body: some View {
         ZStack(alignment: .trailing) {
-            // Delete button background (only visible when swiped)
-            if canDelete && dragOffset < -50 {
-                HStack {
-                    Spacer()
-                    Button(action: {
-                        withAnimation {
-                            isDeleting = true
-                        }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                            onDelete()
-                        }
-                    }) {
-                        Image(systemName: "trash")
-                            .font(.system(size: 20))
-                            .foregroundColor(.white)
-                            .frame(width: 60, height: 60)
-                            .background(Color.red)
-                            .cornerRadius(Theme.CornerRadius.medium)
-                    }
-                    .padding(.trailing, Theme.Spacing.m)
-                }
-            }
+            // Delete button background removed (swipe-to-delete disabled)
             
+            // Timestamp badge shown when user swipes right
+            if showTimestamp {
+                HStack {
+                    Text(message.timestamp.formatted(date: .omitted, time: .shortened))
+                        .font(.sioreeCaption)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.black.opacity(0.7))
+                        .cornerRadius(12)
+                        .padding(.leading, Theme.Spacing.m)
+                    Spacer()
+                }
+                .transition(.move(edge: .leading).combined(with: .opacity))
+            }
+
             // Message bubble
             RealMessageBubble(message: message)
-                .offset(x: canDelete ? dragOffset : 0)
+                .offset(x: dragOffset)
                 .opacity(isDeleting ? 0 : 1)
                 .gesture(
                     DragGesture()
                         .onChanged { value in
-                            if canDelete {
-                                // Only allow swiping left (negative offset)
-                                if value.translation.width < 0 {
-                                    dragOffset = value.translation.width
-                                }
+                            // Only allow right-swipe for timestamp preview. Left-swipe is ignored to prevent delete.
+                            if value.translation.width > 0 {
+                                dragOffset = value.translation.width
+                            } else {
+                                // ignore left drag
+                                dragOffset = 0
                             }
                         }
                         .onEnded { value in
-                            if canDelete {
-                                if value.translation.width < -100 {
-                                    // Swiped far enough, trigger delete
-                                    withAnimation {
-                                        dragOffset = -200
-                                        isDeleting = true
-                                    }
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                                        onDelete()
-                                    }
-                                } else {
-                                    // Spring back
-                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                        dragOffset = 0
-                                    }
+                            if value.translation.width > 60 {
+                                // Swiped right enough: toggle timestamp display
+                                withAnimation(.spring()) {
+                                    showTimestamp.toggle()
+                                }
+                                // spring back visually
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                    dragOffset = 0
+                                }
+                            } else {
+                                // Spring back
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                    dragOffset = 0
                                 }
                             }
                         }
@@ -163,6 +154,7 @@ struct SwipeableMessageBubble: View {
             timestamp: Date(),
             isRead: false,
             messageType: "text"
+            , reaction: nil
         ))
         
         RealMessageBubble(message: Message(
@@ -174,6 +166,7 @@ struct SwipeableMessageBubble: View {
             timestamp: Date(),
             isRead: false,
             messageType: "text"
+            , reaction: nil
         ))
     }
     .padding()

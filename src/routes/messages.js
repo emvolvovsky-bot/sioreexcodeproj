@@ -49,7 +49,7 @@ router.get("/conversations", async (req, res) => {
         END
       )
       LEFT JOIN LATERAL (
-        SELECT text, created_at, is_read, sender_id
+        SELECT COALESCE(text, content) AS text, created_at, is_read, sender_id
         FROM messages
         WHERE conversation_id = c.id
         ORDER BY created_at DESC
@@ -153,7 +153,7 @@ router.get("/:conversationId", async (req, res) => {
         timestamp: new Date(row.created_at).toISOString(),
         isRead: row.is_read || false,
         messageType: row.message_type || "text"
-      })).reversed();
+      })).reverse();
 
       res.json({ messages, hasMore: result.rows.length === limit });
     }
@@ -271,6 +271,14 @@ router.post("/", async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, false, $6) RETURNING *`,
       [convId, userId, receiver, text, messageType || "text", clientTempId || null]
     );
+
+    // Ensure conversation updated_at reflects the new message so clients listing conversations
+    // will consistently see the message as the latest item.
+    try {
+      await db.query(`UPDATE conversations SET updated_at = NOW() WHERE id = $1`, [convId]);
+    } catch (e) {
+      console.error("Failed to update conversation timestamp:", e);
+    }
 
     const message = result.rows[0];
     res.json({

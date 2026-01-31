@@ -490,6 +490,7 @@ extension Notification.Name {
         // Messaging notifications
         static let messageSavedLocally = Notification.Name("MessageSavedLocally")
         static let messageUpserted = Notification.Name("MessageUpserted")
+    static let messageReactionAdded = Notification.Name("MessageReactionAdded")
         static let openConversation = Notification.Name("OpenConversation")
 }
 

@@ -105,13 +105,21 @@ io.on("connection", socket => {
 });
 
 const PORT = process.env.PORT || 4000;
-const HOST = process.env.HOST || "127.0.0.1";
-// Default to localhost to avoid EPERM in restricted environments.
-// Set HOST=0.0.0.0 explicitly if you need LAN access.
-server.listen(PORT, HOST, () => {
-  console.log(`✅ Server running on port ${PORT}`);
-  console.log(`🌐 Host: ${HOST}`);
-  console.log(`🌐 Accessible at: http://${HOST}:${PORT}`);
-});
+const HOST = process.env.HOST; // if unset, bind to all interfaces (OS default)
+// If you need to bind to IPv6/IPv4 specifically, set HOST environment variable
+if (HOST) {
+  server.listen(PORT, HOST, () => {
+    console.log(`✅ Server running on port ${PORT}`);
+    console.log(`🌐 Host: ${HOST}`);
+    console.log(`🌐 Accessible at: http://${HOST}:${PORT}`);
+  });
+} else {
+  server.listen(PORT, () => {
+    console.log(`✅ Server running on port ${PORT}`);
+    console.log(`🌐 Host: all interfaces`);
+    console.log(`🌐 Accessible at: http://127.0.0.1:${PORT} and http://[::1]:${PORT} (if OS supports IPv6)`);
+    console.log('Starting server:', __filename, 'cwd:', process.cwd(), 'dirname:', __dirname);
+  });
+}
 
 export { app, server };

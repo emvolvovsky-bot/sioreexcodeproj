@@ -15,7 +15,6 @@ struct TalentInboxView: View {
     @State private var selectedConversation: Conversation?
     @State private var errorMessage: String?
     @State private var showSearch = false
-    @State private var showCreateGroup = false
     @State private var chatSearchText = ""
     
     var body: some View {
@@ -59,13 +58,6 @@ struct TalentInboxView: View {
                                         TalentConversationRow(conversation: conversation)
                                     }
                                     .buttonStyle(PlainButtonStyle())
-                                    .swipeActions(edge: .trailing) {
-                                        Button(role: .destructive) {
-                                            deleteConversation(conversation)
-                                        } label: {
-                                            Label("Delete", systemImage: "trash")
-                                        }
-                                    }
                                     .padding(.horizontal, Theme.Spacing.l)
                                 }
                             }
@@ -80,9 +72,6 @@ struct TalentInboxView: View {
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showSearch) {
                 UserSearchView()
-            }
-            .sheet(isPresented: $showCreateGroup) {
-                CreateGroupChatView()
             }
             .sheet(item: $selectedConversation) { conversation in
                 RealMessageView(conversation: conversation)
@@ -108,14 +97,17 @@ struct TalentInboxView: View {
             }
             .onAppear {
                 let local = ConversationRepository.shared.fetchConversationsLocally()
-                if !local.isEmpty {
-                    self.conversations = local
-                } else {
-                    loadConversations(showLoading: false)
-                }
-                SyncManager.shared.syncConversationsDelta()
+                // Ensure local conversations are ordered newest-first
+                self.conversations = local.sorted { $0.lastMessageTime > $1.lastMessageTime }
+                // Do not trigger network fetch here — sync is performed only after login
             }
             .onReceive(NotificationCenter.default.publisher(for: .refreshInbox)) { _ in
+                loadConversations(showLoading: false)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .messageUpserted)) { _ in
+                loadConversations(showLoading: false)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .messageSavedLocally)) { _ in
                 loadConversations(showLoading: false)
             }
         }
@@ -154,24 +146,11 @@ struct TalentInboxView: View {
         let query = trimmedQuery.lowercased()
         return conversations.filter { conversation in
             conversation.participantName.lowercased().contains(query)
-                || conversation.lastMessage.lowercased().contains(query)
         }
     }
 
     private var inboxSearchHeader: some View {
         HStack(spacing: Theme.Spacing.s) {
-            Button(action: {
-                showCreateGroup = true
-            }) {
-                Image(systemName: "person.2.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.sioreeIcyBlue)
-                    .frame(width: 34, height: 34)
-                    .background(Color.sioreeIcyBlue.opacity(0.15))
-                    .clipShape(Circle())
-            }
-            .accessibilityLabel("Create group chat")
-            
             HStack(spacing: Theme.Spacing.s) {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(Color.sioreeLightGrey.opacity(0.8))
@@ -307,10 +286,6 @@ struct TalentConversationRow: View {
                     }
                 }
                 
-                Text(conversation.lastMessage)
-                    .font(.sioreeBodySmall)
-                    .foregroundColor(conversation.unreadCount > 0 ? Color.sioreeWhite.opacity(0.9) : Color.sioreeLightGrey.opacity(0.7))
-                    .lineLimit(1)
             }
             
             Spacer()

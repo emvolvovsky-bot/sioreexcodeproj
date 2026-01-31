@@ -525,8 +525,19 @@ struct UserProfileView: View {
     }
     
     private func startConversation() {
-        // Do not auto-create a conversation. Present the composer — create only when a message is sent.
-        showCreateConversation = true
+        // Open or create a 1:1 conversation and present it immediately
+        MessagingService.shared.getOrCreateConversation(with: userId)
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { completion in
+                if case .failure(let error) = completion {
+                    print("❌ Failed to get/create conversation: \(error.localizedDescription)")
+                    // Fallback to composer if conversation creation fails
+                    showCreateConversation = true
+                }
+            }, receiveValue: { conversation in
+                self.selectedConversation = conversation
+            })
+            .store(in: &cancellables)
     }
 }
 

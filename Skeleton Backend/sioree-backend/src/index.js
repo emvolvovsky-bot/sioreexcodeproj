@@ -6,7 +6,7 @@ dotenv.config();
 import http from "http";
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
+import { fileURLToPath, URL } from "url";
 import { Server } from "socket.io";
 import db from "./db/database.js";
 import authRoutes from "./routes/auth.js";
@@ -283,12 +283,25 @@ app.use("/api/earnings", earningsRoutes);
 app.use("/api/media", mediaRoutes);
 app.use("/api/stripe", stripeRoutes);
 
+function getMaskedDbHost() {
+  const db = process.env.DATABASE_URL;
+  if (!db) return "Not configured";
+  try {
+    const u = new URL(db);
+    const hostParts = u.hostname.split(".");
+    const short = hostParts.length >= 2 ? hostParts.slice(-2).join(".") : u.hostname;
+    return short;
+  } catch (e) {
+    return "Unknown";
+  }
+}
+
 app.get("/health", (req, res) => {
-  res.json({ status: "Backend running", database: "Supabase Postgres" });
+  res.json({ status: "Backend running", database: getMaskedDbHost() });
 });
 
 app.get("/api/health", (req, res) => {
-  res.json({ status: "Backend running", database: "Supabase Postgres" });
+  res.json({ status: "Backend running", database: getMaskedDbHost() });
 });
 
 io.on("connection", socket => {

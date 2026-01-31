@@ -13,7 +13,6 @@ struct BrandInboxView: View {
     @State private var conversations: [Conversation] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
-    @State private var showCreateGroup = false
     @State private var showSearch = false
     @State private var chatSearchText = ""
     @State private var cancellables = Set<AnyCancellable>()
@@ -62,13 +61,6 @@ struct BrandInboxView: View {
                                         BrandConversationRow(conversation: conversation)
                                     }
                                     .buttonStyle(PlainButtonStyle())
-                                    .swipeActions(edge: .trailing) {
-                                        Button(role: .destructive) {
-                                            deleteConversation(conversation)
-                                        } label: {
-                                            Label("Delete", systemImage: "trash")
-                                        }
-                                    }
                                     .padding(.horizontal, Theme.Spacing.m)
                                 }
                             }
@@ -82,17 +74,6 @@ struct BrandInboxView: View {
             .navigationTitle("Inbox")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: {
-                        showCreateGroup = true
-                    }) {
-                        Image(systemName: "person.2.fill")
-                            .foregroundColor(.sioreeIcyBlue)
-                    }
-                }
-            }
-            .sheet(isPresented: $showCreateGroup) {
-                CreateGroupChatView()
             }
             .sheet(isPresented: $showSearch) {
                 UserSearchView()
@@ -101,6 +82,12 @@ struct BrandInboxView: View {
                 loadConversations()
             }
             .onReceive(NotificationCenter.default.publisher(for: .refreshInbox)) { _ in
+                loadConversations()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .messageUpserted)) { _ in
+                loadConversations()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .messageSavedLocally)) { _ in
                 loadConversations()
             }
         }
@@ -152,24 +139,11 @@ struct BrandInboxView: View {
         let query = trimmedQuery.lowercased()
         return conversations.filter { conversation in
             conversation.participantName.lowercased().contains(query)
-                || conversation.lastMessage.lowercased().contains(query)
         }
     }
     
     private var inboxSearchHeader: some View {
         HStack(spacing: Theme.Spacing.s) {
-            Button(action: {
-                showCreateGroup = true
-            }) {
-                Image(systemName: "person.2.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.sioreeIcyBlue)
-                    .frame(width: 34, height: 34)
-                    .background(Color.sioreeIcyBlue.opacity(0.15))
-                    .clipShape(Circle())
-            }
-            .accessibilityLabel("Create group chat")
-            
             HStack(spacing: Theme.Spacing.s) {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(Color.sioreeLightGrey.opacity(0.8))
@@ -246,10 +220,6 @@ struct BrandConversationRow: View {
                     }
                 }
                 
-                Text(conversation.lastMessage)
-                    .font(.sioreeBodySmall)
-                    .foregroundColor(conversation.unreadCount > 0 ? Color.sioreeWhite : Color.sioreeLightGrey)
-                    .lineLimit(1)
             }
             
             Spacer()

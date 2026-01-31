@@ -30,8 +30,18 @@ final class ConversationRepository {
                     conv = NSManagedObject(entity: entity, insertInto: ctx)
                 }
 
+                // Ensure a local UUID `id` exists (Core Data model may mark `id` as required)
+                if conv.value(forKey: "id") == nil {
+                    conv.setValue(UUID().uuidString, forKey: "id")
+                }
+
                 conv.setValue(serverId, forKey: "serverId")
-                conv.setValue(convDict["participantId"] as? String, forKey: "participantId")
+                // Normalize participantId/name/avatar to strings to avoid Core Data type mismatches
+                if let participantId = convDict["participantId"] {
+                    conv.setValue("\(participantId)", forKey: "participantId")
+                } else {
+                    conv.setValue(nil, forKey: "participantId")
+                }
                 conv.setValue(convDict["participantName"] as? String, forKey: "participantName")
                 conv.setValue(convDict["participantAvatar"] as? String, forKey: "participantAvatar")
                 if let updatedAt = convDict["updatedAt"] as? String {

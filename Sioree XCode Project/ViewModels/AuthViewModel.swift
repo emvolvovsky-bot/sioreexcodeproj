@@ -74,6 +74,10 @@ class AuthViewModel: ObservableObject {
                     NotificationService.shared.notifyLogin(userName: response.user.name)
                     // Don't call fetchCurrentUser immediately - use the user data from login response
                     // fetchCurrentUser can be called later if needed, but won't block login
+                    // After successful login, perform one-time server sync for conversations
+                    SyncManager.shared.syncConversationsDelta()
+                    // Notify inbox views to refresh (they will load from local DB after the sync)
+                    NotificationCenter.default.post(name: .refreshInbox, object: nil)
                 }
             )
             .store(in: &cancellables)

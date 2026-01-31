@@ -34,6 +34,7 @@ struct EventDetailView: View {
     @State private var proposedRateAmount = ""
     @State private var showMessageTalentSheet = false
     @State private var selectedTalentForMessage: Talent?
+    
     private let ticketFeeRate = 0.05
     
     init(eventId: String, isTalentMapMode: Bool = false) {
@@ -54,12 +55,14 @@ struct EventDetailView: View {
         URL(string: "sioree://event/\(eventId)")
     }
     
+    
+
     var body: some View {
         ZStack {
             backgroundView
             contentView
         }
-            .navigationTitle("Event Details")
+        .navigationTitle("Event Details")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -92,6 +95,7 @@ struct EventDetailView: View {
                 didPreparePaymentSheet = true
                 checkoutViewModel.preparePaymentSheet(amount: totalPrice(for: ticketPrice), eventId: event.id)
             }
+            
             .confirmationDialog("Open Location", isPresented: $showLocationActionSheet, titleVisibility: .visible) {
                 if let event = viewModel.event {
                     Button("Open in Maps") {
@@ -572,10 +576,24 @@ struct EventDetailView: View {
         .onReceive(checkoutViewModel.$paymentResult.compactMap { $0 }) { result in
             switch result {
             case .completed:
+                // Optimistic: mark event as RSVPed immediately so home feed removes it and user sees confirmation.
+                if var event = viewModel.event {
+                    event.isRSVPed = true
+                    viewModel.event = event
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("EventRSVPed"),
+                        object: nil,
+                        userInfo: ["eventId": event.id, "event": event, "qrCode": ""]
+                    )
+                }
+
+                // Continue with normal RSVP network call to get QR code and backend confirmation.
                 viewModel.rsvpToEvent { qrCode in
                     rsvpQRCode = qrCode
                     showRSVPSheet = true
                 }
+
+                // Switch to tickets tab
                 NotificationCenter.default.post(name: .switchToTicketsTab, object: nil)
             case .failed(let error):
                 paymentAlertMessage = "Payment failed. \(error.localizedDescription)"
@@ -715,36 +733,23 @@ struct EventDetailView: View {
 
     @ViewBuilder
     private func paymentActionContent(totalPrice: Double, eventId: String) -> some View {
-        if let paymentSheet = checkoutViewModel.paymentSheet {
-            Button(action: {
+        Button(action: {
+            // If payment sheet already created, present it immediately.
+            if let sheet = checkoutViewModel.paymentSheet {
                 logStripePublishableKey()
-                presentPaymentSheet(paymentSheet)
-            }) {
-                buyButtonLabel(
-                    title: "Buy Ticket",
-                    subtitle: Helpers.formatCurrency(totalPrice),
-                    showsSpinner: false
-                )
-            }
-            .buttonStyle(PlainButtonStyle())
-        } else if checkoutViewModel.paymentSheetErrorMessage != nil {
-            Button(action: {
+                presentPaymentSheet(sheet)
+            } else {
+                // Otherwise, start (or restart) preparing the payment sheet.
                 checkoutViewModel.preparePaymentSheet(amount: totalPrice, eventId: eventId)
-            }) {
-                buyButtonLabel(
-                    title: "Tap to retry payment",
-                    subtitle: Helpers.formatCurrency(totalPrice),
-                    showsSpinner: false
-                )
             }
-            .buttonStyle(PlainButtonStyle())
-        } else {
+        }) {
             buyButtonLabel(
-                title: "Preparing payment...",
+                title: "Buy Ticket",
                 subtitle: Helpers.formatCurrency(totalPrice),
                 showsSpinner: checkoutViewModel.isPreparingPaymentSheet
             )
         }
+        .buttonStyle(PlainButtonStyle())
     }
 
     private func presentPaymentSheet(_ paymentSheet: PaymentSheet) {

@@ -351,4 +351,5 @@ server.listen(PORT, HOST, () => {
   console.log(`🔒 Security Headers: Enabled`);
   console.log(`🌍 CORS: ${allowedOrigins.length > 0 ? "Configured" : "Open (development)"}`);
   console.log("═══════════════════════════════════════════════════════════");
+  console.log('Starting server:', __filename, 'cwd:', process.cwd(), 'dirname:', __dirname);
 });

@@ -224,6 +224,8 @@ class CheckoutViewModel: ObservableObject {
 
         var request = URLRequest(url: checkoutURL)
         request.httpMethod = "POST"
+        // Respect app timeout configuration so failures surface quickly on device
+        request.timeoutInterval = Constants.API.timeout
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         var payload: [String: Any] = ["amount": amount, "currency": "usd"]

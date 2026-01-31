@@ -25,18 +25,9 @@ struct PartierHomeView: View {
     @State private var showCodeEntry = false
     @State private var selectedEvent: Event?
     @State private var enteredCodes: [String: String] = [:] // eventId -> entered code
-    @State private var cardFrames: [String: CGRect] = [:]
-    @State private var animatingEvent: Event?
-    @State private var animationPosition: CGPoint = .zero
-    @State private var animationScale: CGFloat = 1.0
-    @State private var animationOpacity: Double = 0.0
-    @State private var animationSize: CGSize = .zero
-    @State private var favoritesTargetPoint: CGPoint = .zero
-    @State private var hiddenEventIds: Set<String> = []
-    @State private var showSavedAlert = false
-    @State private var favoriteCancellables = Set<AnyCancellable>()
+    @State private var navPath: [String] = []
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navPath) {
             ZStack {
                 backgroundGlow
                 
@@ -52,26 +43,7 @@ struct PartierHomeView: View {
                     .padding(.vertical, Theme.Spacing.l)
                 }
                 
-                GeometryReader { proxy in
-                    Color.clear
-                        .onAppear {
-                            updateFavoritesTargetPoint(in: proxy)
-                        }
-                        .onChange(of: proxy.size) { _ in
-                            updateFavoritesTargetPoint(in: proxy)
-                        }
-                    
-                    if let animatingEvent {
-                        EventSaveThumbnail(event: animatingEvent, accent: .sioreeIcyBlue)
-                            .frame(width: animationSize.width, height: animationSize.height)
-                            .scaleEffect(animationScale)
-                            .opacity(animationOpacity)
-                            .position(animationPosition)
-                            .shadow(color: Color.sioreeIcyBlue.opacity(0.4), radius: 18, x: 0, y: 10)
-                            .allowsHitTesting(false)
-                            .zIndex(10)
-                    }
-                }
+                // Favorites animation removed
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .navigationBar)
@@ -111,18 +83,7 @@ struct PartierHomeView: View {
                     locationManager.requestLocation()
                 }
                 
-                // Listen for favorite changes so UI (hiddenEventIds) stays in sync with server/other views
-                NotificationCenter.default.publisher(for: .favoriteStatusChanged)
-                    .receive(on: DispatchQueue.main)
-                    .sink { note in
-                        guard let event = note.userInfo?["event"] as? Event else { return }
-                        if event.isSaved {
-                            hiddenEventIds.insert(event.id)
-                        } else {
-                            hiddenEventIds.remove(event.id)
-                        }
-                    }
-                    .store(in: &favoriteCancellables)
+                // Favorite-related listeners removed
             }
             .onReceive(locationManager.$location.compactMap { $0 }) { coordinate in
                 applyLocationIfChanged(coordinate)
@@ -134,16 +95,16 @@ struct PartierHomeView: View {
                 viewModel.selectedDate = newDate
                 viewModel.applyDateFilter()
             }
-            .alert("Saved to Favorites", isPresented: $showSavedAlert) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                Text("This event has been saved to your favorites.")
-            }
+            // Saved-to-favorites alert removed
             .alert("Location Access Required", isPresented: $showLocationDeniedAlert) {
                 Button("Open Settings") { openAppSettings() }
                 Button("Cancel", role: .cancel) { }
             } message: {
                 Text("Enable Location Services for Sioree in your device Settings to view nearby events.")
+            }
+            // Programmatic navigation destination for event IDs
+            .navigationDestination(for: String.self) { eventId in
+                EventDetailView(eventId: eventId)
             }
         }
     }
@@ -398,15 +359,9 @@ private extension PartierHomeView {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                     HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    if filteredEvents.isEmpty && !hiddenEventIds.isEmpty {
-                        Text("You have \(hiddenEventIds.count) event\(hiddenEventIds.count == 1 ? "" : "s") saved in favorites")
-                            .font(.sioreeH3)
-                            .foregroundColor(.sioreeWhite)
-                    } else {
-                        Text("\(filteredEvents.count) Events")
-                            .font(.sioreeH3)
-                            .foregroundColor(.sioreeWhite)
-                    }
+                    Text("\(filteredEvents.count) Events")
+                        .font(.sioreeH3)
+                        .foregroundColor(.sioreeWhite)
                 }
                         Spacer()
                     }
@@ -416,51 +371,61 @@ private extension PartierHomeView {
                 let events = filteredEvents
                 ForEach(events, id: \.id) { (event: Event) in
                     Group {
-                        if event.isPrivate, let requiredCode = event.accessCode {
-                            if let savedCode = enteredCodes[event.id], savedCode == requiredCode {
-                                NavigationLink(destination: EventDetailView(eventId: event.id)) {
-                                    NightEventCard(event: event, accent: .sioreeIcyBlue) {
-                                        handleSave(event)
+                        // Build card with Get Now button as an overlay to avoid any hit-test conflicts.
+                        ZStack {
+                            // Render card visually but disable its own hit-testing so only the overlay button receives taps.
+                            NightEventCard(
+                                event: event,
+                                accent: .sioreeIcyBlue,
+                                onSave: { viewModel.toggleSaveEvent(event) },
+                                action: nil
+                            )
+                            .allowsHitTesting(false)
+
+                            // Overlay "Get Now" button in the bottom trailing area of the card.
+                            HStack {
+                                Spacer()
+                                VStack {
+                                    Spacer()
+                                    if event.isPrivate, let requiredCode = event.accessCode {
+                                        if let savedCode = enteredCodes[event.id], savedCode == requiredCode {
+                                            Button {
+                                                navPath.append(event.id)
+                                            } label: {
+                                                CapsuleButtonLabel(text: "Get Now", accent: .sioreeIcyBlue)
+                                            }
+                                            .buttonStyle(.plain)
+                                            .padding(.trailing, Theme.Spacing.m)
+                                            .padding(.bottom, Theme.Spacing.m)
+                                        } else {
+                                            Button {
+                                                selectedEvent = event
+                                                showCodeEntry = true
+                                            } label: {
+                                                CapsuleButtonLabel(text: "Get Now", accent: .sioreeIcyBlue)
+                                            }
+                                            .buttonStyle(.plain)
+                                            .padding(.trailing, Theme.Spacing.m)
+                                            .padding(.bottom, Theme.Spacing.m)
+                                        }
+                                    } else {
+                                        Button {
+                                            navPath.append(event.id)
+                                        } label: {
+                                            CapsuleButtonLabel(text: "Get Now", accent: .sioreeIcyBlue)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .padding(.trailing, Theme.Spacing.m)
+                                        .padding(.bottom, Theme.Spacing.m)
                                     }
-                                    .anchorPreference(key: EventCardFrameKey.self, value: .bounds) { [event.id: $0] }
                                 }
-                                .buttonStyle(.plain)
-                            } else {
-                                Button(action: {
-                                    selectedEvent = event
-                                    showCodeEntry = true
-                                }) {
-                                    NightEventCard(event: event, accent: .sioreeIcyBlue) {
-                                        handleSave(event)
-                                    }
-                                    .anchorPreference(key: EventCardFrameKey.self, value: .bounds) { [event.id: $0] }
-                                }
-                                .buttonStyle(.plain)
                             }
-                        } else {
-                            NavigationLink(destination: EventDetailView(eventId: event.id)) {
-                                NightEventCard(event: event, accent: .sioreeIcyBlue) {
-                                    handleSave(event)
-                                }
-                                .anchorPreference(key: EventCardFrameKey.self, value: .bounds) { [event.id: $0] }
-                            }
-                            .buttonStyle(.plain)
+                            .zIndex(2)
                         }
                     }
                 }
             }
-            .overlayPreferenceValue(EventCardFrameKey.self) { anchors in
-                GeometryReader { proxy in
-                    let frames = anchors.mapValues { proxy[$0] }
-                    Color.clear
-                        .onAppear {
-                            cardFrames = frames
-                        }
-                        .onChange(of: frames) { newFrames in
-                            cardFrames = newFrames
-                        }
-                }
-            }
+            // Removed favorites animation frame tracking
             .padding(.horizontal, listPadding)
             .padding(.bottom, Theme.Spacing.l)
         }
@@ -505,7 +470,7 @@ private extension PartierHomeView {
             // Ensure both free and paid events are included - no price-based filtering
             matchesCategory(event) && matchesSearch(event)
         }
-        let finalEvents = events.filter { !hiddenEventIds.contains($0.id) }
+        let finalEvents = events
         // Debug: Print event counts and prices to console
         print("📊 Event filtering debug:")
         print("   Base events: \(baseEvents.count)")
@@ -539,49 +504,7 @@ private extension PartierHomeView {
         }
     }
     
-    func handleSave(_ event: Event) {
-        if !event.isSaved {
-            startSaveAnimation(for: event)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
-                hiddenEventIds.insert(event.id)
-            }
-            // Show saved alert after animation completes
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                showSavedAlert = true
-            }
-        }
-        viewModel.toggleSaveEvent(event)
-    }
-    
-    func startSaveAnimation(for event: Event) {
-        guard let frame = cardFrames[event.id] else { return }
-        let targetPoint = favoritesTargetPoint == .zero
-        ? CGPoint(x: UIScreen.main.bounds.width * 0.7, y: UIScreen.main.bounds.height - 100)
-        : favoritesTargetPoint
-        
-        animatingEvent = event
-        animationSize = frame.size
-        animationPosition = CGPoint(x: frame.midX, y: frame.midY)
-        animationScale = 1.0
-        animationOpacity = 1.0
-        
-        withAnimation(.spring(response: 0.55, dampingFraction: 0.82)) {
-            animationPosition = targetPoint
-            animationScale = 0.1
-            animationOpacity = 0.0
-        }
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-            animatingEvent = nil
-        }
-    }
-    
-    func updateFavoritesTargetPoint(in geometry: GeometryProxy) {
-        let tabWidth = geometry.size.width / 5
-        let x = tabWidth * 3.5
-        let y = geometry.size.height - geometry.safeAreaInsets.bottom - 30
-        favoritesTargetPoint = CGPoint(x: x, y: y)
-    }
+    // Favorite/save animations and helpers removed
 
     func openAppSettings() {
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
@@ -595,32 +518,7 @@ private struct EventCardFrameKey: PreferenceKey {
         value.merge(nextValue(), uniquingKeysWith: { $1 })
     }
 }
-private struct EventSaveThumbnail: View {
-    let event: Event
-    let accent: Color
-    
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [Color.sioreeCharcoal.opacity(0.8), Color.sioreeBlack.opacity(0.95)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                )
-            
-            Image(systemName: "heart.fill")
-                .font(.system(size: 20, weight: .bold))
-                .foregroundColor(accent)
-                .shadow(color: accent.opacity(0.6), radius: 8, x: 0, y: 4)
-        }
-    }
-}
+// EventSaveThumbnail removed
 private struct GlassChip: View {
     let title: String
     let isSelected: Bool
@@ -672,19 +570,24 @@ struct NightEventCard: View {
     let actionLabel: String
     let showsFavoriteButton: Bool
     var onSave: (() -> Void)? = nil
+    /// If `action` is provided it will be used for the primary action button.
+    /// If nil, the card will navigate to EventDetailView(eventId:) when the primary action is tapped.
+    var action: (() -> Void)? = nil
     
     init(
         event: Event,
         accent: Color,
         actionLabel: String = "Get Now",
         showsFavoriteButton: Bool = true,
-        onSave: (() -> Void)? = nil
+        onSave: (() -> Void)? = nil,
+        action: (() -> Void)? = nil
     ) {
         self.event = event
         self.accent = accent
         self.actionLabel = actionLabel
         self.showsFavoriteButton = showsFavoriteButton
         self.onSave = onSave
+        self.action = action
     }
     
     private var priceText: String {
@@ -729,16 +632,7 @@ struct NightEventCard: View {
                     }
                     .padding(Theme.Spacing.m)
                     
-                    if showsFavoriteButton {
-                        VStack {
-                            HStack {
-                                Spacer()
-                                heartButton
-                            }
-                            Spacer()
-                        }
-                        .padding(Theme.Spacing.m)
-                    }
+                    // Favorite/heart button removed
                 }
                 
                 VStack(alignment: .leading, spacing: Theme.Spacing.m) {
@@ -779,27 +673,59 @@ struct NightEventCard: View {
                                 .padding(.leading, Theme.Spacing.xs)
                         }
                         Spacer()
-                        Text(actionLabel)
-                            .font(.sioreeBody)
-                            .foregroundColor(.sioreeWhite)
-                            .padding(.horizontal, Theme.Spacing.xxl * 1.6)
-                            .padding(.vertical, Theme.Spacing.s)
-                            .background(
-                                Capsule(style: .continuous)
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [accent.opacity(0.9), accent],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
+                        if let action = action {
+                            Button(action: action) {
+                                Text(actionLabel)
+                                    .font(.sioreeBody)
+                                    .foregroundColor(.sioreeWhite)
+                                    .padding(.horizontal, Theme.Spacing.xxl * 1.6)
+                                    .padding(.vertical, Theme.Spacing.s)
+                                    .background(
+                                        Capsule(style: .continuous)
+                                            .fill(
+                                                LinearGradient(
+                                                    colors: [accent.opacity(0.9), accent],
+                                                    startPoint: .topLeading,
+                                                    endPoint: .bottomTrailing
+                                                )
+                                            )
+                                            .shadow(color: accent.opacity(0.35), radius: 16, x: 0, y: 8)
                                     )
-                                    .shadow(color: accent.opacity(0.35), radius: 16, x: 0, y: 8)
-                            )
-                            .overlay(
-                                Capsule(style: .continuous)
-                                    .stroke(Color.white.opacity(0.16), lineWidth: 1)
-                            )
-                            .allowsHitTesting(false)
+                                    .overlay(
+                                        Capsule(style: .continuous)
+                                            .stroke(Color.white.opacity(0.16), lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            .contentShape(Capsule(style: .continuous))
+                            .zIndex(1)
+                        } else {
+                            NavigationLink(destination: EventDetailView(eventId: event.id)) {
+                                Text(actionLabel)
+                                    .font(.sioreeBody)
+                                    .foregroundColor(.sioreeWhite)
+                                    .padding(.horizontal, Theme.Spacing.xxl * 1.6)
+                                    .padding(.vertical, Theme.Spacing.s)
+                                    .background(
+                                        Capsule(style: .continuous)
+                                            .fill(
+                                                LinearGradient(
+                                                    colors: [accent.opacity(0.9), accent],
+                                                    startPoint: .topLeading,
+                                                    endPoint: .bottomTrailing
+                                                )
+                                            )
+                                            .shadow(color: accent.opacity(0.35), radius: 16, x: 0, y: 8)
+                                    )
+                                    .overlay(
+                                        Capsule(style: .continuous)
+                                            .stroke(Color.white.opacity(0.16), lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            .contentShape(Capsule(style: .continuous))
+                            .zIndex(1)
+                        }
                     }
                     .padding(.top, Theme.Spacing.xs)
                 }
@@ -810,6 +736,8 @@ struct NightEventCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
+
+    // CapsuleButtonLabel moved to file-scope (see below)
     
     private var heroImage: some View {
         ZStack {
@@ -870,26 +798,7 @@ struct NightEventCard: View {
         .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: 8)
     }
     
-    private var heartButton: some View {
-        Button(action: {
-            onSave?()
-        }) {
-            Image(systemName: event.isSaved ? "heart.fill" : "heart")
-                .font(.body.bold())
-                .foregroundColor(event.isSaved ? accent : .sioreeWhite)
-                .frame(width: 42, height: 42)
-                .background(
-                    Circle()
-                        .fill(Color.black.opacity(0.35))
-                        .overlay(
-                            Circle()
-                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                        )
-                )
-                .shadow(color: accent.opacity(0.3), radius: 12, x: 0, y: 8)
-        }
-        .buttonStyle(.plain)
-    }
+    // Heart button removed
     
     private var attendeeStack: some View {
         let displayed = Array(sampleAvatars.prefix(2))
@@ -1308,6 +1217,34 @@ private struct PrivateEventCodeView: View {
 }
 #Preview {
     PartierHomeView()
+}
+
+
+private struct CapsuleButtonLabel: View {
+    let text: String
+    let accent: Color
+    var body: some View {
+        Text(text)
+            .font(.sioreeBody)
+            .foregroundColor(.sioreeWhite)
+            .padding(.horizontal, Theme.Spacing.xxl * 1.6)
+            .padding(.vertical, Theme.Spacing.s)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [accent.opacity(0.9), accent],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .shadow(color: accent.opacity(0.35), radius: 16, x: 0, y: 8)
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(Color.white.opacity(0.16), lineWidth: 1)
+            )
+    }
 }
 
 

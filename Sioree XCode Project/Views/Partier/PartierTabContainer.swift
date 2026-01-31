@@ -12,7 +12,6 @@ enum PartierTab: CaseIterable {
     case tickets
     case inbox
     case home
-    case favorites
     case profile
     
     var systemIcon: String {
@@ -20,7 +19,6 @@ enum PartierTab: CaseIterable {
         case .tickets: return "ticket"
         case .inbox: return "bubble.left.and.bubble.right"
         case .home: return "house.fill"
-        case .favorites: return "heart"
         case .profile: return "person"
         }
     }
@@ -47,11 +45,6 @@ struct PartierTabContainer: View {
                 PartierHomeView()
                     .tag(PartierTab.home)
                     .tabItem { EmptyView() }
-                
-                FavoritesView()
-                    .tag(PartierTab.favorites)
-                    .tabItem { EmptyView() }
-                
                 PartierProfileView()
                     .tag(PartierTab.profile)
                     .tabItem { EmptyView() }
@@ -98,7 +91,7 @@ private struct PartierBottomBar: View {
         GeometryReader { geometry in
             let safeAreaBottom = geometry.safeAreaInsets.bottom
             let totalHeight = 70 + safeAreaBottom
-            let tabWidth = geometry.size.width / 5
+            let tabWidth = geometry.size.width / 4
             
             ZStack(alignment: .bottom) {
                 RoundedRectangle(cornerRadius: 26, style: .continuous)
@@ -124,7 +117,6 @@ private struct PartierBottomBar: View {
                     tabButton(.tickets, tabWidth: tabWidth, geometry: geometry)
                     tabButton(.inbox, tabWidth: tabWidth, geometry: geometry)
                     tabButton(.home, tabWidth: tabWidth, geometry: geometry)
-                    tabButton(.favorites, tabWidth: tabWidth, geometry: geometry)
                     tabButton(.profile, tabWidth: tabWidth, geometry: geometry)
                 }
                 .padding(.horizontal, Theme.Spacing.s)
@@ -182,8 +174,6 @@ private struct PartierBottomBar: View {
             return isSelected ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right"
         case .home:
             return isSelected ? "house.fill" : "house"
-        case .favorites:
-            return isSelected ? "heart.fill" : "heart"
         case .profile:
             return isSelected ? "person.fill" : "person"
         }
@@ -194,233 +184,6 @@ private struct PartierBottomBar: View {
     PartierTabContainer()
         .environmentObject(AuthViewModel())
 }
-
-struct FavoritesView: View {
-    @EnvironmentObject var authViewModel: AuthViewModel
-    @StateObject private var viewModel = FavoritesViewModel()
-    @StateObject private var locationManager = LocationManager()
-    
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                backgroundGlow
-                
-                if viewModel.isLoading && viewModel.events.isEmpty {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if viewModel.events.isEmpty {
-                    emptyStateView
-                } else {
-                    ScrollView(showsIndicators: false) {
-                        LazyVStack(spacing: Theme.Spacing.m) {
-                            ForEach(viewModel.events) { event in
-                                NavigationLink(destination: EventDetailView(eventId: event.id)) {
-                                    NightEventCard(event: event, accent: .sioreeIcyBlue) {
-                                        viewModel.toggleSaveEvent(event)
-                                    }
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(.horizontal, Theme.Spacing.l)
-                        .padding(.vertical, Theme.Spacing.m)
-                    }
-                }
-                    ScrollView(showsIndicators: false) {
-                        LazyVStack(spacing: Theme.Spacing.m) {
-                            ForEach(viewModel.events) { event in
-                                NavigationLink(destination: EventDetailView(eventId: event.id)) {
-                                    NightEventCard(event: event, accent: .sioreeIcyBlue) {
-                                        viewModel.toggleSaveEvent(event)
-                                    }
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(.horizontal, Theme.Spacing.l)
-                        .padding(.vertical, Theme.Spacing.l)
-                    }
-                }
-            }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar(.hidden, for: .navigationBar)
-            .onAppear {
-                viewModel.loadFavorites()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .favoriteStatusChanged)) { _ in
-                // Refresh favorites when favorite status changes
-                viewModel.loadFavorites()
-            }
-        }
-    }
-    
-    private var backgroundGlow: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    Color.sioreeBlack,
-                    Color.sioreeBlack.opacity(0.98),
-                    Color.sioreeCharcoal.opacity(0.85)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-            
-            Circle()
-                .fill(Color.sioreeIcyBlue.opacity(0.25))
-                .frame(width: 360, height: 360)
-                .blur(radius: 120)
-                .offset(x: -120, y: -320)
-            
-            Circle()
-                .fill(Color.sioreeIcyBlue.opacity(0.2))
-                .frame(width: 420, height: 420)
-                .blur(radius: 140)
-                .offset(x: 160, y: 220)
-        }
-    }
-    
-    private var emptyStateView: some View {
-        VStack(spacing: Theme.Spacing.m) {
-            Image(systemName: "heart")
-                .font(.system(size: 64, weight: .regular))
-                .foregroundColor(.sioreeIcyBlue.opacity(0.5))
-            Text("No Favorites Yet")
-                .font(.sioreeH3)
-                .foregroundColor(.sioreeWhite)
-            Text("Save events you're interested in and they'll appear here.")
-                .font(.sioreeBody)
-                .foregroundColor(.sioreeLightGrey)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, Theme.Spacing.l)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-class FavoritesViewModel: ObservableObject {
-    @Published var events: [Event] = []
-    @Published var isLoading = false
-    @Published var errorMessage: String?
-    
-    private let networkService = NetworkService()
-    private var cancellables = Set<AnyCancellable>()
-    
-    init() {
-        NotificationCenter.default.publisher(for: .favoriteStatusChanged)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] notification in
-                guard let event = notification.userInfo?["event"] as? Event else { return }
-                self?.applyFavoriteChange(event)
-            }
-            .store(in: &cancellables)
-    }
-    
-    func loadFavorites() {
-        isLoading = true
-        errorMessage = nil
-
-        networkService.fetchSavedEvents()
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { [weak self] completion in
-                    self?.isLoading = false
-                    if case .failure(let error) = completion {
-                        // On failure, try to load cached saved events from StorageService
-                        if let currentUserId = StorageService.shared.getUserId() {
-                            let cached = StorageService.shared.getSavedEvents(forUserId: currentUserId)
-                            if !cached.isEmpty {
-                                self?.events = cached
-                                self?.errorMessage = nil
-                                return
-                            }
-                        }
-                        self?.errorMessage = error.localizedDescription
-                    }
-                },
-                receiveValue: { [weak self] events in
-                    self?.events = events
-                    self?.isLoading = false
-                    // Persist saved events locally for offline/failed-fetch fallback
-                    if let currentUserId = StorageService.shared.getUserId() {
-                        StorageService.shared.saveSavedEvents(events, forUserId: currentUserId)
-                    }
-                }
-            )
-            .store(in: &cancellables)
-    }
-    
-    func refreshFavorites() {
-        loadFavorites()
-    }
-    
-    func toggleSaveEvent(_ event: Event) {
-        // Optimistic update
-        if let index = events.firstIndex(where: { $0.id == event.id }) {
-            events[index].isSaved.toggle()
-        }
-        
-        networkService.toggleEventSave(eventId: event.id)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { [weak self] completion in
-                    if case .failure = completion {
-                        // Revert optimistic update
-                        if let index = self?.events.firstIndex(where: { $0.id == event.id }) {
-                            self?.events[index].isSaved.toggle()
-                        }
-                    } else {
-                        // If unsaved, remove from favorites list
-                        if let index = self?.events.firstIndex(where: { $0.id == event.id }) {
-                            if !(self?.events[index].isSaved ?? false) {
-                                self?.events.remove(at: index)
-                            }
-                        }
-                        // Persist saved-events cache to reflect the confirmed change
-                        if let currentUserId = StorageService.shared.getUserId() {
-                            var cached = StorageService.shared.getSavedEvents(forUserId: currentUserId)
-                            if let updated = self?.events.first(where: { $0.id == event.id }) {
-                                if updated.isSaved {
-                                    if !cached.contains(where: { $0.id == updated.id }) {
-                                        cached.insert(updated, at: 0)
-                                    } else if let idx = cached.firstIndex(where: { $0.id == updated.id }) {
-                                        cached[idx] = updated
-                                    }
-                                } else {
-                                    cached.removeAll(where: { $0.id == updated.id })
-                                }
-                            } else {
-                                // event no longer in favorites list -> ensure removed from cache
-                                cached.removeAll(where: { $0.id == event.id })
-                            }
-                            StorageService.shared.saveSavedEvents(cached, forUserId: currentUserId)
-                        }
-                    }
-                },
-                receiveValue: { _ in }
-            )
-            .store(in: &cancellables)
-    }
-    
-    private func applyFavoriteChange(_ event: Event) {
-        if event.isSaved {
-            if let index = events.firstIndex(where: { $0.id == event.id }) {
-                events[index] = event
-            } else {
-                events.insert(event, at: 0)
-            }
-        } else if let index = events.firstIndex(where: { $0.id == event.id }) {
-            events.remove(at: index)
-        }
-    }
-}
-
-private struct FavoritesPlaceholderView: View {
-    var body: some View {
-        FavoritesView()
-    }
-}
-
 // Custom shape with center notch for the floating home button
 private struct NotchedBarShape: Shape {
     var notchCenterX: CGFloat? = nil
@@ -485,7 +248,6 @@ extension Notification.Name {
     static let hideTabBar = Notification.Name("HideTabBar")
     static let showTabBar = Notification.Name("ShowTabBar")
     static let refreshInbox = Notification.Name("RefreshInbox")
-    static let favoriteStatusChanged = Notification.Name("FavoriteStatusChanged")
     static let switchToTicketsTab = Notification.Name("SwitchToTicketsTab")
         // Messaging notifications
         static let messageSavedLocally = Notification.Name("MessageSavedLocally")

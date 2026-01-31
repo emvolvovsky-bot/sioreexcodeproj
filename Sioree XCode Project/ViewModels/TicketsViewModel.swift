@@ -50,8 +50,16 @@ class TicketsViewModel: ObservableObject {
                     }
                 },
                 receiveValue: { [weak self] events in
-                    self?.upcomingEvents = events
+                    guard let self = self else { return }
+                    self.upcomingEvents = events
                     print("✅ Reloaded \(events.count) upcoming events")
+
+                    // Ensure upcoming events are not duplicated in pastEvents.
+                    let upcomingIds = Set(events.map { $0.id })
+                    // Remove any pastEvents that are actually upcoming (defensive)
+                    if !upcomingIds.isEmpty {
+                        self.pastEvents.removeAll { upcomingIds.contains($0.id) }
+                    }
                 }
             )
             .store(in: &cancellables)
@@ -79,10 +87,27 @@ class TicketsViewModel: ObservableObject {
                     }
                 },
                 receiveValue: { [weak self] events in
-                    self?.pastEvents = events
+                    guard let self = self else { return }
+
+                    // Filter out any events that are actually in the future (should be upcoming).
+                    // Use event.endDate if available, otherwise fall back to event.date.
+                    let now = Date()
+                    var filtered = events.filter { event in
+                        let effectiveEnd = event.endDate ?? event.date
+                        return effectiveEnd < now
+                    }
+
+                    // Also remove any events that are present in upcomingEvents (prefer upcoming)
+                    let upcomingIds = Set(self.upcomingEvents.map { $0.id })
+                    if !upcomingIds.isEmpty {
+                        filtered.removeAll { upcomingIds.contains($0.id) }
+                    }
+
+                    self.pastEvents = filtered
+
                     // Add placeholder if no events
-                    if events.isEmpty {
-                        self?.addPlaceholderData()
+                    if filtered.isEmpty {
+                        self.addPlaceholderData()
                     }
                 }
             )

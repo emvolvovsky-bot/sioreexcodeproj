@@ -36,19 +36,11 @@ struct EventCard: View {
                         )
                     )
                 
-                // Action buttons
+                // Action buttons (save/bookmark only)
                 HStack(spacing: Theme.Spacing.s) {
                     Button(action: onSave) {
                         Image(systemName: event.isSaved ? "bookmark.fill" : "bookmark")
                             .foregroundColor(event.isSaved ? Color.sioreeIcyBlue : Color.sioreeWhite)
-                            .padding(Theme.Spacing.s)
-                            .background(Color.black.opacity(0.3))
-                            .clipShape(Circle())
-                    }
-                    
-                    Button(action: onLike) {
-                        Image(systemName: event.isLiked ? "heart.fill" : "heart")
-                            .foregroundColor(event.isLiked ? Color.red : Color.sioreeWhite)
                             .padding(Theme.Spacing.s)
                             .background(Color.black.opacity(0.3))
                             .clipShape(Circle())

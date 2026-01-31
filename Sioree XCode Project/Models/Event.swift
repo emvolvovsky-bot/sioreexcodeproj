@@ -56,6 +56,7 @@ struct Event: Identifiable, Codable, Hashable {
     var locationDetails: String?
     var images: [String]
     var ticketPrice: Double?
+    var endDate: Date? // Optional event end date/time
     var capacity: Int?
     var attendeeCount: Int
     var talentIds: [String]
@@ -97,6 +98,8 @@ struct Event: Identifiable, Codable, Hashable {
         case lookingForNotesSnake = "looking_for_notes"
         case isPrivate = "isPrivate"
         case isPrivateSnake = "is_private"
+        case endDate = "endDate"
+        case endDateSnake = "end_date"
         case accessCode = "accessCode"
         case accessCodeSnake = "access_code"
     }
@@ -142,6 +145,14 @@ struct Event: Identifiable, Codable, Hashable {
         isSaved = try container.decodeIfPresent(Bool.self, forKey: .isSaved) ?? false
         isRSVPed = try container.decodeIfPresent(Bool.self, forKey: .isRSVPed) ?? false
         qrCode = try container.decodeIfPresent(String.self, forKey: .qrCode)
+        // Try multiple shapes for end date
+        if let ed = try container.decodeIfPresent(Date.self, forKey: .endDate) {
+            endDate = ed
+        } else if let ed2 = try container.decodeIfPresent(Date.self, forKey: .endDateSnake) {
+            endDate = ed2
+        } else {
+            endDate = nil
+        }
         let camelCaseIsPrivate = try container.decodeIfPresent(Bool.self, forKey: .isPrivate)
         let snakeCaseIsPrivate = try container.decodeIfPresent(Bool.self, forKey: .isPrivateSnake)
         isPrivate = camelCaseIsPrivate ?? snakeCaseIsPrivate ?? false
@@ -167,6 +178,7 @@ struct Event: Identifiable, Codable, Hashable {
          hostAvatar: String? = nil,
          date: Date,
          time: Date,
+         endDate: Date? = nil,
          location: String,
          locationDetails: String? = nil,
          images: [String] = [],
@@ -198,6 +210,7 @@ struct Event: Identifiable, Codable, Hashable {
         self.locationDetails = locationDetails
         self.images = images
         self.ticketPrice = ticketPrice
+        self.endDate = endDate
         self.capacity = capacity
         self.attendeeCount = attendeeCount
         self.talentIds = talentIds
@@ -232,6 +245,7 @@ struct Event: Identifiable, Codable, Hashable {
         try container.encodeIfPresent(locationDetails, forKey: .locationDetails)
         try container.encode(images, forKey: .images)
         try container.encodeIfPresent(ticketPrice, forKey: .ticketPrice)
+        try container.encodeIfPresent(endDate, forKey: .endDate)
         try container.encodeIfPresent(capacity, forKey: .capacity)
         try container.encode(attendeeCount, forKey: .attendeeCount)
         try container.encode(talentIds, forKey: .talentIds)

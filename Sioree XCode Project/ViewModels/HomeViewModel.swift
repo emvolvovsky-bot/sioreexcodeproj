@@ -18,6 +18,8 @@ class HomeViewModel: ObservableObject {
     @Published var selectedDate: Date? = nil
     @Published var lastKnownCoordinate: CLLocationCoordinate2D?
     @Published var lastRadiusMiles: Int = 30
+    // Cached IDs for events the current user is attending (to keep them out of the home feed)
+    private var attendingIds: Set<String> = []
     
     // Store all loaded events before filtering
     private var allNearbyEvents: [Event] = []
@@ -32,6 +34,8 @@ class HomeViewModel: ObservableObject {
             .sink { [weak self] notification in
                 if let eventId = notification.userInfo?["eventId"] as? String {
                     self?.removeEventFromLists(eventId: eventId)
+                    // Track as attending so future server loads filter it out
+                    self?.attendingIds.insert(eventId)
                 }
             }
             .store(in: &cancellables)
@@ -56,6 +60,30 @@ class HomeViewModel: ObservableObject {
                 }
                 // Don't do fallback refresh - let the event persist locally
             }
+            .store(in: &cancellables)
+
+        // Load current user's attending IDs so we can filter home feed immediately
+        loadAttendingIds()
+    }
+
+    private func loadAttendingIds() {
+        guard StorageService.shared.getUserId() != nil else { return }
+        networkService.fetchUpcomingAttendingEvents()
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { completion in
+                if case .failure(let error) = completion {
+                    print("❌ Failed to load attending IDs: \(error.localizedDescription)")
+                }
+            }, receiveValue: { [weak self] events in
+                guard let self = self else { return }
+                let ids = Set(events.map { $0.id })
+                self.attendingIds = ids
+                // Immediately remove any attending events from the displayed lists
+                if !ids.isEmpty {
+                    self.allNearbyEvents.removeAll { ids.contains($0.id) }
+                    self.applyDateFilter()
+                }
+            })
             .store(in: &cancellables)
     }
     
@@ -91,6 +119,12 @@ class HomeViewModel: ObservableObject {
         }
 
         // Add to nearby events
+        // If the current user is attending/RSVPed for this event, don't add it to the public home feed.
+        if StorageService.shared.getUserId() != nil && completeEvent.isRSVPed {
+            print("ℹ️ Skipping adding event \(completeEvent.id) to home feed because user has a ticket/RSVP")
+            return
+        }
+
         allNearbyEvents.insert(completeEvent, at: 0) // Add to beginning
         print("✅ Added new event: \(completeEvent.title)")
 
@@ -146,19 +180,31 @@ class HomeViewModel: ObservableObject {
                 }
             },
             receiveValue: { [weak self] events in
-                if events.isEmpty {
-                    self?.allNearbyEvents = []
+                guard let self = self else { return }
+
+                // Filter out events the user is attending (use cached attendingIds)
+                let filteredByAttendance: [Event]
+                if !self.attendingIds.isEmpty {
+                    filteredByAttendance = events.filter { !self.attendingIds.contains($0.id) }
                 } else {
-                    // Merge server events with locally created events that might not be in server response yet
-                    let serverEventIds = Set(events.map { $0.id })
-                    let existingLocalEvents = self?.allNearbyEvents.filter { !serverEventIds.contains($0.id) } ?? []
-                    self?.allNearbyEvents = events + existingLocalEvents
-                    print("✅ Loaded \(events.count) events from server, kept \(existingLocalEvents.count) local events")
+                    // No cached attending ids yet - optimistic include all and rely on loadAttendingIds to update soon
+                    filteredByAttendance = events
                 }
+
+                // Merge server events with locally created events that might not be in server response yet
+                if filteredByAttendance.isEmpty {
+                    self.allNearbyEvents = []
+                } else {
+                    let serverEventIds = Set(filteredByAttendance.map { $0.id })
+                    let existingLocalEvents = self.allNearbyEvents.filter { !serverEventIds.contains($0.id) }
+                    self.allNearbyEvents = filteredByAttendance + existingLocalEvents
+                    print("✅ Loaded \(filteredByAttendance.count) events from server, kept \(existingLocalEvents.count) local events")
+                }
+
                 // Apply date filter if one is selected
-                self?.applyDateFilter()
-                self?.isLoading = false
-                self?.hasLoaded = true
+                self.applyDateFilter()
+                self.isLoading = false
+                self.hasLoaded = true
             }
         )
         .store(in: &cancellables)
@@ -332,7 +378,7 @@ class HomeViewModel: ObservableObject {
             allNearbyEvents[index].isSaved.toggle()
         }
 
-        notifyFavoriteChange(for: event.id)
+        // favorite change notification removed
 
         networkService.toggleEventSave(eventId: event.id)
             .receive(on: DispatchQueue.main)
@@ -346,7 +392,7 @@ class HomeViewModel: ObservableObject {
                         if let index = self?.allNearbyEvents.firstIndex(where: { $0.id == event.id }) {
                             self?.allNearbyEvents[index].isSaved.toggle()
                         }
-                        self?.notifyFavoriteChange(for: event.id)
+                        // favorite change notification removed
                     }
                 },
                 receiveValue: { [weak self] _ in
@@ -376,16 +422,7 @@ class HomeViewModel: ObservableObject {
             .store(in: &cancellables)
     }
     
-    private func notifyFavoriteChange(for eventId: String) {
-        if let updated = nearbyEvents.first(where: { $0.id == eventId }) ??
-            allNearbyEvents.first(where: { $0.id == eventId }) {
-            NotificationCenter.default.post(
-                name: .favoriteStatusChanged,
-                object: nil,
-                userInfo: ["event": updated]
-            )
-        }
-    }
+    // favorite notification helper removed
     
 }
 

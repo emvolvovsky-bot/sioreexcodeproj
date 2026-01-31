@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import http from "http";
 import { Server } from "socket.io";
+import fs from "fs";
 import authRoutes from "./routes/auth.js";
 import eventRoutes from "./routes/events.js";
 import messageRoutes from "./routes/messages.js";
@@ -31,6 +32,41 @@ app.post("/api/payments/webhook", express.raw({ type: "application/json" }), pay
 
 // JSON parser for normal routes
 app.use(express.json());
+
+// Load master API key from file
+let MASTER_API_KEY = "";
+try {
+  const keyPath = new URL("../Sioree XCode Project/sioree_master_word.txt", import.meta.url);
+  MASTER_API_KEY = fs.readFileSync(keyPath, "utf8").trim();
+  if (!MASTER_API_KEY) {
+    console.warn("Master API key file is empty.");
+  }
+} catch (err) {
+  console.error("Failed to read master API key file:", err.message);
+}
+
+// Middleware to require master API key on all requests (except webhook which is registered before)
+function requireMasterKey(req, res, next) {
+  // Allow key via query param, JSON body, or header (x-master-key)
+  const provided =
+    (req.query && (req.query.master_key || req.query.masterKey)) ||
+    (req.body && (req.body.master_key || req.body.masterKey)) ||
+    req.headers["x-master-key"] ||
+    req.headers["x_master_key"];
+
+  if (!MASTER_API_KEY) {
+    return res.status(500).json({ error: "Server misconfigured: master API key not set" });
+  }
+
+  if (!provided || provided !== MASTER_API_KEY) {
+    return res.status(401).json({ error: "Invalid or missing API key" });
+  }
+
+  return next();
+}
+
+// Require master key for all routes registered after this point
+app.use(requireMasterKey);
 
 // Simple media ping for connectivity checks
 app.get("/api/media/ping", (req, res) => {

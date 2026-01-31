@@ -12,6 +12,7 @@ struct PartierInboxView: View {
     @StateObject private var messagingService = MessagingService.shared
     @State private var conversations: [Conversation] = []
     @State private var isLoading = true
+    @State private var selectedConversation: Conversation?
     @State private var errorMessage: String?
     @State private var showCreateGroup = false
     @State private var showUserSearch = false
@@ -26,33 +27,23 @@ struct PartierInboxView: View {
                 VStack(spacing: Theme.Spacing.m) {
                     inboxSearchHeader
 
-                    if isLoading {
+                    if filteredConversations.isEmpty {
                         Spacer()
-                        LoadingView()
-                        Spacer()
-                    } else if filteredConversations.isEmpty {
-                        Spacer()
-                        VStack(spacing: Theme.Spacing.m) {
-                            Image(systemName: "envelope.fill")
-                                .font(.system(size: 60))
-                                .foregroundColor(Color.sioreeIcyBlue.opacity(0.5))
-
+                        VStack(spacing: Theme.Spacing.s) {
                             Text(conversations.isEmpty ? "No messages yet" : "No chats found")
                                 .font(.sioreeH3)
                                 .foregroundColor(Color.sioreeWhite)
 
-                            Text(conversations.isEmpty ? "Thank a host or ask a question" : "Try a different search")
-                                .font(.sioreeBody)
-                                .foregroundColor(Color.sioreeLightGrey)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, Theme.Spacing.xl)
-
                             if conversations.isEmpty {
-                                Text("Ask talent a question")
+                                Text("Thank a host or ask a question")
                                     .font(.sioreeBody)
                                     .foregroundColor(Color.sioreeLightGrey)
                                     .multilineTextAlignment(.center)
-                                    .padding(.horizontal, Theme.Spacing.xl)
+                            } else {
+                                Text("Try a different search")
+                                    .font(.sioreeBody)
+                                    .foregroundColor(Color.sioreeLightGrey)
+                                    .multilineTextAlignment(.center)
                             }
                         }
                         Spacer()
@@ -91,6 +82,28 @@ struct PartierInboxView: View {
             .sheet(isPresented: $showCreateGroup) {
                 CreateGroupChatView()
             }
+            .sheet(item: $selectedConversation) { conversation in
+                RealMessageView(conversation: conversation)
+                    .onAppear { NotificationCenter.default.post(name: .hideTabBar, object: nil) }
+                    .onDisappear { NotificationCenter.default.post(name: .showTabBar, object: nil) }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .openConversation)) { note in
+                guard let dict = note.userInfo?["conversation"] as? [String: Any] else { return }
+                let id = dict["id"] as? String ?? UUID().uuidString
+                let participantId = dict["participantId"] as? String ?? ""
+                let participantName = dict["participantName"] as? String ?? "Unknown"
+                let participantAvatar = dict["participantAvatar"] as? String
+                let lastMessage = dict["lastMessage"] as? String ?? ""
+                var lastMessageTime = Date()
+                if let timeStr = dict["lastMessageTime"] as? String {
+                    let fmt = ISO8601DateFormatter()
+                    fmt.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                    lastMessageTime = fmt.date(from: timeStr) ?? Date()
+                }
+                let unreadCount = dict["unreadCount"] as? Int ?? 0
+                let conv = Conversation(id: id, participantId: participantId, participantName: participantName, participantAvatar: participantAvatar, lastMessage: lastMessage, lastMessageTime: lastMessageTime, unreadCount: unreadCount, isActive: true)
+                selectedConversation = conv
+            }
             .sheet(isPresented: $showUserSearch) {
                 UserSearchView()
             }
@@ -98,26 +111,25 @@ struct PartierInboxView: View {
                 let local = ConversationRepository.shared.fetchConversationsLocally()
                 if !local.isEmpty {
                     self.conversations = local
-                    self.isLoading = false
                 } else {
-                    loadConversations()
+                    loadConversations(showLoading: false)
                 }
                 SyncManager.shared.syncConversationsDelta()
             }
             .onReceive(NotificationCenter.default.publisher(for: .refreshInbox)) { _ in
-                loadConversations()
+                loadConversations(showLoading: false)
             }
         }
     }
     
-    private func loadConversations() {
-        isLoading = true
+    private func loadConversations(showLoading: Bool = false) {
+        if showLoading { isLoading = true }
         // Fetch shared inbox across all roles
         messagingService.getConversations()
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
-                    isLoading = false
+                    if showLoading { isLoading = false }
                     if case .failure(let error) = completion {
                         errorMessage = error.localizedDescription
                         print("❌ Failed to load conversations: \(error)")
@@ -125,7 +137,6 @@ struct PartierInboxView: View {
                 },
                 receiveValue: { fetchedConversations in
                     conversations = fetchedConversations.sorted { $0.lastMessageTime > $1.lastMessageTime }
-                    isLoading = false
                 }
             )
             .store(in: &cancellables)
@@ -254,8 +265,8 @@ struct PartierConversationRow: View {
     
     var body: some View {
         HStack(spacing: Theme.Spacing.m) {
-            // Avatar - Tappable to navigate to profile
-            NavigationLink(destination: UserProfileView(userId: conversation.participantId)) {
+            // Avatar - Tappable to navigate to profile (use InboxProfileView to match UserSearch flow)
+            NavigationLink(destination: InboxProfileView(userId: conversation.participantId)) {
                 ZStack {
                     Circle()
                         .fill(
@@ -275,9 +286,8 @@ struct PartierConversationRow: View {
                         )
                         .shadow(color: Color.sioreeIcyBlue.opacity(0.25), radius: 12, x: 0, y: 6)
                     
-                    Image(systemName: "person.fill")
-                        .foregroundColor(Color.sioreeIcyBlue)
-                        .font(.system(size: 20, weight: .semibold))
+                    AvatarView(imageURL: conversation.participantAvatar, userId: conversation.participantId, size: .medium)
+                        .frame(width: 56, height: 56)
                 }
             }
             .buttonStyle(.plain)

@@ -10,18 +10,24 @@ import Foundation
 // MARK: - Local Configuration Reader
 extension Constants {
     static func shouldUseLocalServer() -> Bool {
-        // Try to read local.txt from the app bundle
+        return Constants._useLocal
+    }
+}
+
+extension Constants {
+    // Cached value read once at first access (app startup). Reads local.txt only once.
+    private static let _useLocal: Bool = {
         if let path = Bundle.main.path(forResource: "local", ofType: "txt"),
            let content = try? String(contentsOfFile: path, encoding: .utf8) {
             let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            print("📄 Read local.txt: '\(content.trimmingCharacters(in: .whitespacesAndNewlines))' -> useLocal: \(trimmedContent == "true")")
-            return trimmedContent == "true"
+            let isLocal = (trimmedContent == "true")
+            print("📄 Read local.txt: '\(content.trimmingCharacters(in: .whitespacesAndNewlines))' -> useLocal: \(isLocal)")
+            return isLocal
         }
 
-        // Default to localhost if file can't be read
         print("⚠️ Could not read local.txt, defaulting to localhost")
         return true
-    }
+    }()
 }
 
 struct Constants {

@@ -349,7 +349,29 @@ class HomeViewModel: ObservableObject {
                         self?.notifyFavoriteChange(for: event.id)
                     }
                 },
-                receiveValue: { _ in }
+                receiveValue: { [weak self] _ in
+                    // Persist change to local saved-events cache so it survives app restarts
+                    guard let self = self, let currentUserId = StorageService.shared.getUserId() else { return }
+                    var cached = StorageService.shared.getSavedEvents(forUserId: currentUserId)
+                    // Determine updated event from local arrays
+                    if let updated = self.nearbyEvents.first(where: { $0.id == event.id }) ?? self.allNearbyEvents.first(where: { $0.id == event.id }) {
+                        if updated.isSaved {
+                            // Add if missing
+                            if !cached.contains(where: { $0.id == updated.id }) {
+                                cached.insert(updated, at: 0)
+                            } else {
+                                // update existing entry
+                                if let idx = cached.firstIndex(where: { $0.id == updated.id }) {
+                                    cached[idx] = updated
+                                }
+                            }
+                        } else {
+                            // Remove if present
+                            cached.removeAll(where: { $0.id == updated.id })
+                        }
+                        StorageService.shared.saveSavedEvents(cached, forUserId: currentUserId)
+                    }
+                }
             )
             .store(in: &cancellables)
     }

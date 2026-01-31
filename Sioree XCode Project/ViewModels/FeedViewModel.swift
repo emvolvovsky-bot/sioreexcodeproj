@@ -111,7 +111,23 @@ class FeedViewModel: ObservableObject {
                         }
                     }
                 },
-                receiveValue: { _ in }
+                receiveValue: { _ in
+                    // Persist to saved-events cache if possible
+                    guard let currentUserId = StorageService.shared.getUserId() else { return }
+                    var cached = StorageService.shared.getSavedEvents(forUserId: currentUserId)
+                    if let updated = self.events.first(where: { $0.id == event.id }) {
+                        if updated.isSaved {
+                            if !cached.contains(where: { $0.id == updated.id }) {
+                                cached.insert(updated, at: 0)
+                            } else if let idx = cached.firstIndex(where: { $0.id == updated.id }) {
+                                cached[idx] = updated
+                            }
+                        } else {
+                            cached.removeAll(where: { $0.id == updated.id })
+                        }
+                        StorageService.shared.saveSavedEvents(cached, forUserId: currentUserId)
+                    }
+                }
             )
             .store(in: &cancellables)
     }

@@ -209,7 +209,9 @@ struct UserSearchRow: View {
     @State private var isFollowing: Bool
     @State private var isRequesting = false
     @State private var showMessageView = false
+    @State private var isCreatingConversation = false
     @State private var cancellables = Set<AnyCancellable>()
+    @Environment(\.dismiss) var dismiss
     private let networkService = NetworkService()
     private let storageService = StorageService.shared
     
@@ -241,19 +243,9 @@ struct UserSearchRow: View {
                     .fill(Color.sioreeLightGrey.opacity(0.3))
                     .frame(width: 50, height: 50)
                 
-                if let avatar = user.avatar, !avatar.isEmpty {
-                    AsyncImage(url: URL(string: avatar)) { image in
-                        image.resizable()
-                    } placeholder: {
-                        Image(systemName: "person.fill")
-                            .foregroundColor(.sioreeIcyBlue)
-                    }
+                // Use AvatarView which prefers a cached local avatar first
+                AvatarView(imageURL: user.avatar, userId: user.id, size: .small)
                     .frame(width: 50, height: 50)
-                    .clipShape(Circle())
-                } else {
-                    Image(systemName: "person.fill")
-                        .foregroundColor(.sioreeIcyBlue)
-                }
             }
             
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
@@ -295,16 +287,46 @@ struct UserSearchRow: View {
             Spacer()
             
             HStack(spacing: Theme.Spacing.s) {
-                // Message Button
+                // Message Button - create/get conversation and open it directly
                 Button(action: {
-                    showMessageView = true
+                    guard !isCreatingConversation else { return }
+                    isCreatingConversation = true
+                    MessagingService.shared.getOrCreateConversation(with: user.id)
+                        .receive(on: DispatchQueue.main)
+                        .sink(receiveCompletion: { completion in
+                            isCreatingConversation = false
+                            if case .failure(let error) = completion {
+                                print("Failed to create/get conversation: \(error)")
+                            }
+                        }, receiveValue: { conv in
+                            // Post notification with minimal conversation info
+                            let dict: [String: Any] = [
+                                "id": conv.id,
+                                "participantId": conv.participantId,
+                                "participantName": conv.participantName,
+                                "participantAvatar": conv.participantAvatar ?? "",
+                                "lastMessage": conv.lastMessage,
+                                "lastMessageTime": conv.lastMessageTime.iso8601String(),
+                                "unreadCount": conv.unreadCount
+                            ]
+                            NotificationCenter.default.post(name: .openConversation, object: nil, userInfo: ["conversation": dict])
+                            // Dismiss the search sheet
+                            dismiss()
+                        })
+                        .store(in: &cancellables)
                 }) {
-                    Image(systemName: "message.fill")
-                        .font(.system(size: 18))
-                        .foregroundColor(.sioreeIcyBlue)
-                        .frame(width: 36, height: 36)
-                        .background(Color.sioreeIcyBlue.opacity(0.1))
-                        .cornerRadius(18)
+                    if isCreatingConversation {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .sioreeIcyBlue))
+                            .frame(width: 36, height: 36)
+                    } else {
+                        Image(systemName: "message.fill")
+                            .font(.system(size: 18))
+                            .foregroundColor(.sioreeIcyBlue)
+                            .frame(width: 36, height: 36)
+                            .background(Color.sioreeIcyBlue.opacity(0.1))
+                            .cornerRadius(18)
+                    }
                 }
                 
                 // Follow/Unfollow Button
@@ -333,9 +355,7 @@ struct UserSearchRow: View {
             RoundedRectangle(cornerRadius: Theme.CornerRadius.medium)
                 .stroke(Color.sioreeIcyBlue.opacity(0.2), lineWidth: 2)
         )
-        .sheet(isPresented: $showMessageView) {
-            CreateConversationView(userId: user.id, userName: user.name ?? user.username)
-        }
+        // (message button now opens conversation directly)
         .onAppear {
             isFollowing = isInitiallyFollowing
         }

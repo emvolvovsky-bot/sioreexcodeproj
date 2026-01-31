@@ -326,12 +326,25 @@ class FavoritesViewModel: ObservableObject {
                 receiveCompletion: { [weak self] completion in
                     self?.isLoading = false
                     if case .failure(let error) = completion {
+                        // On failure, try to load cached saved events from StorageService
+                        if let currentUserId = StorageService.shared.getUserId() {
+                            let cached = StorageService.shared.getSavedEvents(forUserId: currentUserId)
+                            if !cached.isEmpty {
+                                self?.events = cached
+                                self?.errorMessage = nil
+                                return
+                            }
+                        }
                         self?.errorMessage = error.localizedDescription
                     }
                 },
                 receiveValue: { [weak self] events in
                     self?.events = events
                     self?.isLoading = false
+                    // Persist saved events locally for offline/failed-fetch fallback
+                    if let currentUserId = StorageService.shared.getUserId() {
+                        StorageService.shared.saveSavedEvents(events, forUserId: currentUserId)
+                    }
                 }
             )
             .store(in: &cancellables)
@@ -362,6 +375,25 @@ class FavoritesViewModel: ObservableObject {
                             if !(self?.events[index].isSaved ?? false) {
                                 self?.events.remove(at: index)
                             }
+                        }
+                        // Persist saved-events cache to reflect the confirmed change
+                        if let currentUserId = StorageService.shared.getUserId() {
+                            var cached = StorageService.shared.getSavedEvents(forUserId: currentUserId)
+                            if let updated = self?.events.first(where: { $0.id == event.id }) {
+                                if updated.isSaved {
+                                    if !cached.contains(where: { $0.id == updated.id }) {
+                                        cached.insert(updated, at: 0)
+                                    } else if let idx = cached.firstIndex(where: { $0.id == updated.id }) {
+                                        cached[idx] = updated
+                                    }
+                                } else {
+                                    cached.removeAll(where: { $0.id == updated.id })
+                                }
+                            } else {
+                                // event no longer in favorites list -> ensure removed from cache
+                                cached.removeAll(where: { $0.id == event.id })
+                            }
+                            StorageService.shared.saveSavedEvents(cached, forUserId: currentUserId)
                         }
                     }
                 },
@@ -455,5 +487,9 @@ extension Notification.Name {
     static let refreshInbox = Notification.Name("RefreshInbox")
     static let favoriteStatusChanged = Notification.Name("FavoriteStatusChanged")
     static let switchToTicketsTab = Notification.Name("SwitchToTicketsTab")
+        // Messaging notifications
+        static let messageSavedLocally = Notification.Name("MessageSavedLocally")
+        static let messageUpserted = Notification.Name("MessageUpserted")
+        static let openConversation = Notification.Name("OpenConversation")
 }
 

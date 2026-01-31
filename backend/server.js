@@ -8,6 +8,8 @@ const rateLimit = require('express-rate-limit');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 const stripe = require('./lib/stripe');
+const fs = require('fs');
+const path = require('path');
 
 const authRoutes = require('./routes/auth');
 const messageRoutes = require('./routes/messages');
@@ -46,6 +48,39 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Load master API key from file
+let MASTER_API_KEY = "";
+try {
+  const keyPath = path.resolve(__dirname, "..", "Sioree XCode Project", "sioree_master_word.txt");
+  MASTER_API_KEY = fs.readFileSync(keyPath, "utf8").trim();
+  if (!MASTER_API_KEY) {
+    console.warn("Master API key file is empty.");
+  }
+} catch (err) {
+  console.error("Failed to read master API key file:", err.message);
+}
+
+// Middleware to require master API key on all requests
+function requireMasterKey(req, res, next) {
+  const provided =
+    (req.query && (req.query.master_key || req.query.masterKey)) ||
+    (req.body && (req.body.master_key || req.body.masterKey)) ||
+    req.headers["x-master-key"] ||
+    req.headers["x_master_key"];
+
+  if (!MASTER_API_KEY) {
+    return res.status(500).json({ error: "Server misconfigured: master API key not set" });
+  }
+
+  if (!provided || provided !== MASTER_API_KEY) {
+    return res.status(401).json({ error: "Invalid or missing API key" });
+  }
+
+  return next();
+}
+
+// Require master key for all /api routes
+app.use('/api', requireMasterKey);
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes

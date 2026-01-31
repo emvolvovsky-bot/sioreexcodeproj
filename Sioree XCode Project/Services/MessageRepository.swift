@@ -27,6 +27,8 @@ final class MessageRepository {
             msg.setValue("pending", forKey: "status")
             do {
                 try ctx.save()
+                // Notify UI that a pending message was saved locally
+                NotificationCenter.default.post(name: .messageSavedLocally, object: nil, userInfo: ["conversationId": conversationId])
             } catch {
                 print("Failed to save pending message: \(error)")
             }
@@ -78,6 +80,10 @@ final class MessageRepository {
                 msg.setValue("sent", forKey: "status")
 
                 try ctx.save()
+                // Notify UI that a server message was upserted/updated locally
+                if let convId = msg.value(forKey: "conversationId") as? String {
+                    NotificationCenter.default.post(name: .messageUpserted, object: nil, userInfo: ["conversationId": convId])
+                }
             } catch {
                 print("Failed to upsert server message: \(error)")
             }

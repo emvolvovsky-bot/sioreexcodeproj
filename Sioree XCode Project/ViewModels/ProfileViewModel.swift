@@ -62,6 +62,7 @@ class ProfileViewModel: ObservableObject {
     private let useAttendedEvents: Bool
     private weak var authViewModel: AuthViewModel?
     
+    
     init(userId: String? = nil, useAttendedEvents: Bool = false) {
         self.userId = userId
         self.useAttendedEvents = useAttendedEvents
@@ -71,6 +72,9 @@ class ProfileViewModel: ObservableObject {
             isFollowing = storageService.getFollowingIds().contains(userId)
         }
         loadProfile()
+
+        // Start polling server for follow counts every 5 minutes
+        startFollowCountsPolling()
 
         // Listen for post creation to refresh posts
         NotificationCenter.default.publisher(for: NSNotification.Name("PostCreated"))
@@ -132,8 +136,24 @@ class ProfileViewModel: ObservableObject {
                     },
                     receiveValue: { [weak self] user in
                         self?.user = user
-                        self?.followerCount = user.followerCount
-                        self?.followingCount = user.followingCount
+                        // Use locally cached counts immediately when available
+                        if let uid = self?.user?.id,
+                           let cachedFollowers = self?.storageService.getFollowerCount(forUserId: uid) {
+                            self?.followerCount = cachedFollowers
+                        } else {
+                            self?.followerCount = user.followerCount
+                        }
+                        if let uid = self?.user?.id,
+                           let cachedFollowing = self?.storageService.getFollowingCount(forUserId: uid) {
+                            self?.followingCount = cachedFollowing
+                        } else {
+                            self?.followingCount = user.followingCount
+                        }
+                        // Persist initial counts
+                        if let uid = self?.user?.id {
+                            self?.storageService.saveFollowerCount(self?.followerCount ?? 0, forUserId: uid)
+                            self?.storageService.saveFollowingCount(self?.followingCount ?? 0, forUserId: uid)
+                        }
                         self?.loadUserContent()
                         self?.loadFollowCounts()
                     }
@@ -152,8 +172,24 @@ class ProfileViewModel: ObservableObject {
                     },
                     receiveValue: { [weak self] user in
                         self?.user = user
-                        self?.followerCount = user.followerCount
-                        self?.followingCount = user.followingCount
+                        // Use locally cached counts immediately when available
+                        if let uid = self?.user?.id,
+                           let cachedFollowers = self?.storageService.getFollowerCount(forUserId: uid) {
+                            self?.followerCount = cachedFollowers
+                        } else {
+                            self?.followerCount = user.followerCount
+                        }
+                        if let uid = self?.user?.id,
+                           let cachedFollowing = self?.storageService.getFollowingCount(forUserId: uid) {
+                            self?.followingCount = cachedFollowing
+                        } else {
+                            self?.followingCount = user.followingCount
+                        }
+                        // Persist initial counts
+                        if let uid = self?.user?.id {
+                            self?.storageService.saveFollowerCount(self?.followerCount ?? 0, forUserId: uid)
+                            self?.storageService.saveFollowingCount(self?.followingCount ?? 0, forUserId: uid)
+                        }
                         self?.loadUserContent()
                         self?.loadFollowCounts()
                         self?.checkFollowStatus()
@@ -166,6 +202,16 @@ class ProfileViewModel: ObservableObject {
     func loadUserContent() {
         guard let userId = userId ?? StorageService.shared.getUserId() else { return }
         
+        // Preload any locally cached events for this user so they appear immediately
+        let cached = storageService.getLocalEvents(forUserId: userId)
+        if !cached.isEmpty {
+            // Merge cached events with in-memory events but keep cached ones at front
+            let existingIds = Set(self.events.map { $0.id })
+            let newCached = cached.filter { !existingIds.contains($0.id) }
+            self.events.insert(contentsOf: newCached, at: 0)
+            print("📦 Loaded \(newCached.count) cached local events for user \(userId)")
+        }
+
         let eventsPublisher: AnyPublisher<[Event], Error>
         if useAttendedEvents {
             eventsPublisher = networkService.fetchAttendedEvents(userId: userId)
@@ -180,9 +226,15 @@ class ProfileViewModel: ObservableObject {
             receiveValue: { [weak self] serverEvents in
                 // Merge server events with locally created events that might not be in server response yet
                 let serverEventIds = Set(serverEvents.map { $0.id })
-                let existingLocalEvents = self?.events.filter { !serverEventIds.contains($0.id) } ?? []
-                self?.events = serverEvents + existingLocalEvents
-                print("✅ ProfileViewModel loaded \(serverEvents.count) events from server, kept \(existingLocalEvents.count) local events. Total: \(self?.events.count ?? 0)")
+                    // Keep any in-memory events that are not present on the server (local-only)
+                    let existingLocalEvents = self?.events.filter { !serverEventIds.contains($0.id) } ?? []
+                    // Persist server events merged with existing local events (so cache stays current)
+                    self?.events = serverEvents + existingLocalEvents
+                    if let currentUserId = self?.userId ?? StorageService.shared.getUserId() {
+                        // Update local cache for server events so future loads use them
+                        StorageService.shared.saveLocalEvents(serverEvents, forUserId: currentUserId)
+                    }
+                    print("✅ ProfileViewModel loaded \(serverEvents.count) events from server, kept \(existingLocalEvents.count) local events. Total: \(self?.events.count ?? 0)")
             }
         )
         .store(in: &cancellables)
@@ -227,8 +279,16 @@ class ProfileViewModel: ObservableObject {
                     }
                     
                     if let followerCount = response.followerCount {
-                        self.followerCount = followerCount
+                        // Update in-memory and local cache
+                        let previous = self.followerCount
+                        let delta = followerCount - previous
+                        if delta != 0 {
+                            self.followerCount += delta
+                        }
                         self.user?.followerCount = followerCount
+                        if let uid = self.user?.id {
+                            self.storageService.saveFollowerCount(followerCount, forUserId: uid)
+                        }
 
                         // If this is the current user's profile, update AuthViewModel
                         if self.userId == nil || self.userId == StorageService.shared.getUserId() {
@@ -236,8 +296,15 @@ class ProfileViewModel: ObservableObject {
                         }
                     }
                     if let followingCount = response.followingCount {
-                        self.followingCount = followingCount
+                        let previous = self.followingCount
+                        let delta = followingCount - previous
+                        if delta != 0 {
+                            self.followingCount += delta
+                        }
                         self.user?.followingCount = followingCount
+                        if let uid = self.user?.id {
+                            self.storageService.saveFollowingCount(followingCount, forUserId: uid)
+                        }
 
                         // If this is the current user's profile, update AuthViewModel
                         if self.userId == nil || self.userId == StorageService.shared.getUserId() {
@@ -278,12 +345,15 @@ class ProfileViewModel: ObservableObject {
                 receiveCompletion: { _ in },
                 receiveValue: { [weak self] users in
                     guard let self = self else { return }
-                    self.followerCount = users.count
-                    self.user?.followerCount = users.count
-
-                    // If this is the current user's profile, update AuthViewModel
-                    if self.userId == nil || self.userId == StorageService.shared.getUserId() {
-                        self.authViewModel?.currentUser?.followerCount = users.count
+                    let serverCount = users.count
+                    // Only update if changed
+                    if self.followerCount != serverCount {
+                        self.followerCount = serverCount
+                        self.user?.followerCount = serverCount
+                        self.storageService.saveFollowerCount(serverCount, forUserId: uid)
+                        if self.userId == nil || self.userId == StorageService.shared.getUserId() {
+                            self.authViewModel?.currentUser?.followerCount = serverCount
+                        }
                     }
                 }
             )
@@ -295,17 +365,63 @@ class ProfileViewModel: ObservableObject {
                 receiveCompletion: { _ in },
                 receiveValue: { [weak self] users in
                     guard let self = self else { return }
-                    self.followingCount = users.count
-                    self.user?.followingCount = users.count
-
-                    // If this is the current user's profile, update AuthViewModel
-                    if self.userId == nil || self.userId == StorageService.shared.getUserId() {
-                        self.authViewModel?.currentUser?.followingCount = users.count
+                    let serverCount = users.count
+                    if self.followingCount != serverCount {
+                        self.followingCount = serverCount
+                        self.user?.followingCount = serverCount
+                        self.storageService.saveFollowingCount(serverCount, forUserId: uid)
+                        if self.userId == nil || self.userId == StorageService.shared.getUserId() {
+                            self.authViewModel?.currentUser?.followingCount = serverCount
+                        }
                     }
                 }
             )
             .store(in: &cancellables)
     }
+
+    private func startFollowCountsPolling() {
+        // Poll every 5 minutes (300 seconds)
+        let targetUserId = userId ?? StorageService.shared.getUserId()
+        guard let uid = targetUserId else { return }
+
+        Timer.publish(every: 300, on: .main, in: .common)
+            .autoconnect()
+            .flatMap { [weak self] _ -> AnyPublisher<User, Error> in
+                guard let self = self else { return Empty<User, Error>().eraseToAnyPublisher() }
+                return self.networkService.fetchUserProfile(userId: uid)
+            }
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { _ in }, receiveValue: { [weak self] profile in
+                guard let self = self else { return }
+                // Compare server counts with cached counts and update if changed (increment/decrement as needed)
+                let serverFollower = profile.followerCount
+                let cachedFollower = self.storageService.getFollowerCount(forUserId: uid) ?? self.followerCount
+                if serverFollower != cachedFollower {
+                    let delta = serverFollower - cachedFollower
+                    self.followerCount += delta
+                    self.user?.followerCount = serverFollower
+                    self.storageService.saveFollowerCount(serverFollower, forUserId: uid)
+                    if self.userId == nil || self.userId == StorageService.shared.getUserId() {
+                        self.authViewModel?.currentUser?.followerCount = serverFollower
+                    }
+                }
+
+                let serverFollowing = profile.followingCount
+                let cachedFollowing = self.storageService.getFollowingCount(forUserId: uid) ?? self.followingCount
+                if serverFollowing != cachedFollowing {
+                    let delta = serverFollowing - cachedFollowing
+                    self.followingCount += delta
+                    self.user?.followingCount = serverFollowing
+                    self.storageService.saveFollowingCount(serverFollowing, forUserId: uid)
+                    if self.userId == nil || self.userId == StorageService.shared.getUserId() {
+                        self.authViewModel?.currentUser?.followingCount = serverFollowing
+                    }
+                }
+            })
+            .store(in: &cancellables)
+    }
+
+    
     
     func updateProfile(name: String?, username: String?, bio: String?, location: String?) {
         isLoading = true

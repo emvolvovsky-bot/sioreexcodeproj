@@ -153,6 +153,21 @@ struct RealMessageView: View {
                     errorMessage = "Invalid conversation data"
                 }
             }
+            // Listen for local message saves (pending) and server upserts and refresh messages only for this conversation
+            .onReceive(NotificationCenter.default.publisher(for: .messageSavedLocally)) { note in
+                guard let convId = note.userInfo?["conversationId"] as? String, convId == conversation.id else { return }
+                let local = MessageRepository.shared.fetchMessagesLocally(conversationId: conversation.id)
+                if !local.isEmpty {
+                    self.messages = local
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .messageUpserted)) { note in
+                guard let convId = note.userInfo?["conversationId"] as? String, convId == conversation.id else { return }
+                let local = MessageRepository.shared.fetchMessagesLocally(conversationId: conversation.id)
+                if !local.isEmpty {
+                    self.messages = local
+                }
+            }
             .onDisappear {
                 // Refresh inbox when leaving message view
                 NotificationCenter.default.post(name: .refreshInbox, object: nil)

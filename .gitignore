@@ -45,6 +45,7 @@ local.txt
 *.crt
 *.p12
 *.pfx
+sioree_master_word.txt
 
 # Logs
 logs/

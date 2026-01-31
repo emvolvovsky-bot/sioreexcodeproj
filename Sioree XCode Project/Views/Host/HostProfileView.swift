@@ -248,7 +248,7 @@ struct HostProfileView: View {
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     if let user = currentUser {
-                        Text(user.username)
+                        Text("\(user.username) • \(user.userType.rawValue)")
                             .font(.system(size: 18, weight: .semibold))
                             .foregroundColor(.sioreeWhite)
                     }

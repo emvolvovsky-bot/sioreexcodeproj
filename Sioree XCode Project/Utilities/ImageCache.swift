@@ -164,9 +164,12 @@ struct CachedAsyncImage<Content: View>: View {
 
     private func loadCachedImage() {
         guard let url = url else { return }
-
-        if let cachedImage = ImageCache.shared.getImage(for: url) {
-            self.cachedImage = cachedImage
+        DispatchQueue.global(qos: .userInitiated).async {
+            if let cachedImage = ImageCache.shared.getImage(for: url) {
+                DispatchQueue.main.async {
+                    self.cachedImage = cachedImage
+                }
+            }
         }
     }
 }

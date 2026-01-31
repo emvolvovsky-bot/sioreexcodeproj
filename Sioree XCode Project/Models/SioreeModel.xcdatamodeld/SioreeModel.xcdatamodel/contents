@@ -1,2 +1,38 @@
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="24512" systemVersion="25C56" minimumToolsVersion="Automatic" sourceLanguage="Swift" usedWithSwiftData="YES" userDefinedModelVersionIdentifier=""/>
+<?xml version="1.0" encoding="UTF-8"?>
+<model name="SioreeModel" userDefinedModelVersionIdentifier="" type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0">
+  <entity name="MessageEntity" syncable="YES">
+    <attribute name="id" optional="NO" attributeType="String" syncable="YES"/>
+    <attribute name="serverId" optional="YES" attributeType="String" syncable="YES"/>
+    <attribute name="clientTempId" optional="YES" attributeType="String" syncable="YES"/>
+    <attribute name="conversationId" optional="NO" attributeType="String" syncable="YES"/>
+    <attribute name="senderId" optional="NO" attributeType="String" syncable="YES"/>
+    <attribute name="receiverId" optional="YES" attributeType="String" syncable="YES"/>
+    <attribute name="text" optional="YES" attributeType="String" syncable="YES"/>
+    <attribute name="createdAt" optional="YES" attributeType="Date" syncable="YES"/>
+    <attribute name="updatedAt" optional="YES" attributeType="Date" syncable="YES"/>
+    <attribute name="status" optional="YES" attributeType="String" syncable="YES"/>
+    <attribute name="isRead" optional="YES" attributeType="Boolean" syncable="YES"/>
+    <attribute name="messageType" optional="YES" attributeType="String" syncable="YES"/>
+  </entity>
+
+  <entity name="ConversationEntity" syncable="YES">
+    <attribute name="id" optional="NO" attributeType="String" syncable="YES"/>
+    <attribute name="serverId" optional="YES" attributeType="String" syncable="YES"/>
+    <attribute name="participantId" optional="YES" attributeType="String" syncable="YES"/>
+    <attribute name="participantName" optional="YES" attributeType="String" syncable="YES"/>
+    <attribute name="participantAvatar" optional="YES" attributeType="String" syncable="YES"/>
+    <attribute name="localAvatarPath" optional="YES" attributeType="String" syncable="YES"/>
+    <attribute name="lastMessage" optional="YES" attributeType="String" syncable="YES"/>
+    <attribute name="lastMessageTime" optional="YES" attributeType="Date" syncable="YES"/>
+    <attribute name="updatedAt" optional="YES" attributeType="Date" syncable="YES"/>
+    <attribute name="unreadCount" optional="YES" attributeType="Integer 32" syncable="YES"/>
+  </entity>
+
+  <fetchIndex name="MessageByServerId" entityName="MessageEntity">
+    <fetchIndexElement property="serverId"/>
+    <fetchIndexElement property="clientTempId"/>
+  </fetchIndex>
+  <fetchIndex name="ConversationByServerId" entityName="ConversationEntity">
+    <fetchIndexElement property="serverId"/>
+  </fetchIndex>
+</model>

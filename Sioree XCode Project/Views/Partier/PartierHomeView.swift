@@ -6,6 +6,7 @@
 //
 //
 import SwiftUI
+import Combine
 import CoreLocation
 import UIKit
 import MapKit
@@ -33,6 +34,7 @@ struct PartierHomeView: View {
     @State private var favoritesTargetPoint: CGPoint = .zero
     @State private var hiddenEventIds: Set<String> = []
     @State private var showSavedAlert = false
+    @State private var favoriteCancellables = Set<AnyCancellable>()
     var body: some View {
         NavigationStack {
             ZStack {
@@ -108,6 +110,19 @@ struct PartierHomeView: View {
                 } else {
                     locationManager.requestLocation()
                 }
+                
+                // Listen for favorite changes so UI (hiddenEventIds) stays in sync with server/other views
+                NotificationCenter.default.publisher(for: .favoriteStatusChanged)
+                    .receive(on: DispatchQueue.main)
+                    .sink { note in
+                        guard let event = note.userInfo?["event"] as? Event else { return }
+                        if event.isSaved {
+                            hiddenEventIds.insert(event.id)
+                        } else {
+                            hiddenEventIds.remove(event.id)
+                        }
+                    }
+                    .store(in: &favoriteCancellables)
             }
             .onReceive(locationManager.$location.compactMap { $0 }) { coordinate in
                 applyLocationIfChanged(coordinate)

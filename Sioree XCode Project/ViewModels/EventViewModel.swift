@@ -34,6 +34,7 @@ class EventViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private let eventId: String
     private var hasLoadedEvent = false
+    private let storageService = StorageService.shared
     
     init(eventId: String) {
         self.eventId = eventId
@@ -50,8 +51,19 @@ class EventViewModel: ObservableObject {
         }
         isLoading = true
         errorMessage = nil
+
+        // First attempt to load a locally cached copy to avoid network calls
+        if let cached = storageService.getLocalEvent(eventId: eventId) {
+            print("📦 Loaded cached event for id \(eventId): \(cached.title)")
+            self.event = cached
+            self.isRSVPed = cached.isRSVPed
+            isLoading = false
+            // Do not mark hasLoadedEvent so that callers can still request a fresh load if needed.
+            return
+        }
+
         hasLoadedEvent = true
-        print("🔍 Loading event with ID: \(eventId)")
+        print("🔍 Loading event with ID: \(eventId) from network")
 
         networkService.fetchEvent(eventId: eventId)
             .receive(on: DispatchQueue.main)
@@ -70,6 +82,8 @@ class EventViewModel: ObservableObject {
                     self?.event = event
                     // RSVP status is now included in the event response from backend
                     self?.isRSVPed = event.isRSVPed
+                    // Cache the fetched event locally so subsequent loads are fast
+                    StorageService.shared.saveLocalEvent(event)
                 }
             )
             .store(in: &cancellables)
@@ -132,6 +146,8 @@ class EventViewModel: ObservableObject {
                         object: nil,
                         userInfo: ["event": event]
                     )
+                    // Persist created event locally so it shows up instantly without reloading from server
+                    StorageService.shared.saveLocalEvent(event)
                     // If event is in the future and has a QR code, it will also appear in tickets
                     completion?(.success(event))
                 }
@@ -162,6 +178,8 @@ class EventViewModel: ObservableObject {
         event.isRSVPed = true
         event.attendeeCount += 1
         self.event = event
+        // Update cached copy immediately
+        StorageService.shared.saveLocalEvent(event)
         
         networkService.rsvpToEvent(eventId: event.id)
             .receive(on: DispatchQueue.main)

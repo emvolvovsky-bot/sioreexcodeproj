@@ -45,7 +45,7 @@ local.txt
 *.crt
 *.p12
 *.pfx
-sioree_master_word.txt
+
 
 # Logs
 logs/
@@ -114,3 +114,5 @@ Skeleton Backend/sioree-backend/node_modules/
 
 # Setup guides with sensitive information
 STRIPE_SETUP_GUIDE.md
+# Master API key file
+Sioree XCode Project/sioree_master_word.txt

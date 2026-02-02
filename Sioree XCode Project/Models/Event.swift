@@ -72,6 +72,7 @@ struct Event: Identifiable, Codable, Hashable {
     var lookingForTalentType: String? // Type of talent the host is looking for (e.g., "DJ", "Bartender")
     var isPrivate: Bool // Whether the event requires an access code
     var accessCode: String? // Access code required for private events
+    var category: String? // Optional category for the event (e.g., "Music", "Food")
     
     enum CodingKeys: String, CodingKey {
         case id, title, description, location, images, capacity, likes
@@ -102,6 +103,7 @@ struct Event: Identifiable, Codable, Hashable {
         case endDateSnake = "end_date"
         case accessCode = "accessCode"
         case accessCodeSnake = "access_code"
+        case category = "category"
     }
     
     init(from decoder: Decoder) throws {
@@ -138,6 +140,8 @@ struct Event: Identifiable, Codable, Hashable {
         } else {
             lookingForNotes = nil
         }
+        // Category (optional) - some backends may include this
+        category = try container.decodeIfPresent(String.self, forKey: .category)
         status = try container.decodeIfPresent(EventStatus.self, forKey: .status) ?? .published
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         likes = try container.decodeIfPresent(Int.self, forKey: .likes) ?? 0

@@ -49,7 +49,12 @@ final class MessageRepository {
             let clientTempId = messageDict["clientTempId"] as? String
 
             let fetch: NSFetchRequest<NSManagedObject> = NSFetchRequest(entityName: "MessageEntity")
-            fetch.predicate = NSPredicate(format: "serverId == %@ OR clientTempId == %@", serverId, clientTempId ?? "")
+            // Build predicate defensively: only include clientTempId clause when clientTempId is non-empty.
+            if let ct = clientTempId, !ct.isEmpty {
+                fetch.predicate = NSPredicate(format: "serverId == %@ OR clientTempId == %@", serverId, ct)
+            } else {
+                fetch.predicate = NSPredicate(format: "serverId == %@", serverId)
+            }
             fetch.fetchLimit = 1
 
             do {

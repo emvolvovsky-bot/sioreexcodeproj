@@ -26,7 +26,13 @@ struct PartierInboxView: View {
                 VStack(spacing: Theme.Spacing.m) {
                     inboxSearchHeader
 
-                    if filteredConversations.isEmpty {
+                    if isLoading {
+                        Spacer()
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .sioreeIcyBlue))
+                            .scaleEffect(1.2)
+                        Spacer()
+                    } else if filteredConversations.isEmpty {
                         Spacer()
                         VStack(spacing: Theme.Spacing.s) {
                             Text(conversations.isEmpty ? "No messages yet" : "No chats found")
@@ -101,7 +107,10 @@ struct PartierInboxView: View {
                 let local = ConversationRepository.shared.fetchConversationsLocally()
                 // Ensure local conversations are ordered newest-first
                 self.conversations = local.sorted { $0.lastMessageTime > $1.lastMessageTime }
-                // Do not trigger network fetch here — sync is performed only after login
+                // If user is authenticated, immediately refresh inbox from server so only authorized convs show.
+                if let currentUser = StorageService.shared.getUserId(), !currentUser.isEmpty {
+                    loadConversations(showLoading: true)
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: .refreshInbox)) { _ in
                 loadConversations(showLoading: false)
@@ -129,7 +138,38 @@ struct PartierInboxView: View {
                     }
                 },
                 receiveValue: { fetchedConversations in
-                    conversations = fetchedConversations.sorted { $0.lastMessageTime > $1.lastMessageTime }
+                    // If nothing fetched, clear.
+                    guard !fetchedConversations.isEmpty else {
+                        conversations = []
+                        return
+                    }
+
+                    // Perform per-conversation authorization check and only include authorized ones.
+                    let group = DispatchGroup()
+                    var authorized: [Conversation] = []
+
+                    for conv in fetchedConversations {
+                        group.enter()
+                        let isGroup = conv.participantId.isEmpty
+                        print("📥 [Inbox] fetched conv id=\(conv.id) isGroup=\(isGroup) participantId=\(conv.participantId) title=\(conv.conversationTitle ?? "")")
+
+                        messagingService.getMessages(conversationId: conv.id, page: 1)
+                            .sink(receiveCompletion: { completion in
+                                if case .failure(let err) = completion {
+                                    print("⛔ [Inbox] not authorized for conv \(conv.id): \(err)")
+                                    group.leave()
+                                }
+                            }, receiveValue: { _ in
+                                print("✅ [Inbox] authorized conv \(conv.id)")
+                                authorized.append(conv)
+                                group.leave()
+                            })
+                            .store(in: &cancellables)
+                    }
+
+                    group.notify(queue: .main) {
+                        conversations = authorized.sorted { $0.lastMessageTime > $1.lastMessageTime }
+                    }
                 }
             )
             .store(in: &cancellables)

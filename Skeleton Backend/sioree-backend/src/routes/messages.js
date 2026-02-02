@@ -135,17 +135,46 @@ router.get("/conversations", async (req, res) => {
 
     const result = await db.query(query, params);
 
-    const conversations = result.rows.map(row => ({
-      id: row.conversation_id.toString(),
-      isGroup: row.is_group === true,
-      participantId: row.participant_id ? row.participant_id.toString() : null,
-      participantName: row.participant_name || row.participant_username || (row.is_group ? row.conversation_title : "Unknown"),
-      participantAvatar: row.participant_avatar || null,
-      conversationTitle: row.conversation_title || null,
-      lastMessage: row.last_message || "",
-      lastMessageTime: row.last_message_time ? new Date(row.last_message_time).toISOString() : new Date().toISOString(),
-      unreadCount: parseInt(row.unread_count) || 0,
-      isActive: true
+    // Defensive authorization check:
+    // Even though the SQL should already be scoped to the authenticated user, perform an additional
+    // server-side verification to guarantee we only return conversations the user is a participant of.
+    const convIds = result.rows.map(r => r.conversation_id);
+    let authorizedIds = new Set();
+    if (convIds.length > 0) {
+    try {
+        // Use text casting to avoid type mismatch between integer/uuid representations.
+        const authCheck = await db.query(
+          `SELECT id FROM conversations 
+           WHERE id::text = ANY($1::text[]) 
+             AND (
+               user1_id::text = $2::text OR user2_id::text = $2::text
+               OR id::text IN (SELECT conversation_id::text FROM group_members WHERE user_id::text = $2::text)
+             )`,
+          [convIds.map(String), String(userId)]
+        );
+        for (const row of authCheck.rows) {
+          authorizedIds.add(String(row.id));
+        }
+      } catch (authErr) {
+        console.error("Authorization double-check failed:", authErr);
+        // If auth double-check fails, fall back to not returning any conversations to be safe.
+        return res.status(500).json({ error: "Authorization verification failed" });
+      }
+    }
+
+    const conversations = result.rows
+      .filter(row => authorizedIds.size === 0 ? false : authorizedIds.has(String(row.conversation_id)))
+      .map(row => ({
+        id: row.conversation_id.toString(),
+        isGroup: row.is_group === true,
+        participantId: row.participant_id ? row.participant_id.toString() : null,
+        participantName: row.participant_name || row.participant_username || (row.is_group ? row.conversation_title : "Unknown"),
+        participantAvatar: row.participant_avatar || null,
+        conversationTitle: row.conversation_title || null,
+        lastMessage: row.last_message || "",
+        lastMessageTime: row.last_message_time ? new Date(row.last_message_time).toISOString() : new Date().toISOString(),
+        unreadCount: parseInt(row.unread_count) || 0,
+        isActive: true
     }));
 
     res.json({ conversations });

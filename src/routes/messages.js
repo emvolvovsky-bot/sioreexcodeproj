@@ -73,17 +73,40 @@ router.get("/conversations", async (req, res) => {
 
     const result = await db.query(baseQuery, params);
 
-    const conversations = result.rows.map(row => ({
-      id: row.conversation_id.toString(),
-      participantId: row.participant_id.toString(),
-      participantName: row.participant_name || row.participant_username || "Unknown",
-      participantAvatar: row.participant_avatar || null,
-      lastMessage: row.last_message || "",
-      lastMessageTime: row.last_message_time ? new Date(row.last_message_time).toISOString() : new Date().toISOString(),
-      updatedAt: row.conversation_updated_at ? new Date(row.conversation_updated_at).toISOString() : null,
-      unreadCount: parseInt(row.unread_count) || 0,
-      isActive: true
-    }));
+    // Defensive authorization: ensure returned conversation IDs actually belong to the user.
+    const convIds = result.rows.map(r => r.conversation_id);
+    let authorizedIds = new Set();
+    if (convIds.length > 0) {
+      try {
+        const authCheck = await db.query(
+          `SELECT id FROM conversations
+           WHERE id::text = ANY($1::text[])
+             AND (user1_id::text = $2::text OR user2_id::text = $2::text
+                  OR id::text IN (SELECT conversation_id::text FROM group_members WHERE user_id::text = $2::text))`,
+          [convIds.map(String), String(userId)]
+        );
+        for (const row of authCheck.rows) {
+          authorizedIds.add(String(row.id));
+        }
+      } catch (authErr) {
+        console.error("Authorization double-check failed:", authErr);
+        return res.status(500).json({ error: "Authorization verification failed" });
+      }
+    }
+
+    const conversations = result.rows
+      .filter(row => authorizedIds.size === 0 ? false : authorizedIds.has(String(row.conversation_id)))
+      .map(row => ({
+        id: row.conversation_id.toString(),
+        participantId: row.participant_id.toString(),
+        participantName: row.participant_name || row.participant_username || "Unknown",
+        participantAvatar: row.participant_avatar || null,
+        lastMessage: row.last_message || "",
+        lastMessageTime: row.last_message_time ? new Date(row.last_message_time).toISOString() : new Date().toISOString(),
+        updatedAt: row.conversation_updated_at ? new Date(row.conversation_updated_at).toISOString() : null,
+        unreadCount: parseInt(row.unread_count) || 0,
+        isActive: true
+      }));
 
     res.json({ conversations });
   } catch (err) {

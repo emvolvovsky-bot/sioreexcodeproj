@@ -23,15 +23,9 @@ struct SettingsView: View {
     @State private var showDeleteAccountAlert = false
     @State private var isDeletingAccount = false
     
-    private var showsWithdrawals: Bool {
-        guard let userType = authViewModel.currentUser?.userType else { return false }
-        return userType == .host || userType == .talent
-    }
-
-    private var showsBankAccounts: Bool {
-        guard let userType = authViewModel.currentUser?.userType else { return false }
-        return userType == .host || userType == .talent
-    }
+    // Hide bank accounts and withdrawals for users (hosts/talent) per request
+    private var showsWithdrawals: Bool { false }
+    private var showsBankAccounts: Bool { false }
     
     var body: some View {
         NavigationStack {

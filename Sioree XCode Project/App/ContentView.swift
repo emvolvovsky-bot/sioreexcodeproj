@@ -12,7 +12,7 @@ struct ContentView: View {
     @EnvironmentObject var talentViewModel: TalentViewModel
     @State private var showSplash = true
     @State private var appReady = false
-    @State private var showBankConnectSheet = false
+    // Removed automatic bank connect onboarding sheet
     @State private var eventDeepLink: EventDeepLink?
     @State private var pendingEventDeepLink: EventDeepLink?
     
@@ -88,11 +88,7 @@ struct ContentView: View {
         .onOpenURL { url in
             handleDeepLink(url)
         }
-        .sheet(isPresented: $showBankConnectSheet, onDismiss: {
-            StorageService.shared.clearNeedsBankConnect()
-        }) {
-            BankConnectOnboardingView(onConnect: { _ in })
-        }
+        // Bank connect onboarding removed from automatic presentation on signup.
         .sheet(item: $eventDeepLink) { deepLink in
             EventDetailView(eventId: deepLink.id, isTalentMapMode: false)
                 .environmentObject(authViewModel)
@@ -112,12 +108,7 @@ struct ContentView: View {
     }
 
     private func presentBankConnectIfNeeded() {
-        guard authViewModel.isAuthenticated else { return }
-        guard StorageService.shared.needsBankConnect() else { return }
-        let userType = authViewModel.currentUser?.userType ?? StorageService.shared.getUserType()
-        if userType == .host || userType == .talent {
-            showBankConnectSheet = true
-        }
+        // Intentionally left blank — automatic bank connect onboarding removed.
     }
 
     private func handleDeepLink(_ url: URL) {

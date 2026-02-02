@@ -241,7 +241,7 @@ struct EventDetailView: View {
                         .cornerRadius(Theme.CornerRadius.medium)
                     }
 
-                    // Only show host profile and message host button if user is not the host
+                    // Only show host profile (account link) if user is not the host
                     if !isHost {
                         NavigationLink(destination: InboxProfileView(userId: event.hostId)) {
                             HStack(spacing: Theme.Spacing.s) {
@@ -256,25 +256,6 @@ struct EventDetailView: View {
                             }
                         }
                         .buttonStyle(PlainButtonStyle())
-
-                        Divider()
-
-                        // Message Host Button
-                        NavigationLink(destination: InboxProfileView(userId: event.hostId)) {
-                            HStack {
-                                Image(systemName: "message.fill")
-                                    .foregroundColor(.sioreeIcyBlue)
-                                Text("Message Host")
-                                    .font(.sioreeBody)
-                                    .foregroundColor(.sioreeIcyBlue)
-                                Spacer()
-                            }
-                            .padding(Theme.Spacing.m)
-                            .background(Color.sioreeIcyBlue.opacity(0.1))
-                            .cornerRadius(Theme.CornerRadius.medium)
-                        }
-                        .buttonStyle(PlainButtonStyle())
-
                         Divider()
                     }
 
@@ -328,6 +309,24 @@ struct EventDetailView: View {
                                 Text("\(event.date.formattedEventDate()) at \(event.time.formattedEventTime())")
                                     .font(.sioreeBody)
                                     .foregroundColor(.sioreeWhite)
+                            }
+                        }
+
+                        // Category (optional)
+                        if let category = event.category, !category.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            HStack(spacing: Theme.Spacing.m) {
+                                Image(systemName: "tag.fill")
+                                    .foregroundColor(.sioreeIcyBlue)
+                                    .frame(width: 24)
+                                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                                    Text("Category")
+                                        .font(.sioreeCaption)
+                                        .foregroundColor(.sioreeWhite.opacity(0.7))
+                                    Text(category)
+                                        .font(.sioreeBody)
+                                        .foregroundColor(.sioreeWhite)
+                                }
+                                Spacer()
                             }
                         }
 

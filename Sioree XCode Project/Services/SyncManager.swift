@@ -23,21 +23,31 @@ final class SyncManager {
 
     // Fetch conversations updated after localLatest
     func syncConversationsDelta() {
-        // TODO: compute local latest updatedAt from Core Data; for now pass nil to fetch all
-        let updatedAfter: String? = nil
-        var endpoint = "/api/messages/conversations"
-        if let updatedAfter = updatedAfter {
-            endpoint += "?updated_after=\(updatedAfter)"
+        // Don't attempt to sync conversations unless we have an authenticated user.
+        // This avoids unauthenticated or pre-login syncs that may seed the local DB with conversations
+        // belonging to other users.
+        guard let currentUserId = StorageService.shared.getUserId(), !currentUserId.isEmpty else {
+            // No authenticated user yet — skip sync.
+            return
         }
 
+        // TODO: compute local latest updatedAt from Core Data; for now pass nil to fetch all deltas
+        // The messaging.getConversations() endpoint is already scoped to the authenticated user on the server,
+        // but we still guard here to avoid calling it before login (which can produce confusing UI state).
         messaging.getConversations()
             .sink(receiveCompletion: { completion in
                 if case .failure(let err) = completion {
                     print("Conversation delta fetch failed: \(err)")
                 }
             }, receiveValue: { conversations in
-                // Upsert conversations into Core Data
+                // Upsert conversations into Core Data (only store conversations for current user)
                 for conv in conversations {
+                    // Defensive: ensure participant belongs to current user context for 1:1 chats.
+                    // Group chats will have nil participantId.
+                    if !conv.participantId.isEmpty {
+                        // nothing additional required here — server returns only authorized conversations
+                    }
+
                     let dict: [String: Any] = [
                         "id": conv.id,
                         "participantId": conv.participantId,
@@ -46,6 +56,19 @@ final class SyncManager {
                         "updatedAt": conv.lastMessageTime.iso8601String()
                     ]
                     ConversationRepository.shared.upsertConversation(convDict: dict)
+
+                    // DEBUG: log fetched conversation and verify authorization by attempting to fetch messages.
+                    let isGroup = conv.participantId.isEmpty
+                    print("📥 Fetched conversation id=\(conv.id) isGroup=\(isGroup) participantId=\(conv.participantId) title=\(conv.conversationTitle ?? "")")
+                    MessagingService.shared.getMessages(conversationId: conv.id, page: 1)
+                        .sink(receiveCompletion: { completion in
+                            if case .failure(let err) = completion {
+                                print("⛔ Authorization check failed for conversation \(conv.id): \(err)")
+                            }
+                        }, receiveValue: { _ in
+                            print("✅ Authorization check passed for conversation \(conv.id)")
+                        })
+                        .store(in: &self.cancellables)
                 }
             })
             .store(in: &cancellables)

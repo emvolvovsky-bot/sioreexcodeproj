@@ -48,7 +48,13 @@ struct HostInboxView: View {
                 VStack(spacing: Theme.Spacing.m) {
                     inboxSearchHeader
 
-                    if filteredConversations.isEmpty {
+                    if isLoading {
+                        Spacer()
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .sioreeIcyBlue))
+                            .scaleEffect(1.2)
+                        Spacer()
+                    } else if filteredConversations.isEmpty {
                         Spacer()
                         VStack(spacing: Theme.Spacing.s) {
                             Text(conversations.isEmpty ? "No messages yet" : "No chats found")
@@ -123,7 +129,10 @@ struct HostInboxView: View {
                 let local = ConversationRepository.shared.fetchConversationsLocally()
                 // Ensure local conversations are ordered newest-first
                 self.conversations = local.sorted { $0.lastMessageTime > $1.lastMessageTime }
-                // Do not trigger network fetch here — conversations are synced after login
+                // If authenticated, immediately refresh inbox from server so only authorized convs show.
+                if let currentUser = StorageService.shared.getUserId(), !currentUser.isEmpty {
+                    loadConversations(showLoading: true)
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: .refreshInbox)) { _ in
                 // Background refresh without blocking UI
@@ -237,8 +246,37 @@ struct HostInboxView: View {
                         errorMessage = error.localizedDescription
                     }
                 },
-                receiveValue: { conversations in
-                    self.conversations = conversations.sorted { $0.lastMessageTime > $1.lastMessageTime }
+                receiveValue: { fetchedConversations in
+                    guard !fetchedConversations.isEmpty else {
+                        self.conversations = []
+                        return
+                    }
+
+                    let group = DispatchGroup()
+                    var authorized: [Conversation] = []
+
+                    for conv in fetchedConversations {
+                        group.enter()
+                        let isGroup = conv.participantId.isEmpty
+                        print("📥 [Host Inbox] fetched conv id=\(conv.id) isGroup=\(isGroup) participantId=\(conv.participantId) title=\(conv.conversationTitle ?? "")")
+
+                        messagingService.getMessages(conversationId: conv.id, page: 1)
+                            .sink(receiveCompletion: { completion in
+                                if case .failure(let err) = completion {
+                                    print("⛔ [Host Inbox] not authorized for conv \(conv.id): \(err)")
+                                    group.leave()
+                                }
+                            }, receiveValue: { _ in
+                                print("✅ [Host Inbox] authorized conv \(conv.id)")
+                                authorized.append(conv)
+                                group.leave()
+                            })
+                            .store(in: &cancellables)
+                    }
+
+                    group.notify(queue: .main) {
+                        self.conversations = authorized.sorted { $0.lastMessageTime > $1.lastMessageTime }
+                    }
                 }
             )
             .store(in: &cancellables)

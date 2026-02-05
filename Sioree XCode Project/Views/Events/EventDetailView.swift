@@ -312,22 +312,21 @@ struct EventDetailView: View {
                             }
                         }
 
-                        // Category (optional)
-                        if let category = event.category, !category.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            HStack(spacing: Theme.Spacing.m) {
-                                Image(systemName: "tag.fill")
-                                    .foregroundColor(.sioreeIcyBlue)
-                                    .frame(width: 24)
-                                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                                    Text("Category")
-                                        .font(.sioreeCaption)
-                                        .foregroundColor(.sioreeWhite.opacity(0.7))
-                                    Text(category)
-                                        .font(.sioreeBody)
-                                        .foregroundColor(.sioreeWhite)
-                                }
-                                Spacer()
+                        // Category row (always visible; shows fallback if not set)
+                        HStack(spacing: Theme.Spacing.m) {
+                            Image(systemName: "tag.fill")
+                                .foregroundColor(.sioreeIcyBlue)
+                                .frame(width: 24)
+                            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                                Text("Category")
+                                    .font(.sioreeCaption)
+                                    .foregroundColor(.sioreeWhite.opacity(0.7))
+                                let displayCategory = (event.category?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 } ?? (event.lookingForTalentType ?? "Uncategorized")
+                                Text(displayCategory)
+                                    .font(.sioreeBody)
+                                    .foregroundColor(.sioreeWhite)
                             }
+                            Spacer()
                         }
 
                         if !isTalentMapMode {
@@ -384,14 +383,14 @@ struct EventDetailView: View {
                                     Text("Attendees")
                                         .font(.sioreeCaption)
                                         .foregroundColor(.sioreeWhite.opacity(0.7))
-                                    Text("\(event.attendeeCount) People Going")
+                                    Text("\(event.attendeeCount) \(event.date >= Date() ? "People Going" : "Attended")")
                                         .font(.sioreeBody)
                                         .foregroundColor(Color.sioreeIcyBlue)
                                 }
                                 Spacer()
                             }
                         } else {
-                            NavigationLink(destination: EventAttendeesView(eventId: event.id, eventName: event.title)) {
+                            NavigationLink(destination: EventAttendeesView(eventId: event.id, eventName: event.title, isPast: event.date < Date())) {
                                 HStack(spacing: Theme.Spacing.m) {
                                     Image(systemName: "person.3.fill")
                                         .foregroundColor(.sioreeIcyBlue)
@@ -400,7 +399,7 @@ struct EventDetailView: View {
                                         Text("Attendees")
                                             .font(.sioreeCaption)
                                             .foregroundColor(.sioreeWhite.opacity(0.7))
-                                        Text("\(event.attendeeCount) People Going")
+                                        Text("\(event.attendeeCount) \(event.date >= Date() ? "People Going" : "Attended")")
                                             .font(.sioreeBody)
                                             .foregroundColor(Color.sioreeIcyBlue)
                                     }

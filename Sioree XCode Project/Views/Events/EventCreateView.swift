@@ -44,7 +44,6 @@ struct EventCreateView: View {
     @StateObject private var photoService = PhotoService.shared
     @State private var cancellables = Set<AnyCancellable>()
     @State private var selectedCategory: EventCategory? = nil
-    @State private var selectedSubcategory: String? = nil
     @State private var showCategoryPicker = false
     
     var body: some View {
@@ -126,11 +125,11 @@ struct EventCreateView: View {
                             HStack {
                                 Image(systemName: "tag.fill")
                                     .foregroundColor(.sioreeIcyBlue)
-                                Text(selectedSubcategory ?? selectedCategory?.label ?? "Select Category")
-                                    .foregroundColor((selectedCategory == nil && selectedSubcategory == nil) ? .sioreeIcyBlue : .sioreeWhite)
+                                Text(selectedCategory?.label ?? "Select Category")
+                                    .foregroundColor(selectedCategory == nil ? .sioreeIcyBlue : .sioreeWhite)
                                     .font(.sioreeBody)
                                 Spacer()
-                                if selectedCategory != nil || selectedSubcategory != nil {
+                                if selectedCategory != nil {
                                     Image(systemName: "checkmark")
                                         .foregroundColor(.sioreeIcyBlue)
                                 }
@@ -326,7 +325,7 @@ struct EventCreateView: View {
                 Text(stripeSetupMessage.isEmpty ? "Complete Stripe setup to publish ticketed events." : stripeSetupMessage)
             }
             .sheet(isPresented: $showCategoryPicker) {
-                CategoryWheelPickerView(selectedCategory: $selectedCategory, selectedSubcategory: $selectedSubcategory)
+                CategoryWheelPickerView(selectedCategory: $selectedCategory)
                     .presentationDetents([.fraction(0.5)])
             }
         }
@@ -381,7 +380,8 @@ struct EventCreateView: View {
             talentIds: selectedTalentIds,
             lookingForRoles: [],
             lookingForNotes: nil,
-            lookingForTalentType: nil
+            lookingForTalentType: nil,
+            category: selectedCategory?.label
         ) { result in
             DispatchQueue.main.async {
                 isPublishing = false
@@ -455,65 +455,15 @@ struct EventCreateView: View {
 }
 
 
-// Category Wheel Picker (half-screen, wheel style with subcategories)
+// Category Picker (simple single-list scroll, no subcategories)
 struct CategoryWheelPickerView: View {
     @Environment(\.dismiss) var dismiss
     @Binding var selectedCategory: EventCategory?
-    @Binding var selectedSubcategory: String?
 
-    // Main categories to choose from
-    private let mainCategories: [EventCategory] = [.music, .food, .sport, .movies, .meetups]
-
-    // Subcategory lists
-    private let musicSubcategories = [
-        "Live Band", "DJ Night", "Silent Disco", "Open Mic", "Karaoke",
-        "Listening Party", "Album Release Party", "Jam Session", "Rave",
-        "Jazz Night", "Hip Hop Night"
+    // Desired single-level ordered categories
+    private let displayedCategories: [EventCategory] = [
+        .movies, .food, .sport, .music, .meetups, .nightlife, .arts, .outdoors
     ]
-    private let foodSubcategories = [
-        "Dinner Party", "Potluck", "Pizza Party", "Taco Night", "Brunch",
-        "Wine Tasting", "Cocktail Party", "Mocktail Night", "Beer Tasting",
-        "Food Crawl", "Dessert Night", "Cooking Party"
-    ]
-    private let moviesSubcategories = [
-        "Game Day Watch Party", "Movie Night", "Outdoor Movie Night",
-        "TV Finale Watch Party", "Binge Watch Party", "Anime Night",
-        "Documentary Screening"
-    ]
-    private let sportSubcategories = [
-        "Sports Watch Party", "Pickup Basketball", "Soccer Game", "Tennis Meetup",
-        "Volleyball", "Bowling Night", "Mini Golf", "Hiking Group", "Run Club",
-        "Yoga Session", "Ski Meetup", "Snowboard Meetup"
-    ]
-    private let meetupsSubcategories = [
-        "Board Game Night", "Card Game Night", "Poker Night", "Casino Night",
-        "Trivia Night", "Murder Mystery", "Escape Room Meetup", "Video Game Night",
-        "Mario Kart Tournament", "Esports Watch Party", "House Party", "Theme Party",
-        "Costume Party", "Halloween Party", "Glow Party", "Decades Party",
-        "Masquerade", "Pajama Party", "Rooftop Party", "Pool Party", "Beach Party",
-        "Bonfire", "Networking Mixer", "Social Mixer", "College Party", "Campus Event",
-        "Alumni Meetup", "Singles Night", "Speed Dating", "Friend Meetup",
-        "Coffee Meetup", "Study Group", "Book Club", "Language Exchange",
-        "Paint and Sip", "Craft Night", "DIY Night", "Vision Board Party",
-        "Photography Walk", "Writing Circle", "Poetry Night", "Fashion Swap",
-        "Wellness Meetup", "Meditation Session", "Sound Bath", "Breathwork Session",
-        "Self Care Night", "Pop Up Party", "Secret Location Party", "After Party",
-        "Pre Game", "Late Night Meetup", "Surprise Party"
-    ]
-
-    @State private var tempCategory: EventCategory = .music
-    @State private var tempSubIndex: Int = 0
-
-    private var currentSubcategories: [String] {
-        switch tempCategory {
-        case .music: return musicSubcategories
-        case .food: return foodSubcategories
-        case .movies: return moviesSubcategories
-        case .sport: return sportSubcategories
-        case .meetups: return meetupsSubcategories
-        default: return []
-        }
-    }
 
     var body: some View {
         NavigationStack {
@@ -527,37 +477,32 @@ struct CategoryWheelPickerView: View {
                 }
                 Divider().background(Color.sioreeLightGrey.opacity(0.2))
 
-                HStack(spacing: 0) {
-                    // Main category wheel
-                    Picker("", selection: $tempCategory) {
-                        ForEach(mainCategories, id: \.self) { cat in
-                            Text(cat.label)
-                                .lineLimit(2)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .tag(cat)
+                ScrollView {
+                    VStack(spacing: Theme.Spacing.s) {
+                        ForEach(displayedCategories, id: \.self) { cat in
+                            Button(action: {
+                                selectedCategory = cat
+                            }) {
+                                HStack {
+                                    Text(cat.label)
+                                        .foregroundColor(selectedCategory == cat ? .sioreeWhite : .sioreeLightGrey)
+                                        .font(.sioreeBody)
+                                    Spacer()
+                                    if selectedCategory == cat {
+                                        Image(systemName: "checkmark")
+                                            .foregroundColor(.sioreeIcyBlue)
+                                    }
+                                }
+                                .padding(.vertical, Theme.Spacing.m)
+                                .padding(.horizontal, Theme.Spacing.m)
+                                .background(selectedCategory == cat ? Color.sioreeCharcoal.opacity(0.25) : Color.clear)
+                                .cornerRadius(12)
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
-                    .pickerStyle(.wheel)
-                    .frame(maxWidth: .infinity)
-                    .clipped()
-
-                    // Subcategory wheel
-                    Picker("", selection: $tempSubIndex) {
-                        ForEach(0..<currentSubcategories.count, id: \.self) { idx in
-                            Text(currentSubcategories[idx])
-                                .lineLimit(2)
-                                .multilineTextAlignment(.leading)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .tag(idx)
-                        }
-                    }
-                    .pickerStyle(.wheel)
-                    .frame(maxWidth: .infinity)
-                    .clipped()
+                    .padding(.vertical, Theme.Spacing.m)
                 }
-                .frame(height: 220)
-
-                Spacer()
             }
             .padding(.horizontal, Theme.Spacing.m)
             .background(
@@ -575,30 +520,16 @@ struct CategoryWheelPickerView: View {
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") {
-                        selectedCategory = tempCategory
-                        let subs = currentSubcategories
-                        if subs.indices.contains(tempSubIndex) {
-                            selectedSubcategory = subs[tempSubIndex]
-                        } else {
-                            selectedSubcategory = nil
-                        }
                         dismiss()
                     }
                     .foregroundColor(.sioreeIcyBlue)
                 }
             }
             .onAppear {
-                tempCategory = selectedCategory ?? .music
-                // set tempSubIndex to index of currently selectedSubcategory if present
-                if let sel = selectedSubcategory, let idx = currentSubcategories.firstIndex(of: sel) {
-                    tempSubIndex = idx
-                } else {
-                    tempSubIndex = 0
+                // Ensure a default is selected if none chosen yet
+                if selectedCategory == nil {
+                    selectedCategory = nil
                 }
-            }
-            .onChange(of: tempCategory) { _ in
-                // reset sub index whenever main category changes
-                tempSubIndex = 0
             }
         }
     }

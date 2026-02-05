@@ -104,12 +104,29 @@ struct PartierInboxView: View {
                 UserSearchView()
             }
             .onAppear {
-                let local = ConversationRepository.shared.fetchConversationsLocally()
-                // Ensure local conversations are ordered newest-first
-                self.conversations = local.sorted { $0.lastMessageTime > $1.lastMessageTime }
-                // If user is authenticated, immediately refresh inbox from server so only authorized convs show.
+                // If authenticated and we've already performed the initial server load this session, render cached inbox immediately.
                 if let currentUser = StorageService.shared.getUserId(), !currentUser.isEmpty {
-                    loadConversations(showLoading: true)
+                    if SyncManager.shared.hasInboxLoaded(for: currentUser) {
+                        let cached = SyncManager.shared.getCachedInbox(for: currentUser)
+                        if !cached.isEmpty {
+                            self.conversations = cached.sorted { $0.lastMessageTime > $1.lastMessageTime }
+                        } else {
+                            // Fallback to local DB if cache missing
+                            let local = ConversationRepository.shared.fetchConversationsLocally()
+                            self.conversations = local.sorted { $0.lastMessageTime > $1.lastMessageTime }
+                        }
+                        self.isLoading = false
+                    } else {
+                        // First open this session — show spinner and fetch server-authorized inbox.
+                        self.conversations = []
+                        self.isLoading = true
+                        loadConversations(showLoading: true)
+                    }
+                } else {
+                    // Unauthenticated fallback: render local cache
+                    let local = ConversationRepository.shared.fetchConversationsLocally()
+                    self.conversations = local.sorted { $0.lastMessageTime > $1.lastMessageTime }
+                    self.isLoading = false
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: .refreshInbox)) { _ in
@@ -131,8 +148,9 @@ struct PartierInboxView: View {
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
-                    if showLoading { isLoading = false }
+                    // Only handle errors here; success path completes before per-conversation checks finish.
                     if case .failure(let error) = completion {
+                        if showLoading { isLoading = false }
                         errorMessage = error.localizedDescription
                         print("❌ Failed to load conversations: \(error)")
                     }
@@ -141,6 +159,12 @@ struct PartierInboxView: View {
                     // If nothing fetched, clear.
                     guard !fetchedConversations.isEmpty else {
                         conversations = []
+                        // mark inbox loaded (empty) so subsequent opens render immediately
+                        if let currentUser = StorageService.shared.getUserId(), !currentUser.isEmpty {
+                            SyncManager.shared.setCachedInbox(for: currentUser, conversations: [])
+                            SyncManager.shared.markInboxLoaded(for: currentUser)
+                        }
+                        if showLoading { isLoading = false }
                         return
                     }
 
@@ -169,6 +193,12 @@ struct PartierInboxView: View {
 
                     group.notify(queue: .main) {
                         conversations = authorized.sorted { $0.lastMessageTime > $1.lastMessageTime }
+                        // Cache and mark inbox loaded for this user for this session so subsequent opens render immediately.
+                        if let currentUser = StorageService.shared.getUserId(), !currentUser.isEmpty {
+                            SyncManager.shared.setCachedInbox(for: currentUser, conversations: conversations)
+                            SyncManager.shared.markInboxLoaded(for: currentUser)
+                        }
+                        if showLoading { isLoading = false }
                     }
                 }
             )

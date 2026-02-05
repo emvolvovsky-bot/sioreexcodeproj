@@ -210,7 +210,7 @@ struct HostUpcomingEventCard: View {
         .buttonStyle(PlainButtonStyle())
         .sheet(isPresented: $showAttendees) {
             NavigationStack {
-                EventAttendeesView(eventId: event.id, eventName: event.title)
+                EventAttendeesView(eventId: event.id, eventName: event.title, isPast: event.date < Date())
                     .environmentObject(authViewModel)
             }
         }

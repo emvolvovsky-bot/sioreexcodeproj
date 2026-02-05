@@ -21,6 +21,7 @@ struct Attendee: Identifiable, Codable {
 struct EventAttendeesView: View {
     let eventId: String
     let eventName: String
+    let isPast: Bool
     @State private var selectedAttendee: Attendee?
     @State private var attendees: [Attendee] = []
     @State private var isLoading = true
@@ -29,9 +30,10 @@ struct EventAttendeesView: View {
     private let networkService = NetworkService()
     @State private var cancellables = Set<AnyCancellable>()
     
-    init(eventId: String, eventName: String) {
+    init(eventId: String, eventName: String, isPast: Bool = false) {
         self.eventId = eventId
         self.eventName = eventName
+        self.isPast = isPast
     }
     
     var body: some View {
@@ -48,12 +50,24 @@ struct EventAttendeesView: View {
                 LoadingView()
             } else if attendees.isEmpty {
                 VStack(spacing: Theme.Spacing.m) {
-                    Image(systemName: "person.3.fill")
+                    Image(systemName: isPast ? "person.3" : "person.3.fill")
                         .font(.system(size: 50))
                         .foregroundColor(.sioreeLightGrey.opacity(0.5))
-                    Text("No attendees yet")
-                        .font(.sioreeBody)
-                        .foregroundColor(.sioreeLightGrey)
+                    if isPast {
+                        Text("No one attended")
+                            .font(.sioreeBody)
+                            .foregroundColor(.sioreeLightGrey)
+                        Text("This event has passed and no attendees were recorded.")
+                            .font(.sioreeCaption)
+                            .foregroundColor(.sioreeLightGrey.opacity(0.8))
+                    } else {
+                        Text("No attendees yet")
+                            .font(.sioreeBody)
+                            .foregroundColor(.sioreeLightGrey)
+                        Text("As soon as people sign up, they’ll appear here.")
+                            .font(.sioreeCaption)
+                            .foregroundColor(.sioreeLightGrey.opacity(0.8))
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -68,7 +82,7 @@ struct EventAttendeesView: View {
                             .buttonStyle(PlainButtonStyle())
                         }
                     } header: {
-                        Text("\(attendees.count) People Going")
+                        Text("\(attendees.count) \(isPast ? "Attended" : "People Going")")
                             .foregroundColor(.sioreeLightGrey)
                     }
                 }
@@ -90,25 +104,62 @@ struct EventAttendeesView: View {
     private func loadAttendees() {
         isLoading = true
         errorMessage = nil
-        
+        // Try loading cached attendees first for snappy UX
+        if let cached = loadCachedAttendees() {
+            attendees = cached
+            isLoading = false
+        }
+
         networkService.fetchEventAttendees(eventId: eventId)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
                     isLoading = false
                     if case .failure(let error) = completion {
-                        errorMessage = error.localizedDescription
+                        // If no cached data and request failed, show error
+                        if attendees.isEmpty {
+                            errorMessage = error.localizedDescription
+                        }
                         print("❌ Failed to load attendees: \(error)")
                     }
                 },
                 receiveValue: { fetchedAttendees in
                     attendees = fetchedAttendees
+                    // Cache the fresh list locally
+                    saveAttendeesToCache(fetchedAttendees)
                     // Check follow status for each attendee
                     checkFollowStatuses()
                     isLoading = false
                 }
             )
             .store(in: &cancellables)
+    }
+
+    // MARK: - Caching
+    private func cacheKey() -> String {
+        "cached_attendees_\(eventId)"
+    }
+
+    private func saveAttendeesToCache(_ list: [Attendee]) {
+        DispatchQueue.global(qos: .background).async {
+            do {
+                let data = try JSONEncoder().encode(list)
+                UserDefaults.standard.set(data, forKey: cacheKey())
+            } catch {
+                print("❌ Failed to cache attendees: \(error)")
+            }
+        }
+    }
+
+    private func loadCachedAttendees() -> [Attendee]? {
+        guard let data = UserDefaults.standard.data(forKey: cacheKey()) else { return nil }
+        do {
+            let list = try JSONDecoder().decode([Attendee].self, from: data)
+            return list
+        } catch {
+            print("❌ Failed to decode cached attendees: \(error)")
+            return nil
+        }
     }
     
     private func checkFollowStatuses() {

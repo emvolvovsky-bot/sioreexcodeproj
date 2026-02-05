@@ -112,17 +112,55 @@ struct HostMyEventsView: View {
                                 .padding(.horizontal, Theme.Spacing.l)
                                 .padding(.vertical, Theme.Spacing.m)
                             } else {
-                                // Grid layout for hosted events
-                                let columns = Array(repeating: GridItem(.flexible(), spacing: Theme.Spacing.m), count: 2)
-                                
-                                LazyVGrid(columns: columns, spacing: Theme.Spacing.l) {
+                                // Minimal vertical list for hosted (past) events.
+                                LazyVStack(spacing: Theme.Spacing.s) {
                                     ForEach(visibleEvents) { event in
-                                        NavigationLink(destination: EventDetailView(eventId: event.id, isTalentMapMode: false)) {
-                                            HostEventCardGrid(event: event) {
-                                                selectedEventForDetail = event
-                                            }
+                                        // Hidden NavigationLink driven by selection so whole row is tappable.
+                                        NavigationLink(tag: event, selection: $selectedEventForDetail) {
+                                            EventDetailView(eventId: event.id, isTalentMapMode: false)
+                                        } label: {
+                                            EmptyView()
                                         }
-                                        .buttonStyle(PlainButtonStyle())
+                                        .opacity(0)
+                                        .frame(width: 0, height: 0)
+
+                                        HStack(spacing: Theme.Spacing.m) {
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(event.title)
+                                                    .font(.sioreeBody)
+                                                    .fontWeight(.semibold)
+                                                    .foregroundColor(.sioreeWhite)
+                                                    .lineLimit(1)
+                                                Text(HostHomeDateFormatter.event.string(from: event.date))
+                                                    .font(.sioreeCaption)
+                                                    .foregroundColor(.sioreeLightGrey)
+                                            }
+
+                                            Spacer()
+
+                                            // Attendees button: navigates to attendees list
+                                            NavigationLink(destination: EventAttendeesView(eventId: event.id, eventName: event.title, isPast: true)) {
+                                                HStack(spacing: Theme.Spacing.xs) {
+                                                    Image(systemName: "person.2.fill")
+                                                        .font(.system(size: 14, weight: .semibold))
+                                                    Text("\(event.attendeeCount)")
+                                                        .font(.sioreeCaption)
+                                                }
+                                                .padding(.vertical, Theme.Spacing.xs)
+                                                .padding(.horizontal, Theme.Spacing.s)
+                                                .background(Color.sioreeLightGrey.opacity(0.06))
+                                                .cornerRadius(12)
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                        .padding(.vertical, Theme.Spacing.s)
+                                        .padding(.horizontal, Theme.Spacing.m)
+                                        .background(.ultraThinMaterial.opacity(0.03))
+                                        .cornerRadius(Theme.CornerRadius.medium)
+                                        .onTapGesture {
+                                            // Select to navigate to event detail
+                                            selectedEventForDetail = event
+                                        }
                                     }
                                 }
                                 .padding(.horizontal, Theme.Spacing.m)
@@ -255,5 +293,13 @@ struct HostMyEventsView: View {
 #Preview {
     HostMyEventsView()
         .environmentObject(AuthViewModel())
+}
+
+private enum HostHomeDateFormatter {
+    static let event: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "E, MMM d"
+        return formatter
+    }()
 }
 

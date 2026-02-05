@@ -52,14 +52,12 @@ class EventViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
 
-        // First attempt to load a locally cached copy to avoid network calls
+        // First attempt to load a locally cached copy for snappy UX, but still fetch fresh data.
         if let cached = storageService.getLocalEvent(eventId: eventId) {
             print("📦 Loaded cached event for id \(eventId): \(cached.title)")
             self.event = cached
             self.isRSVPed = cached.isRSVPed
-            isLoading = false
-            // Do not mark hasLoadedEvent so that callers can still request a fresh load if needed.
-            return
+            // Keep isLoading true while we attempt a network refresh below.
         }
 
         hasLoadedEvent = true
@@ -78,12 +76,25 @@ class EventViewModel: ObservableObject {
                     }
                 },
                 receiveValue: { [weak self] event in
-                    print("✅ Received event: \(event.title)")
-                    self?.event = event
+                    print("✅ Received event: \(event.title) — category: \(event.category ?? "nil")")
+                    var finalEvent = event
+                    // If backend didn't include category, prefer cached copy, then prefer created-category mapping
+                    if (finalEvent.category?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) {
+                        if let cached = self?.storageService.getLocalEvent(eventId: event.id),
+                           let cachedCat = cached.category?.trimmingCharacters(in: .whitespacesAndNewlines),
+                           !cachedCat.isEmpty {
+                            print("ℹ️ Using cached category '\(cachedCat)' for event \(event.id)")
+                            finalEvent.category = cachedCat
+                        } else if let createdCat = StorageService.shared.getCreatedEventCategory(forEventId: event.id) {
+                            print("ℹ️ Using created-category mapping '\(createdCat)' for event \(event.id)")
+                            finalEvent.category = createdCat
+                        }
+                    }
+                    self?.event = finalEvent
                     // RSVP status is now included in the event response from backend
                     self?.isRSVPed = event.isRSVPed
                     // Cache the fetched event locally so subsequent loads are fast
-                    StorageService.shared.saveLocalEvent(event)
+                    StorageService.shared.saveLocalEvent(finalEvent)
                 }
             )
             .store(in: &cancellables)
@@ -111,6 +122,7 @@ class EventViewModel: ObservableObject {
                     lookingForRoles: [String] = [],
                     lookingForNotes: String? = nil,
                     lookingForTalentType: String? = nil,
+                    category: String? = nil,
                     completion: ((Result<Event, Error>) -> Void)? = nil) {
         isLoading = true
         errorMessage = nil
@@ -127,7 +139,8 @@ class EventViewModel: ObservableObject {
             talentIds: talentIds,
             lookingForRoles: lookingForRoles,
             lookingForNotes: lookingForNotes,
-            lookingForTalentType: lookingForTalentType
+            lookingForTalentType: lookingForTalentType,
+            category: category
         )
             .receive(on: DispatchQueue.main)
             .sink(
@@ -139,17 +152,28 @@ class EventViewModel: ObservableObject {
                     }
                 },
                 receiveValue: { [weak self] event in
-                    self?.event = event
+                    var returned = event
+                    // If backend didn't echo back category, use the one we passed to the API for immediate UX correctness
+                    if (returned.category?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true),
+                       let cat = category, !cat.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        returned.category = cat
+                    }
+
+                    self?.event = returned
                     // Always post notification when event is created so it appears on home screen
                     NotificationCenter.default.post(
                         name: NSNotification.Name("EventCreated"),
                         object: nil,
-                        userInfo: ["event": event]
+                        userInfo: ["event": returned]
                     )
                     // Persist created event locally so it shows up instantly without reloading from server
-                    StorageService.shared.saveLocalEvent(event)
+                    StorageService.shared.saveLocalEvent(returned)
+                    // Also save created-category mapping so we can fallback later if backend omits it
+                    if let cat = returned.category?.trimmingCharacters(in: .whitespacesAndNewlines), !cat.isEmpty {
+                        StorageService.shared.saveCreatedEventCategory(cat, forEventId: returned.id)
+                    }
                     // If event is in the future and has a QR code, it will also appear in tickets
-                    completion?(.success(event))
+                    completion?(.success(returned))
                 }
             )
             .store(in: &cancellables)

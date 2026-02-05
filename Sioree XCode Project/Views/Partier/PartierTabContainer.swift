@@ -34,17 +34,20 @@ struct PartierTabContainer: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             TabView(selection: $selectedTab) {
-                TicketsView()
-                    .tag(PartierTab.tickets)
-                    .tabItem { EmptyView() }
-                
-                PartierInboxView()
-                    .tag(PartierTab.inbox)
-                    .tabItem { EmptyView() }
-                
+                // Home should be the first tab for Partier
                 PartierHomeView()
                     .tag(PartierTab.home)
                     .tabItem { EmptyView() }
+
+                PartierInboxView()
+                    .tag(PartierTab.inbox)
+                    .tabItem { EmptyView() }
+
+                // Tickets moved to the third position
+                TicketsView()
+                    .tag(PartierTab.tickets)
+                    .tabItem { EmptyView() }
+
                 PartierProfileView()
                     .tag(PartierTab.profile)
                     .tabItem { EmptyView() }
@@ -114,9 +117,10 @@ private struct PartierBottomBar: View {
                     .frame(width: geometry.size.width, height: totalHeight)
                 
                 HStack(spacing: 0) {
-                    tabButton(.tickets, tabWidth: tabWidth, geometry: geometry)
-                    tabButton(.inbox, tabWidth: tabWidth, geometry: geometry)
+                    // Order changed: Home first, Inbox second, Tickets third, Profile fourth
                     tabButton(.home, tabWidth: tabWidth, geometry: geometry)
+                    tabButton(.inbox, tabWidth: tabWidth, geometry: geometry)
+                    tabButton(.tickets, tabWidth: tabWidth, geometry: geometry)
                     tabButton(.profile, tabWidth: tabWidth, geometry: geometry)
                 }
                 .padding(.horizontal, Theme.Spacing.s)

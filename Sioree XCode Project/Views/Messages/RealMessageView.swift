@@ -158,15 +158,17 @@ struct RealMessageView: View {
             }
             .navigationBarHidden(true)
             .onAppear {
-                // Render from local cache first
+                // Render from local cache first, but always refresh from network so messages appear immediately.
                 if !conversation.participantId.isEmpty && !conversation.id.isEmpty {
                     let local = MessageRepository.shared.fetchMessagesLocally(conversationId: conversation.id)
                     if !local.isEmpty {
                         self.messages = local
                     } else {
-                        // Fallback to network if no local messages
-                        loadMessagesFromNetwork()
+                        // If no local messages, show loading while fetching
+                        self.isLoading = true
                     }
+                    // Always attempt to refresh from network to ensure latest messages are present
+                    loadMessagesFromNetwork()
                     // Do not trigger background sync here — sync is performed only after login
                     markAsRead()
                 } else {

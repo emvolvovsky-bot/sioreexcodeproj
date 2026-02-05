@@ -18,6 +18,9 @@ struct PartierHomeView: View {
     @State private var showMapView = false
     @State private var showLocationDeniedAlert = false
     @State private var selectedCategory: EventCategory = .all
+    private var displayedCategories: [EventCategory] {
+        [.all, .meetups, .movies, .sport, .music, .food, .nightlife, .arts, .outdoors]
+    }
     @State private var searchText: String = ""
     @Namespace private var chipAnimation
     @State private var radiusMiles: Double = 15
@@ -271,7 +274,7 @@ private extension PartierHomeView {
     var categoryFilters: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: Theme.Spacing.s) {
-                ForEach(EventCategory.allCases, id: \.self) { category in
+                ForEach(displayedCategories, id: \.self) { category in
                     GlassChip(
                         title: category.label,
                         isSelected: selectedCategory == category,
@@ -492,11 +495,25 @@ private extension PartierHomeView {
     }
     
     func matchesCategory(_ event: Event) -> Bool {
+        // Only show upcoming events
+        let now = Date()
+        guard event.date >= now else { return false }
+
         switch selectedCategory {
         case .all:
+            // "All" shows upcoming events within the next 30 days
+            if let thirtyDays = Calendar.current.date(byAdding: .day, value: 30, to: now) {
+                return event.date <= thirtyDays
+            }
             return true
         default:
             let keyword = selectedCategory.keyword.lowercased()
+            // Match explicit event.category if provided
+            if let cat = event.category?.lowercased(), !cat.isEmpty {
+                if cat.contains(keyword) || cat.contains(selectedCategory.label.lowercased()) {
+                    return true
+                }
+            }
             let titleMatch = event.title.lowercased().contains(keyword)
             let locationMatch = event.location.lowercased().contains(keyword)
             let lookingMatch = event.lookingForSummary?.lowercased().contains(keyword) ?? false

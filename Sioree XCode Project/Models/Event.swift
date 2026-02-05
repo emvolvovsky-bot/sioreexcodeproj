@@ -8,7 +8,7 @@
 import Foundation
 
 enum EventCategory: CaseIterable, Hashable {
-    case all, music, food, sport, movies, meetups
+    case all, music, food, sport, movies, meetups, nightlife, arts, outdoors
     
     var label: String {
         switch self {
@@ -17,7 +17,10 @@ enum EventCategory: CaseIterable, Hashable {
         case .food: return "Food"
         case .sport: return "Sport"
         case .movies: return "Movies"
-        case .meetups: return "Meetups"
+        case .meetups: return "Meetup"
+        case .nightlife: return "Nightlife"
+        case .arts: return "Arts & Culture"
+        case .outdoors: return "Outdoors"
         }
     }
     
@@ -28,7 +31,10 @@ enum EventCategory: CaseIterable, Hashable {
         case .food: return "food"
         case .sport: return "sport"
         case .movies: return "movie"
-        case .meetups: return "meet"
+        case .meetups: return "meetup"
+        case .nightlife: return "nightlife"
+        case .arts: return "arts"
+        case .outdoors: return "outdoors"
         }
     }
 }

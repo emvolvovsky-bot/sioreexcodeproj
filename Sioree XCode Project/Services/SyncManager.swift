@@ -6,6 +6,9 @@ final class SyncManager {
     static let shared = SyncManager()
     private let messaging = MessagingService.shared
     private var cancellables = Set<AnyCancellable>()
+    // Track which user IDs have completed their initial inbox server load during this app session.
+    private var inboxLoadedUsers: Set<String> = []
+    private var inboxCache: [String: [Conversation]] = [:]
 
     private init() {}
 
@@ -110,6 +113,23 @@ final class SyncManager {
                 print("Failed to fetch pending messages: \(error)")
             }
         }
+    }
+    
+    // MARK: - Inbox session tracking (in-memory per app launch)
+    func markInboxLoaded(for userId: String) {
+        inboxLoadedUsers.insert(userId)
+    }
+
+    func hasInboxLoaded(for userId: String) -> Bool {
+        return inboxLoadedUsers.contains(userId)
+    }
+
+    func setCachedInbox(for userId: String, conversations: [Conversation]) {
+        inboxCache[userId] = conversations
+    }
+
+    func getCachedInbox(for userId: String) -> [Conversation] {
+        return inboxCache[userId] ?? []
     }
 }
 

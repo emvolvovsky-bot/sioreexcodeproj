@@ -244,6 +244,19 @@ class StorageService {
         }
     }
 
+    // MARK: - Created event category override (persist category selected at creation)
+    private func createdEventCategoryKey(forEventId eventId: String) -> String {
+        return "createdCategory:\(eventId)"
+    }
+
+    func saveCreatedEventCategory(_ category: String, forEventId eventId: String) {
+        userDefaults.set(category, forKey: createdEventCategoryKey(forEventId: eventId))
+    }
+
+    func getCreatedEventCategory(forEventId eventId: String) -> String? {
+        return userDefaults.string(forKey: createdEventCategoryKey(forEventId: eventId))
+    }
+
     // MARK: - Saved / Favorite Events Cache
     private func savedEventsKey(forUserId userId: String) -> String {
         return "savedEvents:\(userId)"

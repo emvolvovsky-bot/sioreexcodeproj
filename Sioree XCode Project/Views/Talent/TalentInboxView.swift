@@ -103,11 +103,23 @@ struct TalentInboxView: View {
             }
             .onAppear {
                 let local = ConversationRepository.shared.fetchConversationsLocally()
-                // Ensure local conversations are ordered newest-first
-                self.conversations = local.sorted { $0.lastMessageTime > $1.lastMessageTime }
-                // If authenticated, immediately refresh inbox from server so only authorized convs show.
                 if let currentUser = StorageService.shared.getUserId(), !currentUser.isEmpty {
-                    loadConversations(showLoading: true)
+                    if SyncManager.shared.hasInboxLoaded(for: currentUser) {
+                        let cached = SyncManager.shared.getCachedInbox(for: currentUser)
+                        if !cached.isEmpty {
+                            self.conversations = cached.sorted { $0.lastMessageTime > $1.lastMessageTime }
+                        } else {
+                            self.conversations = local.sorted { $0.lastMessageTime > $1.lastMessageTime }
+                        }
+                        self.isLoading = false
+                    } else {
+                        self.conversations = []
+                        self.isLoading = true
+                        loadConversations(showLoading: true)
+                    }
+                } else {
+                    self.conversations = local.sorted { $0.lastMessageTime > $1.lastMessageTime }
+                    self.isLoading = false
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: .refreshInbox)) { _ in
@@ -214,14 +226,19 @@ struct TalentInboxView: View {
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
-                    if showLoading { isLoading = false }
                     if case .failure(let error) = completion {
+                        if showLoading { isLoading = false }
                         errorMessage = error.localizedDescription
                     }
                 },
                 receiveValue: { fetchedConversations in
                     guard !fetchedConversations.isEmpty else {
                         self.conversations = []
+                        if let currentUser = StorageService.shared.getUserId(), !currentUser.isEmpty {
+                            SyncManager.shared.setCachedInbox(for: currentUser, conversations: [])
+                            SyncManager.shared.markInboxLoaded(for: currentUser)
+                        }
+                        if showLoading { isLoading = false }
                         return
                     }
 
@@ -249,6 +266,11 @@ struct TalentInboxView: View {
 
                     group.notify(queue: .main) {
                         self.conversations = authorized.sorted { $0.lastMessageTime > $1.lastMessageTime }
+                        if let currentUser = StorageService.shared.getUserId(), !currentUser.isEmpty {
+                            SyncManager.shared.setCachedInbox(for: currentUser, conversations: self.conversations)
+                            SyncManager.shared.markInboxLoaded(for: currentUser)
+                        }
+                        if showLoading { isLoading = false }
                     }
                 }
             )

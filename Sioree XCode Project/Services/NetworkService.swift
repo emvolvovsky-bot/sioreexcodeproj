@@ -199,7 +199,56 @@ class NetworkService {
     }
     
     func fetchEvent(eventId: String) -> AnyPublisher<Event, Error> {
-        return request("/api/events/\(eventId)")
+        // Build URLRequest manually so we can log raw JSON response for debugging
+        guard let url = URL(string: baseURL + "/api/events/\(eventId)") else {
+            return Fail(error: NetworkError.invalidURL).eraseToAnyPublisher()
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token = StorageService.shared.getAuthToken() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        let decoder = JSONDecoder()
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let dateString = try container.decode(String.self)
+            if let date = isoFormatter.date(from: dateString) {
+                return date
+            }
+            let fallbackFormatter = ISO8601DateFormatter()
+            if let date = fallbackFormatter.date(from: dateString) {
+                return date
+            }
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Expected ISO8601 date string, got: \(dateString)")
+        }
+
+        return session.dataTaskPublisher(for: request)
+            .tryMap { data, response -> Data in
+                if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode >= 400 {
+                    throw NetworkError.serverError("HTTP \(httpResponse.statusCode)")
+                }
+                return data
+            }
+            .handleEvents(receiveOutput: { data in
+                if let s = String(data: data, encoding: .utf8) {
+                    print("🔎 Raw event response for \(eventId): \(s)")
+                }
+            })
+            .decode(type: Event.self, decoder: decoder)
+            .mapError { error -> Error in
+                if let decodingError = error as? DecodingError {
+                    print("❌ JSON Decoding Error (fetchEvent): \(decodingError)")
+                    return NetworkError.decodingError
+                }
+                return error
+            }
+            .receive(on: DispatchQueue.main)
+            .eraseToAnyPublisher()
     }
 
     func fetchEventBookings(eventId: String) -> AnyPublisher<[Booking], Error> {
@@ -254,7 +303,8 @@ class NetworkService {
                      talentIds: [String] = [],
                      lookingForRoles: [String] = [],
                      lookingForNotes: String? = nil,
-                     lookingForTalentType: String? = nil) -> AnyPublisher<Event, Error> {
+                     lookingForTalentType: String? = nil,
+                     category: String? = nil) -> AnyPublisher<Event, Error> {
         // Combine date and time for event_date
         let calendar = Calendar.current
         let dateComponents = calendar.dateComponents([.year, .month, .day], from: date)
@@ -332,6 +382,12 @@ class NetworkService {
         body["lookingForTalentType"] = talentType
         body["looking_for_talent_type"] = talentType
         body["talentNeeded"] = talentType
+        
+        // Add category if provided
+        if let category = category?.trimmingCharacters(in: .whitespacesAndNewlines), !category.isEmpty {
+            body["category"] = category
+            body["category_snake"] = category
+        }
         
         print("📤 Creating event with body: \(body)")
         

@@ -34,7 +34,7 @@ struct EventDetailPlaceholderView: View {
                                 .foregroundColor(.sioreeWhite)
                                 .padding(.horizontal, Theme.Spacing.m)
                             
-                            NavigationLink(destination: EventAttendeesView(eventId: event.id, eventName: event.title)) {
+                            NavigationLink(destination: EventAttendeesView(eventId: event.id, eventName: event.title, isPast: event.date < Date())) {
                                 HStack {
                                     Image(systemName: "person.3.fill")
                                         .font(.system(size: 20))

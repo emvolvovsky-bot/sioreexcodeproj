@@ -13,10 +13,12 @@ import Foundation
 struct CoverPhotoView: View {
     let imageURL: String?
     let height: CGFloat
+    let shouldFit: Bool
     
-    init(imageURL: String?, height: CGFloat = 200) {
+    init(imageURL: String?, height: CGFloat = 200, shouldFit: Bool = false) {
         self.imageURL = imageURL
         self.height = height
+        self.shouldFit = shouldFit
     }
     
     var body: some View {
@@ -36,22 +38,17 @@ struct CoverPhotoView: View {
                                     .tint(.sioreeIcyBlue)
                                     .scaleEffect(0.8)
                             }
-                    case .success(let image):
+                        case .success(let image):
                         // CRITICAL: Show the actual image at FULL opacity - NO dimming, NO overlays
                         image
                             .resizable()
                             .renderingMode(.original) // Ensure original rendering - no tinting
-                            .aspectRatio(contentMode: .fill)
+                            .aspectRatio(contentMode: shouldFit ? .fit : .fill)
                             .frame(height: height)
+                            .frame(maxWidth: .infinity)
                             .clipped()
                             .opacity(1.0) // Explicitly ensure full opacity - never faded
                             .background(Color.clear) // Ensure no background overlay
-                            .onAppear {
-                                // Cache the image when it loads successfully
-                                if let uiImage = image.asUIImage() {
-                                    ImageCache.shared.storeImage(uiImage, for: url)
-                                }
-                            }
                         case .failure(_):
                             // If image fails to load, show empty space (bug state)
                             Rectangle()

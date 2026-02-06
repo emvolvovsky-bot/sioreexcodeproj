@@ -116,3 +116,4 @@ Skeleton Backend/sioree-backend/node_modules/
 STRIPE_SETUP_GUIDE.md
 # Master API key file
 Sioree XCode Project/Models/sioree_master_word.txt
+sendgrid.env

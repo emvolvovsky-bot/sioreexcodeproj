@@ -48,6 +48,14 @@ class ImageCache {
             return image
         }
 
+        // Also prefer raw cached file (if present) which preserves original bytes
+        let rawFileURL = cacheDirectory.appendingPathComponent("raw_\(key.hash.description)")
+        if let raw = try? Data(contentsOf: rawFileURL),
+           let rawImage = UIImage(data: raw) {
+            cache.setObject(rawImage, forKey: key)
+            return rawImage
+        }
+
         return nil
     }
 
@@ -66,6 +74,24 @@ class ImageCache {
                 try? data.write(to: fileURL)
             }
         }
+    }
+
+    // Store raw downloaded bytes for the URL (preferred when available)
+    func storeRawData(_ data: Data, for url: URL) {
+        let key = url.absoluteString as NSString
+        let rawFileURL = cacheDirectory.appendingPathComponent("raw_\(key.hash.description)")
+        DispatchQueue.global(qos: .background).async {
+            try? data.write(to: rawFileURL)
+            if let image = UIImage(data: data) {
+                self.cache.setObject(image, forKey: key)
+            }
+        }
+    }
+
+    func getRawData(for url: URL) -> Data? {
+        let key = url.absoluteString as NSString
+        let rawFileURL = cacheDirectory.appendingPathComponent("raw_\(key.hash.description)")
+        return try? Data(contentsOf: rawFileURL)
     }
 
     // Avatar helpers - store avatar by userId + version for deterministic lookup.
@@ -175,27 +201,59 @@ struct CachedAsyncImage<Content: View>: View {
 
     var body: some View {
         Group {
-            if let cachedImage = cachedImage {
-                content(.success(Image(uiImage: cachedImage)))
-            } else {
-                AsyncImage(url: url) { phase in
-                    content(phase)
-                }
-                .onAppear {
-                    loadCachedImage()
-                }
-            }
+            // Render based on currentPhase to keep API similar to AsyncImage
+            content(currentPhase)
+        }
+        .onAppear {
+            loadOrFetchImage()
         }
     }
 
-    private func loadCachedImage() {
-        guard let url = url else { return }
+    private func loadOrFetchImage() {
+        guard let url = url else {
+            currentPhase = .failure(URLError(.badURL))
+            return
+        }
+
+        // Try memory/disk/raw cache first
         DispatchQueue.global(qos: .userInitiated).async {
-            if let cachedImage = ImageCache.shared.getImage(for: url) {
+            if let cached = ImageCache.shared.getImage(for: url) {
                 DispatchQueue.main.async {
-                    self.cachedImage = cachedImage
+                    self.cachedImage = cached
+                    self.currentPhase = .success(Image(uiImage: cached))
+                }
+                return
+            }
+
+            // No cached image — fetch raw data
+            DispatchQueue.main.async {
+                self.currentPhase = .empty
+            }
+
+            let task = URLSession.shared.dataTask(with: url) { data, response, error in
+                if let error = error {
+                    DispatchQueue.main.async {
+                        self.currentPhase = .failure(error)
+                    }
+                    return
+                }
+                guard let data = data, let uiImage = UIImage(data: data) else {
+                    DispatchQueue.main.async {
+                        self.currentPhase = .failure(URLError(.cannotDecodeContentData))
+                    }
+                    return
+                }
+
+                // Store raw bytes and a decoded UIImage into the cache
+                ImageCache.shared.storeRawData(data, for: url)
+                ImageCache.shared.storeImage(uiImage, for: url)
+
+                DispatchQueue.main.async {
+                    self.cachedImage = uiImage
+                    self.currentPhase = .success(Image(uiImage: uiImage))
                 }
             }
+            task.resume()
         }
     }
 }

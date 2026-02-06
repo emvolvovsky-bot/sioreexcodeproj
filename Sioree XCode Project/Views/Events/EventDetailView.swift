@@ -34,6 +34,8 @@ struct EventDetailView: View {
     @State private var proposedRateAmount = ""
     @State private var showMessageTalentSheet = false
     @State private var selectedTalentForMessage: Talent?
+    @State private var showHostProfileSheet = false
+    @State private var hostProfileIdToShow: String? = nil
     
     private let ticketFeeRate = 0.05
     
@@ -62,17 +64,10 @@ struct EventDetailView: View {
             backgroundView
             contentView
         }
-        .navigationTitle("Event Details")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    if let shareURL = shareURL {
-                        ShareLink(item: shareURL) {
-                            Label("Share", systemImage: "square.and.arrow.up")
-                        }
-                    }
-                }
-            }
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
             .onAppear {
                 // Track impression when event detail is viewed
                 if let _ = viewModel.event {
@@ -188,25 +183,102 @@ struct EventDetailView: View {
     private func eventScrollView(_ event: Event) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                // Hero Image - Cover photo ONLY, no fallback
-                ZStack {
-                    CoverPhotoView(imageURL: event.images.first, height: 300)
+                // Hero Image - cover top half of screen, show full image; overlay title & category at bottom-left and host avatar bottom-right
+                    ZStack {
+                        CoverPhotoView(imageURL: event.images.first, height: UIScreen.main.bounds.height * 0.5, shouldFit: true)
+                            .frame(height: UIScreen.main.bounds.height * 0.5)
+                            .frame(maxWidth: .infinity)
+                            .background(Color.black)
+                            .ignoresSafeArea(edges: .top)
+                            .overlay(
+                                LinearGradient(
+                                    gradient: Gradient(colors: [Color.clear, Color.sioreeBlack.opacity(0.85)]),
+                                    startPoint: .center,
+                                    endPoint: .bottom
+                                )
+                            )
 
+                        // Floating top controls (back + share) overlayed on photo
+                        HStack {
+                            Button(action: {
+                                dismiss()
+                            }) {
+                                Image(systemName: "chevron.left")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(.white)
+                                    .padding(10)
+                                    .background(Circle().fill(Color.black.opacity(0.35)))
+                            }
+                            .buttonStyle(PlainButtonStyle())
 
+                            Spacer()
 
-                }
-                .clipShape(RoundedRectangle(cornerRadius: Theme.CornerRadius.large, style: .continuous))
-                .frame(height: 300)
-                .frame(maxWidth: min(UIScreen.main.bounds.width - (Theme.Spacing.m * 2), 500), alignment: .center)
-                .frame(maxWidth: .infinity, alignment: .center)
+                            if let shareURL = shareURL {
+                                ShareLink(item: shareURL) {
+                                    Image(systemName: "square.and.arrow.up")
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundColor(.white)
+                                        .padding(10)
+                                        .background(Circle().fill(Color.black.opacity(0.35)))
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                            }
+                        }
+                        .padding(.horizontal, Theme.Spacing.m)
+                        .padding(.top, 44)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+
+                        // Bottom-left stacked badges (aligned leading letters)
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                            Text(event.title)
+                                .font(.sioreeH4)
+                                .foregroundColor(.white)
+                                .multilineTextAlignment(.leading)
+                                .padding(.vertical, Theme.Spacing.xs)
+                                .padding(.horizontal, Theme.Spacing.m)
+                                .background(Color.sioreeIcyBlue)
+                                .cornerRadius(20)
+
+                            Text((event.category?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 } ?? (event.lookingForTalentType ?? "Uncategorized"))
+                                .font(.sioreeCaption)
+                                .foregroundColor(.white)
+                                .multilineTextAlignment(.leading)
+                                .padding(.vertical, Theme.Spacing.xs)
+                                .padding(.horizontal, Theme.Spacing.m)
+                                .background(Color.sioreeIcyBlue.opacity(0.95))
+                                .cornerRadius(18)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                        .padding(.leading, Theme.Spacing.m)
+                        .padding(.bottom, Theme.Spacing.m + 8)
+
+                        // Host avatar bottom-right linking to profile
+                        VStack {
+                            Spacer()
+                            HStack {
+                                Spacer()
+                                Button {
+                                    hostProfileIdToShow = event.hostId
+                                    showHostProfileSheet = true
+                                } label: {
+                                    AvatarView(imageURL: event.hostAvatar, size: .medium)
+                                        .overlay(
+                                            Circle()
+                                                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                                        )
+                                        .shadow(color: Color.black.opacity(0.4), radius: 8, x: 0, y: 4)
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                                .padding(.trailing, Theme.Spacing.m)
+                                .padding(.bottom, Theme.Spacing.l + 12)
+                                .offset(x: 10, y: 14)
+                            }
+                        }
+                    }
 
                 // Content
                 VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                     HStack(alignment: .center) {
-                        Text(event.title)
-                            .font(.sioreeH1)
-                            .foregroundColor(.sioreeWhite)
-
                         Spacer()
 
                         // Edit button for host on upcoming events only
@@ -241,52 +313,26 @@ struct EventDetailView: View {
                         .cornerRadius(Theme.CornerRadius.medium)
                     }
 
-                    // Only show host profile (account link) if user is not the host
-                    if !isHost {
-                        NavigationLink(destination: InboxProfileView(userId: event.hostId)) {
-                            HStack(spacing: Theme.Spacing.s) {
-                                AvatarView(imageURL: event.hostAvatar, size: .small)
-                                Text(event.hostName)
-                                    .font(.sioreeBody)
-                                    .foregroundColor(.sioreeWhite)
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 14))
-                                    .foregroundColor(Color.sioreeIcyBlue)
-                            }
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        Divider()
-                    }
+                    // Host profile moved to hero overlay avatar (bottom-right)
 
-                    Divider()
-
-                    // Event Details Section
+                    // Event Details (compact)
                     VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                        Text("Event Details")
-                            .font(.sioreeH3)
-                            .foregroundColor(.sioreeWhite)
-
-                        // Place - Tappable to open in Maps
-                        Button(action: {
-                            showLocationActionSheet = true
-                        }) {
+                        // Vertical event info stack: Location, Date & Time, Category
+                        // Location - tappable
+                        Button(action: { showLocationActionSheet = true }) {
                             HStack(spacing: Theme.Spacing.m) {
-                                Image(systemName: "location.fill")
+                                Image(systemName: "mappin.circle.fill")
                                     .foregroundColor(.sioreeIcyBlue)
                                     .frame(width: 24)
                                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                                    Text("Location")
-                                        .font(.sioreeCaption)
-                                        .foregroundColor(.sioreeWhite.opacity(0.7))
                                     Text(event.location)
                                         .font(.sioreeBody)
                                         .foregroundColor(.sioreeWhite)
+                                        .lineLimit(2)
                                     if let locationDetails = event.locationDetails, !locationDetails.isEmpty, !isTalentMapMode {
                                         Text(locationDetails)
                                             .font(.sioreeBodySmall)
                                             .foregroundColor(.sioreeWhite.opacity(0.7))
-                                            .padding(.top, 2)
                                     }
                                 }
                                 Spacer()
@@ -297,35 +343,25 @@ struct EventDetailView: View {
                         }
                         .buttonStyle(PlainButtonStyle())
 
-                        // Time
+                        // Date & Time row
                         HStack(spacing: Theme.Spacing.m) {
                             Image(systemName: "clock.fill")
                                 .foregroundColor(.sioreeIcyBlue)
                                 .frame(width: 24)
-                            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                                Text("Date & Time")
-                                    .font(.sioreeCaption)
-                                    .foregroundColor(.sioreeWhite.opacity(0.7))
-                                Text("\(event.date.formattedEventDate()) at \(event.time.formattedEventTime())")
-                                    .font(.sioreeBody)
-                                    .foregroundColor(.sioreeWhite)
-                            }
+                            Text(formattedDateAndTime(start: event.date, end: event.endDate))
+                                .font(.sioreeBody)
+                                .foregroundColor(.sioreeWhite)
                         }
 
-                        // Category row (always visible; shows fallback if not set)
+                        // Category row
                         HStack(spacing: Theme.Spacing.m) {
                             Image(systemName: "tag.fill")
                                 .foregroundColor(.sioreeIcyBlue)
                                 .frame(width: 24)
-                            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                                Text("Category")
-                                    .font(.sioreeCaption)
-                                    .foregroundColor(.sioreeWhite.opacity(0.7))
-                                let displayCategory = (event.category?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 } ?? (event.lookingForTalentType ?? "Uncategorized")
-                                Text(displayCategory)
-                                    .font(.sioreeBody)
-                                    .foregroundColor(.sioreeWhite)
-                            }
+                            let displayCategory = (event.category?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 } ?? (event.lookingForTalentType ?? "Uncategorized")
+                            Text(displayCategory)
+                                .font(.sioreeBody)
+                                .foregroundColor(.sioreeWhite)
                             Spacer()
                         }
 
@@ -523,6 +559,13 @@ struct EventDetailView: View {
                 .padding(.bottom, Theme.Spacing.xl)
             }
         }
+        .sheet(isPresented: $showHostProfileSheet) {
+            if let hostId = hostProfileIdToShow {
+                NavigationStack {
+                    InboxProfileView(userId: hostId)
+                }
+            }
+        }
         .frame(maxWidth: .infinity, alignment: .top)
         .safeAreaInset(edge: .bottom) {
             if shouldShowBottomAction(for: event) {
@@ -607,6 +650,23 @@ struct EventDetailView: View {
                     dismiss()
                 }
             }
+        }
+        .ignoresSafeArea(edges: .top)
+    }
+
+    private func formattedDateAndTime(start: Date, end: Date?) -> String {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "E, MMM d"
+        let timeFormatter = DateFormatter()
+        timeFormatter.dateFormat = "h:mm a"
+
+        let datePart = dateFormatter.string(from: start)
+        let startTime = timeFormatter.string(from: start)
+        if let end = end {
+            let endTime = timeFormatter.string(from: end)
+            return "\(datePart) · \(startTime) - \(endTime)"
+        } else {
+            return "\(datePart) · \(startTime)"
         }
     }
 
